@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { ThemeProvider } from 'next-themes';
-import { ApolloWrapper } from './ApolloWrapper';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -17,16 +16,14 @@ export default function RootLayout({
     <html lang='en' suppressHydrationWarning>
       <head />
       <body>
-        <ApolloWrapper>
-          <ThemeProvider
-            attribute='class'
-            defaultTheme='system'
-            enableSystem
-            disableTransitionOnChange
-          >
-            {children}
-          </ThemeProvider>
-        </ApolloWrapper>
+        <ThemeProvider
+          attribute='class'
+          defaultTheme='system'
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

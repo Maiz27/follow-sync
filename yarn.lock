@@ -50,6 +50,17 @@
     tslib "^2.3.0"
     zen-observable-ts "^1.2.5"
 
+"@auth/core@0.40.0":
+  version "0.40.0"
+  resolved "https://registry.yarnpkg.com/@auth/core/-/core-0.40.0.tgz#973262fbbb935d4fd9c3b2a0b32003c2719530c7"
+  integrity sha512-n53uJE0RH5SqZ7N1xZoMKekbHfQgjd0sAEyUbE+IYJnmuQkbvuZnXItCU7d+i7Fj8VGOgqvNO7Mw4YfBTlZeQw==
+  dependencies:
+    "@panva/hkdf" "^1.2.1"
+    jose "^6.0.6"
+    oauth4webapi "^3.3.0"
+    preact "10.24.3"
+    preact-render-to-string "6.5.11"
+
 "@emnapi/core@^1.4.3":
   version "1.4.5"
   resolved "https://registry.yarnpkg.com/@emnapi/core/-/core-1.4.5.tgz#bfbb0cbbbb9f96ec4e2c4fd917b7bbe5495ceccb"
@@ -420,6 +431,11 @@
   version "1.0.39"
   resolved "https://registry.yarnpkg.com/@nolyfill/is-core-module/-/is-core-module-1.0.39.tgz#3dc35ba0f1e66b403c00b39344f870298ebb1c8e"
   integrity sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==
+
+"@panva/hkdf@^1.2.1":
+  version "1.2.1"
+  resolved "https://registry.yarnpkg.com/@panva/hkdf/-/hkdf-1.2.1.tgz#cb0d111ef700136f4580349ff0226bf25c853f23"
+  integrity sha512-6oclG6Y3PiDFcoyk8srjLfVKyMfVCKJ27JwNPViuXziFpmdz+MZnZN/aKY0JGXgYuO/VghU0jcOAZgWXZ1Dmrw==
 
 "@rtsao/scc@^1.1.0":
   version "1.1.0"
@@ -2071,6 +2087,11 @@ jiti@^2.4.2:
   resolved "https://registry.yarnpkg.com/jiti/-/jiti-2.5.1.tgz#bd099c1c2be1c59bbea4e5adcd127363446759d0"
   integrity sha512-twQoecYPiVA5K/h6SxtORw/Bs3ar+mLUtoPSc7iMXzQzK8d7eJ/R09wmTwAjiamETn1cXYPGfNnu7DMoHgu12w==
 
+jose@^6.0.6:
+  version "6.0.12"
+  resolved "https://registry.yarnpkg.com/jose/-/jose-6.0.12.tgz#56253d94d46bd784addc4bde3691c323552fe7e4"
+  integrity sha512-T8xypXs8CpmiIi78k0E+Lk7T2zlK4zDyg+o1CZ4AkOHgDg98ogdP2BeZ61lTFKFyoEwJ9RgAgN+SdM3iPgNonQ==
+
 "js-tokens@^3.0.0 || ^4.0.0":
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/js-tokens/-/js-tokens-4.0.0.tgz#19203fb59991df98e3a287050d4647cdeaf32499"
@@ -2315,6 +2336,13 @@ natural-compare@^1.4.0:
   resolved "https://registry.yarnpkg.com/natural-compare/-/natural-compare-1.4.0.tgz#4abebfeed7541f2c27acfb29bdbbd15c8d5ba4f7"
   integrity sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==
 
+next-auth@^5.0.0-beta.29:
+  version "5.0.0-beta.29"
+  resolved "https://registry.yarnpkg.com/next-auth/-/next-auth-5.0.0-beta.29.tgz#f685ae8c8bf8feb3f45107d3e6dbd7cdc8c01985"
+  integrity sha512-Ukpnuk3NMc/LiOl32njZPySk7pABEzbjhMUFd5/n10I0ZNC7NCuVv8IY2JgbDek2t/PUOifQEoUiOOTLy4os5A==
+  dependencies:
+    "@auth/core" "0.40.0"
+
 next-themes@^0.4.6:
   version "0.4.6"
   resolved "https://registry.yarnpkg.com/next-themes/-/next-themes-0.4.6.tgz#8d7e92d03b8fea6582892a50a928c9b23502e8b6"
@@ -2340,6 +2368,11 @@ next@15.4.4:
     "@next/swc-win32-arm64-msvc" "15.4.4"
     "@next/swc-win32-x64-msvc" "15.4.4"
     sharp "^0.34.3"
+
+oauth4webapi@^3.3.0:
+  version "3.6.0"
+  resolved "https://registry.yarnpkg.com/oauth4webapi/-/oauth4webapi-3.6.0.tgz#839a4520c59f82fdc84d129ce308562646aa3fbc"
+  integrity sha512-OwXPTXjKPOldTpAa19oksrX9TYHA0rt+VcUFTkJ7QKwgmevPpNm9Cn5vFZUtIo96FiU6AfPuUUGzoXqgOzibWg==
 
 object-assign@^4.1.1:
   version "4.1.1"
@@ -2511,6 +2544,16 @@ postcss@^8.4.41:
     nanoid "^3.3.11"
     picocolors "^1.1.1"
     source-map-js "^1.2.1"
+
+preact-render-to-string@6.5.11:
+  version "6.5.11"
+  resolved "https://registry.yarnpkg.com/preact-render-to-string/-/preact-render-to-string-6.5.11.tgz#467e69908a453497bb93d4d1fc35fb749a78e027"
+  integrity sha512-ubnauqoGczeGISiOh6RjX0/cdaF8v/oDXIjO85XALCQjwQP+SB4RDXXtvZ6yTYSjG+PC1QRP2AhPgCEsM2EvUw==
+
+preact@10.24.3:
+  version "10.24.3"
+  resolved "https://registry.yarnpkg.com/preact/-/preact-10.24.3.tgz#086386bd47071e3b45410ef20844c21e23828f64"
+  integrity sha512-Z2dPnBnMUfyQfSQ+GBdsGa16hz35YmLmtTLhM169uW944hYL6xzTYkJjC07j+Wosz733pMWx0fgON3JNw1jJQA==
 
 prelude-ls@^1.2.1:
   version "1.2.1"
