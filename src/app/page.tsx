@@ -1,4 +1,4 @@
-import SignIn from '@/components/auth/SignIn';
+import SignIn from '@/components/auth/signIn';
 import { Heading } from '@/components/utils/Heading';
 import { Section } from '@/components/utils/Section';
 import { SubText } from '@/components/utils/SubText';

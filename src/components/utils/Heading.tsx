@@ -19,7 +19,7 @@ export const Heading = ({
   return (
     <Tag
       className={twMerge(
-        `text-center font-semibold text-balance ${textSizesClasses[size]} max-w-5xl 2xl:text-5xl`,
+        `scroll-m-20 text-center font-extrabold tracking-tight text-balance ${textSizesClasses[size]} max-w-5xl 2xl:text-5xl`,
         className
       )}
       style={{ lineHeight: 1.5 }}

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Button } from '../ui/button';
 import { auth, signIn } from '@/app/auth';
+import { Button } from '../ui/button';
+import UserHoverCard from '../user/userHoverCard';
 import { LuGithub } from 'react-icons/lu';
 
 const SignIn = async () => {
@@ -8,7 +9,12 @@ const SignIn = async () => {
 
   if (session) {
     console.log(session);
-    return <p>Signed in as {session.user?.login}</p>;
+    return (
+      <div>
+        <span>Signed in as</span>
+        <UserHoverCard />
+      </div>
+    );
   }
 
   return (

@@ -9,7 +9,12 @@ type SubTextProps = {
 
 export const SubText = ({ children, Tag = 'p', className }: SubTextProps) => {
   return (
-    <Tag className={twMerge('my-6 max-w-2xl text-center text-lg', className)}>
+    <Tag
+      className={twMerge(
+        'max-w-2xl text-center text-lg [&:not(:first-child)]:mt-6 [&:not(:last-child)]:mb-6',
+        className
+      )}
+    >
       {children}
     </Tag>
   );
