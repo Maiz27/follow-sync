@@ -1,46 +1,26 @@
-import { auth, signIn } from './auth';
-import { query } from '@/lib/gql/client';
-import { GET_USER_FOLLOWS } from '@/lib/gql/queries';
+import SignIn from '@/components/auth/signIn';
+import { Heading } from '@/components/utils/heading';
+import { Section } from '@/components/utils/section';
+import { SubText } from '@/components/utils/subText';
+import Dashboard from '@/components/dashboard/dashboard';
 
 export default async function Home() {
-  const session = await auth();
-  const token = session?.accessToken;
-  console.log(session);
-
-  if (!token) {
-    return (
-      <>
-        <p>Not signed in</p>
-        <form
-          action={async () => {
-            'use server';
-            await signIn('github');
-          }}
-        >
-          <button type='submit'>Signin with GitHub</button>
-        </form>
-      </>
-    );
-  }
-
-  const { data } = await query({
-    query: GET_USER_FOLLOWS,
-    variables: {
-      login: 'maiz27',
-    },
-  });
-  console.log(data);
-
   return (
     <>
-      <form
-        action={async () => {
-          'use server';
-          await signIn('github');
-        }}
-      >
-        <button type='submit'>Signin with GitHub</button>
-      </form>
+      <Section className='grid place-items-center pt-20 pb-0'>
+        <Heading Tag='h1'>
+          {`Master Your GitHub Connections: Know Who's Really Following`}
+        </Heading>
+        <SubText>
+          {`Take control of your GitHub presence. Follow Sync provides a clear,
+          real-time view of your followers and who you follow back, ensuring
+          you're always in sync with your professional network.`}
+        </SubText>
+
+        <SignIn />
+      </Section>
+
+      <Dashboard />
     </>
   );
 }
