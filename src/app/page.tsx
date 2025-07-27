@@ -1,7 +1,7 @@
-import SignIn from '@/components/nav/signIn';
-import { Heading } from '@/components-temp/utils/heading';
-import { Section } from '@/components-temp/utils/section';
-import { SubText } from '@/components-temp/utils/subText';
+import SignIn from '@/components/auth/signIn';
+import { Heading } from '@/components/utils/heading';
+import { Section } from '@/components/utils/section';
+import { SubText } from '@/components/utils/subText';
 
 export default function Home() {
   return (

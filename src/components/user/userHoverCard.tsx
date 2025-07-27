@@ -1,16 +1,12 @@
 import React from 'react';
 import Link from 'next/link';
 import { auth } from '@/app/auth';
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from '@/components-temp/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
-} from '@/components-temp/ui/hover-card';
+} from '@/components/ui/hover-card';
 import { Button } from '../ui/button';
 import { LuBuilding2, LuLink, LuMapPin } from 'react-icons/lu';
 import { SiX } from 'react-icons/si';
