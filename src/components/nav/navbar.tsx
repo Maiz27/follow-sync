@@ -1,8 +1,10 @@
 import React from 'react';
-import Image from 'next/image';
 import { auth, signIn } from '@/app/auth';
-import { Button } from '../ui/button';
+import Logo from './logo';
 import SignOut from '../auth/signOut';
+import { Button } from '../ui/button';
+import { ThemeToggle } from '../theme/themeToggle';
+import { Separator } from '../ui/separator';
 import { LuGithub } from 'react-icons/lu';
 
 const Navbar = () => {
@@ -10,17 +12,16 @@ const Navbar = () => {
     <header className='z-50 w-full bg-background'>
       <div className='flex h-[calc(.25rem*14)] w-full items-center justify-between px-4 md:px-6'>
         <div className='flex items-center'>
-          <Image
-            src='/imgs/logo/logo.png'
-            alt='Follow Sync Logo'
-            width={30}
-            height={30}
-          />
+          <Logo />
           <span className='text-xl font-extrabold text-primary'>
             Follow Sync
           </span>
         </div>
-        <GetStarted />
+        <div className='flex h-4 items-center space-x-2'>
+          <GetStarted />
+          <Separator orientation='vertical' className='ml-2' />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

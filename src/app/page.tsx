@@ -7,9 +7,9 @@ import Dashboard from '@/components/dashboard/dashboard';
 export default async function Home() {
   return (
     <>
-      <Section className='grid place-items-center'>
+      <Section className='grid place-items-center pt-20 pb-0'>
         <Heading Tag='h1'>
-          {`Master Your GitHub Connections: Know Who's Really Following.`}
+          {`Master Your GitHub Connections: Know Who's Really Following`}
         </Heading>
         <SubText>
           {`Take control of your GitHub presence. Follow Sync provides a clear,

@@ -1,5 +1,6 @@
 import React from 'react';
-import Stats from '@/components/user/stats';
+import Stats from '@/components/dashboard/stats';
+import Analyzer from './analyzer';
 import { Section } from '@/components/utils/section';
 import {
   fetchAllFollowersLogin,
@@ -29,7 +30,7 @@ const Dashboard = async () => {
       console.error('Following fetch failed:', followingResult.reason);
     }
     return (
-      <Section className='my-20 grid place-items-center'>
+      <Section className='grid place-items-center'>
         <div>Error loading follow data. Please try again.</div>
       </Section>
     );
@@ -43,6 +44,7 @@ const Dashboard = async () => {
   return (
     <Section className='my-0 grid place-items-center py-0'>
       <Stats stats={stats} />
+      <Analyzer />
     </Section>
   );
 };

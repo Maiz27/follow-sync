@@ -74,16 +74,6 @@ export const getFollowStats = ({
     (u) => !followingLogins.has(u!.login)
   );
 
-  // For debugging, you can log the calculated non-mutuals:
-  console.log(
-    'Non-mutuals (You follow, they dont):',
-    nonMutualsFollowingYou.map((u) => u!.login)
-  );
-  console.log(
-    'Non-mutuals (They follow, you dont):',
-    nonMutualsYouFollow.map((u) => u!.login)
-  );
-
   const stats = {
     followers: followers.totalCount,
     following: followings.totalCount,
