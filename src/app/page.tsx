@@ -2,8 +2,9 @@ import SignIn from '@/components/auth/signIn';
 import { Heading } from '@/components/utils/heading';
 import { Section } from '@/components/utils/section';
 import { SubText } from '@/components/utils/subText';
+import Dashboard from '@/components/dashboard/dashboard';
 
-export default function Home() {
+export default async function Home() {
   return (
     <>
       <Section className='grid place-items-center'>
@@ -18,6 +19,8 @@ export default function Home() {
 
         <SignIn />
       </Section>
+
+      <Dashboard />
     </>
   );
 }

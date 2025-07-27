@@ -8,8 +8,6 @@ const SignIn = async () => {
   const session = await auth();
 
   if (session) {
-    console.log(session);
-
     return (
       <div>
         <span>Signed in as</span>
