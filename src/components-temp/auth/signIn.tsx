@@ -9,6 +9,7 @@ const SignIn = async () => {
 
   if (session) {
     console.log(session);
+
     return (
       <div>
         <span>Signed in as</span>
