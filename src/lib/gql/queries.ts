@@ -1,4 +1,4 @@
-import { gql } from '@apollo/client';
+import { gql } from 'graphql-request';
 import {
   FRAGMENT_FOLLOWER_FIELDS,
   FRAGMENT_FOLLOWING_FIELDS,
