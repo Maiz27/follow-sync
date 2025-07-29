@@ -10,6 +10,8 @@ import {
   FetchProgress,
 } from '@/lib/gql/fetchers';
 import { useProgress } from '@/lib/context/progress';
+import { getNonMutuals } from '@/lib/utils';
+import Stats from '@/components/dashboard/stats';
 
 const ClientDashboard = () => {
   const { client, status: authStatus } = useClientAuthenticatedGraphQLClient();
@@ -76,11 +78,25 @@ const ClientDashboard = () => {
 
   if (!data) return <div>No data</div>;
 
-  console.log(data);
+  const { followers, following } = data!;
+
+  const { nonMutualsFollowingYou, nonMutualsYouFollow } = getNonMutuals({
+    followers,
+    following,
+  });
 
   return (
     <>
-      <Section className='my-10 gap-2 py-0'></Section>
+      <Section className='my-10 gap-2 py-0'>
+        <Stats
+          stats={{
+            nonMutualsFollowingYou,
+            nonMutualsYouFollow,
+            following: following.totalCount,
+            followers: followers.totalCount,
+          }}
+        />
+      </Section>
     </>
   );
 };
