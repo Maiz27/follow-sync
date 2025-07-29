@@ -1,6 +1,7 @@
+'use client';
+
 import React from 'react';
 import Link from 'next/link';
-import { auth } from '@/app/auth';
 import { Session } from 'next-auth';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -12,9 +13,10 @@ import { Button } from '../ui/button';
 import { LuBuilding2, LuLink, LuMapPin } from 'react-icons/lu';
 import { SiX } from 'react-icons/si';
 import { Card, CardContent } from '../ui/card';
+import { useSession } from 'next-auth/react';
 
-export const UserHoverCard = async () => {
-  const session = await auth();
+export const UserHoverCard = () => {
+  const { data: session } = useSession();
 
   if (!session) {
     return <></>;
@@ -38,8 +40,8 @@ export const UserHoverCard = async () => {
   );
 };
 
-export const UserCard = async () => {
-  const session = await auth();
+export const UserCard = () => {
+  const { data: session } = useSession();
 
   if (!session) {
     return <></>;

@@ -35620,13 +35620,15 @@ export type FollowingFieldsFragment = {
   } | null> | null;
 };
 
-export type GetUserFollowersLoginQueryVariables = Exact<{
+export type GetUserFollowersAndFollowingQueryVariables = Exact<{
   login: Scalars['String']['input'];
   firstFollowers?: InputMaybe<Scalars['Int']['input']>;
   afterFollowers?: InputMaybe<Scalars['String']['input']>;
+  firstFollowing?: InputMaybe<Scalars['Int']['input']>;
+  afterFollowing?: InputMaybe<Scalars['String']['input']>;
 }>;
 
-export type GetUserFollowersLoginQuery = {
+export type GetUserFollowersAndFollowingQuery = {
   __typename?: 'Query';
   user?: {
     __typename?: 'User';
@@ -35638,21 +35640,14 @@ export type GetUserFollowersLoginQuery = {
         hasNextPage: boolean;
         endCursor?: string | null;
       };
-      nodes?: Array<{ __typename?: 'User'; login: string } | null> | null;
+      nodes?: Array<{
+        __typename?: 'User';
+        login: string;
+        name?: string | null;
+        avatarUrl: any;
+        url: any;
+      } | null> | null;
     };
-  } | null;
-};
-
-export type GetUserFollowingLoginQueryVariables = Exact<{
-  login: Scalars['String']['input'];
-  firstFollowing?: InputMaybe<Scalars['Int']['input']>;
-  afterFollowing?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-export type GetUserFollowingLoginQuery = {
-  __typename?: 'Query';
-  user?: {
-    __typename?: 'User';
     following: {
       __typename?: 'FollowingConnection';
       totalCount: number;
@@ -35661,7 +35656,13 @@ export type GetUserFollowingLoginQuery = {
         hasNextPage: boolean;
         endCursor?: string | null;
       };
-      nodes?: Array<{ __typename?: 'User'; login: string } | null> | null;
+      nodes?: Array<{
+        __typename?: 'User';
+        login: string;
+        name?: string | null;
+        avatarUrl: any;
+        url: any;
+      } | null> | null;
     };
   } | null;
 };
@@ -35920,13 +35921,13 @@ export const FollowingFieldsFragmentDoc = {
     },
   ],
 } as unknown as DocumentNode<FollowingFieldsFragment, unknown>;
-export const GetUserFollowersLoginDocument = {
+export const GetUserFollowersAndFollowingDocument = {
   kind: 'Document',
   definitions: [
     {
       kind: 'OperationDefinition',
       operation: 'query',
-      name: { kind: 'Name', value: 'GetUserFollowersLogin' },
+      name: { kind: 'Name', value: 'GetUserFollowersAndFollowing' },
       variableDefinitions: [
         {
           kind: 'VariableDefinition',
@@ -35956,6 +35957,23 @@ export const GetUserFollowersLoginDocument = {
           variable: {
             kind: 'Variable',
             name: { kind: 'Name', value: 'afterFollowers' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'firstFollowing' },
+          },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+          defaultValue: { kind: 'IntValue', value: '100' },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'afterFollowing' },
           },
           type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
         },
@@ -36004,123 +36022,12 @@ export const GetUserFollowersLoginDocument = {
                     kind: 'SelectionSet',
                     selections: [
                       {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'totalCount' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'pageInfo' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'FragmentSpread',
-                              name: { kind: 'Name', value: 'PageInfo' },
-                            },
-                          ],
-                        },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'nodes' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'login' },
-                            },
-                          ],
-                        },
+                        kind: 'FragmentSpread',
+                        name: { kind: 'Name', value: 'FollowerFields' },
                       },
                     ],
                   },
                 },
-              ],
-            },
-          },
-        ],
-      },
-    },
-    {
-      kind: 'FragmentDefinition',
-      name: { kind: 'Name', value: 'PageInfo' },
-      typeCondition: {
-        kind: 'NamedType',
-        name: { kind: 'Name', value: 'PageInfo' },
-      },
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          { kind: 'Field', name: { kind: 'Name', value: 'hasNextPage' } },
-          { kind: 'Field', name: { kind: 'Name', value: 'endCursor' } },
-        ],
-      },
-    },
-  ],
-} as unknown as DocumentNode<
-  GetUserFollowersLoginQuery,
-  GetUserFollowersLoginQueryVariables
->;
-export const GetUserFollowingLoginDocument = {
-  kind: 'Document',
-  definitions: [
-    {
-      kind: 'OperationDefinition',
-      operation: 'query',
-      name: { kind: 'Name', value: 'GetUserFollowingLogin' },
-      variableDefinitions: [
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'login' },
-          },
-          type: {
-            kind: 'NonNullType',
-            type: {
-              kind: 'NamedType',
-              name: { kind: 'Name', value: 'String' },
-            },
-          },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'firstFollowing' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
-          defaultValue: { kind: 'IntValue', value: '100' },
-        },
-        {
-          kind: 'VariableDefinition',
-          variable: {
-            kind: 'Variable',
-            name: { kind: 'Name', value: 'afterFollowing' },
-          },
-          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
-        },
-      ],
-      selectionSet: {
-        kind: 'SelectionSet',
-        selections: [
-          {
-            kind: 'Field',
-            name: { kind: 'Name', value: 'user' },
-            arguments: [
-              {
-                kind: 'Argument',
-                name: { kind: 'Name', value: 'login' },
-                value: {
-                  kind: 'Variable',
-                  name: { kind: 'Name', value: 'login' },
-                },
-              },
-            ],
-            selectionSet: {
-              kind: 'SelectionSet',
-              selections: [
                 {
                   kind: 'Field',
                   name: { kind: 'Name', value: 'following' },
@@ -36146,34 +36053,8 @@ export const GetUserFollowingLoginDocument = {
                     kind: 'SelectionSet',
                     selections: [
                       {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'totalCount' },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'pageInfo' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'FragmentSpread',
-                              name: { kind: 'Name', value: 'PageInfo' },
-                            },
-                          ],
-                        },
-                      },
-                      {
-                        kind: 'Field',
-                        name: { kind: 'Name', value: 'nodes' },
-                        selectionSet: {
-                          kind: 'SelectionSet',
-                          selections: [
-                            {
-                              kind: 'Field',
-                              name: { kind: 'Name', value: 'login' },
-                            },
-                          ],
-                        },
+                        kind: 'FragmentSpread',
+                        name: { kind: 'Name', value: 'FollowingFields' },
                       },
                     ],
                   },
@@ -36199,10 +36080,107 @@ export const GetUserFollowingLoginDocument = {
         ],
       },
     },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'UserInfo' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'User' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'login' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'name' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'avatarUrl' } },
+          { kind: 'Field', name: { kind: 'Name', value: 'url' } },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'FollowerFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'FollowerConnection' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'totalCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'pageInfo' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'PageInfo' },
+                },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'nodes' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'UserInfo' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+    {
+      kind: 'FragmentDefinition',
+      name: { kind: 'Name', value: 'FollowingFields' },
+      typeCondition: {
+        kind: 'NamedType',
+        name: { kind: 'Name', value: 'FollowingConnection' },
+      },
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          { kind: 'Field', name: { kind: 'Name', value: 'totalCount' } },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'pageInfo' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'PageInfo' },
+                },
+              ],
+            },
+          },
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'nodes' },
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'FragmentSpread',
+                  name: { kind: 'Name', value: 'UserInfo' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
   ],
 } as unknown as DocumentNode<
-  GetUserFollowingLoginQuery,
-  GetUserFollowingLoginQueryVariables
+  GetUserFollowersAndFollowingQuery,
+  GetUserFollowersAndFollowingQueryVariables
 >;
 export const GetUserFollowersDocument = {
   kind: 'Document',

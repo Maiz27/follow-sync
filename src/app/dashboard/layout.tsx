@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { SessionProvider } from 'next-auth/react';
 import Providers from '../provider';
 
 export default function Layout({
@@ -6,5 +7,9 @@ export default function Layout({
 }: Readonly<{
   children: ReactNode;
 }>) {
-  return <Providers>{children}</Providers>;
+  return (
+    <Providers>
+      <SessionProvider>{children}</SessionProvider>
+    </Providers>
+  );
 }

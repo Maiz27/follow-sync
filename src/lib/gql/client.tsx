@@ -59,7 +59,7 @@ export const createServerGraphQLClient = async ({
  * - client: The GraphQLClient instance, or null if not authenticated/loading.
  * - status: The authentication status ('loading', 'authenticated', 'unauthenticated').
  */
-export const useClientAuthenticatedGraphQLClient = (): object => {
+export const useClientAuthenticatedGraphQLClient = () => {
   // Mark this file or the component using this hook as 'use client'
   // if this file is not already marked as such and this hook is used directly in a component.
   // Example: 'use client'; at the top of a component file that imports this.
@@ -101,13 +101,18 @@ export const useClientAuthenticatedGraphQLClient = (): object => {
  * @returns {Promise<TData>} A promise that resolves with the typed response data.
  * @throws {Error} If the request fails, the error will be thrown for error handling.
  */
-export const graphqlRequest = async <TData, TVariables extends Variables>(
-  client: GraphQLClient,
-  query: DocumentNode | string,
-  variables: TVariables
-): Promise<TData> => {
+export const graphqlRequest = async <TData, TVariables extends Variables>({
+  client,
+  query,
+  variables,
+}: {
+  client: GraphQLClient;
+  query: DocumentNode | string;
+  variables: TVariables;
+}): Promise<TData> => {
+  console.log(query, variables);
   try {
-    const data = await client.request<TData>(query, { variables });
+    const data = await client.request<TData>(query, { ...variables });
     return data;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
