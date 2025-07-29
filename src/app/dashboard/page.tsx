@@ -1,11 +1,11 @@
-import { UserCard } from '@/components/user/userCard';
-import { Section } from '@/components/utils/section';
 import React from 'react';
+import { Section } from '@/components/utils/section';
+import { UserCard } from '@/components/user/userCard';
 
 const Dashboard = () => {
   return (
     <>
-      <Section>
+      <Section className='my-10 grid place-items-center py-0'>
         <UserCard />
       </Section>
     </>
