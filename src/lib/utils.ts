@@ -76,8 +76,8 @@ export const getNonMutuals = ({
   );
 
   const stats = {
-    nonMutualsFollowingYou: nonMutualsFollowingYou.length,
-    nonMutualsYouFollow: nonMutualsYouFollow.length,
+    nonMutualsFollowingYou,
+    nonMutualsYouFollow,
   };
 
   return stats;

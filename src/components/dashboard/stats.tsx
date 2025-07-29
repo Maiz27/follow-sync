@@ -26,15 +26,13 @@ const Stats = ({
       label: 'Your Audience (Followers)',
       value: followers,
       icon: LuEye,
-      description:
-        'The total number of users currently following your GitHub profile.',
+      description: 'Users currently following your GitHub profile.',
     },
     {
       label: 'Your Network (Following)',
       value: following,
       icon: LuHeart,
-      description:
-        'The total number of users you are currently following on GitHub.',
+      description: 'Users you are currently following on GitHub.',
     },
     {
       label: 'One-Way Out (You Follow)',

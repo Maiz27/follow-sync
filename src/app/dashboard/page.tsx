@@ -6,6 +6,7 @@ import { Section } from '@/components/utils/section';
 import { useUserNetwork } from '@/lib/hooks/useUserNetwork';
 import { getNonMutuals } from '@/lib/utils';
 import { useSession } from 'next-auth/react';
+import Analyzer from '@/components/dashboard/analyzer';
 
 const ClientDashboard = () => {
   const { data: session } = useSession();
@@ -29,14 +30,20 @@ const ClientDashboard = () => {
 
   return (
     <>
-      <Section className='my-10 gap-2 py-0'>
+      <Section className='my-10 grid gap-2 py-0'>
         <Stats
           stats={{
-            nonMutualsFollowingYou,
-            nonMutualsYouFollow,
+            nonMutualsFollowingYou: nonMutualsFollowingYou.length,
+            nonMutualsYouFollow: nonMutualsYouFollow.length,
             following: following.totalCount,
             followers: followers.totalCount,
           }}
+        />
+        <Analyzer
+          followers={followers.nodes!}
+          following={following.nodes!}
+          oneWayOut={nonMutualsYouFollow}
+          oneWayIn={nonMutualsFollowingYou}
         />
       </Section>
     </>
