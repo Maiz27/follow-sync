@@ -1,26 +1,21 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 
-// React component that can accept props
-type ComponentType<P = object> = React.ComponentType<P>;
-
-// single tab
-export type Tab<TProps extends Record<string, any> = Record<string, never>> = {
+export type Tab = {
   id: string;
   label: string;
-  component: ComponentType<TProps>;
-  componentProps: TProps; // Make componentProps required, even if it's an empty object
+  component: React.ReactNode;
 };
 
-type TabManagerProps<TTabs extends Tab<any>[]> = {
+type TabManagerProps<TTabs extends Tab[]> = {
   tabs: TTabs;
   defaultValue?: string;
   tabsListClassName?: string;
   tabsContainerClassName?: string;
 };
 
-const TabManager = <TTabs extends Tab<any>[]>({
+const TabManager = <TTabs extends Tab[]>({
   tabs,
   defaultValue,
   tabsListClassName,
@@ -37,12 +32,13 @@ const TabManager = <TTabs extends Tab<any>[]>({
   return (
     <Tabs
       defaultValue={initialDefaultValue}
-      className={tabsContainerClassName || 'h-full w-full'}
+      className={cn('h-full w-full', tabsContainerClassName)}
     >
       <TabsList
-        className={
-          tabsListClassName || 'grid h-full w-full grid-cols-2 lg:grid-cols-4'
-        }
+        className={cn(
+          'grid h-full w-full grid-cols-2 lg:grid-cols-4',
+          tabsListClassName
+        )}
       >
         {tabs.map((tab) => (
           <TabsTrigger key={tab.id} value={tab.id}>
@@ -53,7 +49,7 @@ const TabManager = <TTabs extends Tab<any>[]>({
 
       {tabs.map((tab) => (
         <TabsContent key={tab.id} value={tab.id}>
-          {React.createElement(tab.component, tab.componentProps)}
+          {tab.component}
         </TabsContent>
       ))}
     </Tabs>

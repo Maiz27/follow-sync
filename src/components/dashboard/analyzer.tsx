@@ -6,8 +6,9 @@ import {
   CardHeader,
   CardTitle,
 } from '../ui/card';
-import TabManager, { Tab } from '../utils/tabsManager';
+import TabManager from '../utils/tabsManager';
 import { UserInfoFragment } from '@/lib/gql/types';
+import FollowersTab from './tabs/followersTab';
 
 type AnalyzerProps = {
   followers: (UserInfoFragment | null)[];
@@ -22,29 +23,29 @@ const Analyzer = ({
   oneWayOut,
   oneWayIn,
 }: AnalyzerProps) => {
-  const networkTabsData: Tab<(UserInfoFragment | null)[]>[] = [
+  const networkTabsData = [
     {
       id: 'followers',
       label: `Audience (${followers.length})`,
-      component: DummyComponent,
+      component: <FollowersTab followers={followers} />,
       componentProps: followers,
     },
     {
       id: 'following',
       label: `Network (${following.length})`,
-      component: DummyComponent,
+      component: <DummyComponent />,
       componentProps: following,
     },
     {
       id: 'one-way-out',
       label: `One-Way Out (${oneWayOut.length})`,
-      component: DummyComponent,
+      component: <DummyComponent />,
       componentProps: oneWayOut,
     },
     {
       id: 'one-way-in',
       label: `One-Way In (${oneWayIn.length})`,
-      component: DummyComponent,
+      component: <DummyComponent />,
       componentProps: oneWayIn,
     },
   ];
