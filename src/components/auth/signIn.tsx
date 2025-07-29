@@ -1,7 +1,7 @@
 import React from 'react';
 import { auth, signIn } from '@/app/auth';
 import { Button } from '../ui/button';
-import { UserHoverCard } from '../user/userCard';
+import { UserHoverCard } from '../user/userHoverCard';
 import { LuGithub } from 'react-icons/lu';
 
 const SignIn = async () => {

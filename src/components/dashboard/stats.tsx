@@ -1,5 +1,4 @@
 import React from 'react';
-import { Section } from '../utils/section';
 import {
   Card,
   CardContent,
@@ -19,7 +18,7 @@ type StatsProps = {
   };
 };
 
-const Stats = async ({
+const Stats = ({
   stats: { followers, following, nonMutualsFollowingYou, nonMutualsYouFollow },
 }: StatsProps) => {
   const list = [
@@ -52,7 +51,7 @@ const Stats = async ({
   ];
 
   return (
-    <Section className='grid place-items-center gap-2 md:grid-cols-2 lg:grid-cols-4'>
+    <div className='grid w-full place-items-center gap-2 md:grid-cols-2 lg:grid-cols-4'>
       {list.map((item, index) => {
         return (
           <Card
@@ -60,11 +59,11 @@ const Stats = async ({
             className='h-full w-full flex-col-reverse text-center'
           >
             <CardHeader className='flex flex-col'>
-              <CardTitle className='flex items-center gap-2'>
+              <CardTitle className='flex w-full items-center justify-center gap-2'>
                 <item.icon className='text-xl text-primary' />
-                <h3 className='text-base'>{item.label}</h3>
+                <h3>{item.label}</h3>
               </CardTitle>
-              <CardDescription className='text-xs text-muted-foreground'>
+              <CardDescription className='text-sm text-muted-foreground'>
                 {item.description}
               </CardDescription>
             </CardHeader>
@@ -76,7 +75,7 @@ const Stats = async ({
           </Card>
         );
       })}
-    </Section>
+    </div>
   );
 };
 

@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { FollowLogin, textSizes } from './types';
+import { textSizes } from './types';
+import { FollowerFieldsFragment, FollowingFieldsFragment } from './gql/types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -55,28 +56,26 @@ export const textSizesClasses: Record<NonNullable<textSizes>, string> = {
   '7xl': 'text-7xl',
 };
 
-export const getFollowStats = ({
+export const getNonMutuals = ({
   followers,
-  followings,
+  following,
 }: {
-  followers: FollowLogin;
-  followings: FollowLogin;
+  followers: Pick<FollowerFieldsFragment, 'nodes' | 'totalCount'>;
+  following: Pick<FollowingFieldsFragment, 'nodes' | 'totalCount'>;
 }) => {
-  const followerLogins = new Set(followers.nodes.map((u) => u!.login));
-  const followingLogins = new Set(followings.nodes.map((u) => u!.login));
+  const followerLogins = new Set(followers.nodes!.map((u) => u!.login));
+  const followingLogins = new Set(following.nodes!.map((u) => u!.login));
 
   // Calculate non-mutuals using only logins
-  const nonMutualsFollowingYou = followings.nodes.filter(
+  const nonMutualsFollowingYou = following.nodes!.filter(
     (u) => !followerLogins.has(u!.login)
   );
 
-  const nonMutualsYouFollow = followers.nodes.filter(
+  const nonMutualsYouFollow = followers.nodes!.filter(
     (u) => !followingLogins.has(u!.login)
   );
 
   const stats = {
-    followers: followers.totalCount,
-    following: followings.totalCount,
     nonMutualsFollowingYou: nonMutualsFollowingYou.length,
     nonMutualsYouFollow: nonMutualsYouFollow.length,
   };

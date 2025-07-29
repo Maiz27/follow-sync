@@ -1,44 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { Fragment } from 'react';
 import Link from 'next/link';
-import { Session } from 'next-auth';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from '@/components/ui/hover-card';
-import { Button } from '../ui/button';
-import { LuBuilding2, LuLink, LuMapPin } from 'react-icons/lu';
-import { SiX } from 'react-icons/si';
-import { Card, CardContent } from '../ui/card';
 import { useSession } from 'next-auth/react';
-
-export const UserHoverCard = () => {
-  const { data: session } = useSession();
-
-  if (!session) {
-    return <></>;
-  }
-
-  if (!session.user) {
-    return <></>;
-  }
-
-  const user = session.user;
-
-  return (
-    <HoverCard>
-      <HoverCardTrigger asChild>
-        <Button variant='link'>@{user.login}</Button>
-      </HoverCardTrigger>
-      <HoverCardContent className='w-fit max-w-md'>
-        <UserCardContent user={user} />
-      </HoverCardContent>
-    </HoverCard>
-  );
-};
+import { Card, CardContent } from '../ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { LuBuilding2, LuLink, LuMapPin, LuUser } from 'react-icons/lu';
+import { SiX } from 'react-icons/si';
+import { Separator } from '@/components/ui/separator';
 
 export const UserCard = () => {
   const { data: session } = useSession();
@@ -53,20 +22,19 @@ export const UserCard = () => {
 
   const user = session.user;
 
-  return (
-    <Card>
-      <CardContent>
-        <UserCardContent user={user} />
-      </CardContent>
-    </Card>
-  );
-};
+  console.log(user);
 
-const UserCardContent = ({ user }: { user: Session['user'] }) => {
   const properties = [
     { icon: LuBuilding2, value: user.company },
     { icon: LuMapPin, value: user.location },
-    { icon: LuLink, value: user.blog, href: user.blog },
+  ];
+
+  const linkProperties = [
+    {
+      icon: LuUser,
+      value: user.login,
+      href: user.login ? `https://github.com/${user.login}` : undefined,
+    },
     {
       icon: SiX,
       value: user.twitter_username,
@@ -74,52 +42,72 @@ const UserCardContent = ({ user }: { user: Session['user'] }) => {
         ? `https://x.com/${user.twitter_username}`
         : undefined,
     },
+    {
+      icon: LuLink,
+      value: 'Website',
+      href: user.blog,
+    },
   ];
 
   return (
-    <div className='flex justify-between gap-4'>
-      <Avatar className='h-fit w-24 overflow-hidden rounded-full'>
-        <AvatarImage src={user.image!} />
-        <AvatarFallback>{user.name?.split(' ')[0][0]}</AvatarFallback>
-      </Avatar>
+    <Card className='h-full w-full'>
+      <CardContent className='grow'>
+        <div className='flex h-full w-full flex-col justify-center gap-4'>
+          <div>
+            <Avatar className='mx-auto h-fit w-64 overflow-hidden rounded-full md:w-40'>
+              <AvatarImage src={user.image!} />
+              <AvatarFallback>{user.name?.split(' ')[0][0]}</AvatarFallback>
+            </Avatar>
 
-      <div className='space-y-2'>
-        <div className='grid'>
-          <span className='text-lg font-semibold'>{user.name}</span>
-          <span className='text-xs text-muted-foreground'>@{user.login}</span>
-        </div>
+            <div className='grid'>
+              <span className='text-lg font-semibold'>{user.name}</span>
+              <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+                {linkProperties.map((property, index) => {
+                  if (!property.value) {
+                    return null;
+                  }
 
-        <p className='py-1 text-sm'>{user.bio}</p>
-
-        <div className='grid gap-2 text-xs'>
-          {properties.map((property, index) => {
-            if (!property.value) {
-              return null;
-            }
-            if (property.href) {
-              return (
-                <Link
-                  key={index}
-                  href={property.href}
-                  target='_blank'
-                  rel='noreferrer'
-                  className='flex items-center gap-2 hover:underline'
-                >
-                  <property.icon className='text-muted-foreground' />
-                  {property.value}
-                </Link>
-              );
-            }
-
-            return (
-              <div key={index} className='flex items-center gap-2'>
-                <property.icon className='text-muted-foreground' />
-                {property.value}
+                  return (
+                    <Fragment key={index}>
+                      <Separator
+                        orientation='vertical'
+                        className='ml-2 first:hidden'
+                      />
+                      <Link
+                        href={property.href!}
+                        target='_blank'
+                        rel='noreferrer'
+                        className='flex items-center gap-1 hover:underline'
+                      >
+                        <property.icon className='text-muted-foreground' />
+                        <span>{property.value}</span>
+                      </Link>
+                    </Fragment>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          </div>
+
+          <div className='flex flex-col space-y-2'>
+            <p className='grow py-1 text-sm'>{user.bio}</p>
+
+            <div className='grid gap-2 text-xs'>
+              {properties.map((property, index) => {
+                if (!property.value) {
+                  return null;
+                }
+                return (
+                  <div key={index} className='flex items-center gap-2'>
+                    <property.icon className='text-muted-foreground' />
+                    {property.value}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 };

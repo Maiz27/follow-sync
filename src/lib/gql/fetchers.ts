@@ -4,15 +4,35 @@ import type {
   FollowingFieldsFragment,
   GetUserFollowersAndFollowingQuery,
   GetUserFollowersAndFollowingQueryVariables,
+  User,
 } from '@/lib/gql/types';
 import { GraphQLClient } from 'graphql-request';
 
+/**
+ * Defines the shape of the progress update object.
+ */
+export interface FetchProgress {
+  fetchedFollowers: number;
+  totalFollowers: number;
+  fetchedFollowing: number;
+  totalFollowing: number;
+  // We can add more details here later, like the current user being fetched.
+}
+
+/**
+ * Fetches all followers and following for a given GitHub user, with progress reporting.
+ * @param client - The authenticated GraphQL client.
+ * @param username - The GitHub username to fetch data for.
+ * @param onProgress - An optional callback function that receives progress updates.
+ */
 export const fetchAllUserFollowersAndFollowing = async ({
   client,
   username,
+  onProgress, // The new callback parameter
 }: {
   client: GraphQLClient;
   username: string;
+  onProgress?: (progress: FetchProgress) => void;
 }) => {
   const allFollowers: Pick<FollowerFieldsFragment, 'nodes' | 'totalCount'> = {
     nodes: [],
@@ -29,16 +49,13 @@ export const fetchAllUserFollowersAndFollowing = async ({
   let currentCursorFollowers: string | null = null;
   let currentCursorFollowing: string | null = null;
 
-  const pageSize = 100; // Your desired page size for fetching
+  const pageSize = 100;
 
-  // Continue looping as long as either followers or following still has a next page
   while (hasNextPageFollowers || hasNextPageFollowing) {
-    const _variables: GetUserFollowersAndFollowingQueryVariables = {
+    const variables: GetUserFollowersAndFollowingQueryVariables = {
       login: username,
-      // Only request next page if it exists for followers
       firstFollowers: hasNextPageFollowers ? pageSize : 0,
       afterFollowers: currentCursorFollowers,
-      // Only request next page if it exists for following
       firstFollowing: hasNextPageFollowing ? pageSize : 0,
       afterFollowing: currentCursorFollowing,
     };
@@ -47,55 +64,50 @@ export const fetchAllUserFollowersAndFollowing = async ({
       const data = await client.request<
         GetUserFollowersAndFollowingQuery,
         GetUserFollowersAndFollowingQueryVariables
-      >(GET_USER_FOLLOWERS_AND_FOLLOWING, _variables);
+      >(GET_USER_FOLLOWERS_AND_FOLLOWING, variables);
 
       // Process Followers data
-      if (hasNextPageFollowers) {
-        // Only process if we were expecting more
-        const currentFollowerNodes = data.user?.followers.nodes || [];
-        allFollowers.nodes?.push(...currentFollowerNodes);
-        // totalCount should be set once from the first page, or updated if it can change
-        if (
-          allFollowers.totalCount === 0 &&
-          data.user?.followers.totalCount !== undefined
-        ) {
-          allFollowers.totalCount = data.user.followers.totalCount;
+      if (hasNextPageFollowers && data.user?.followers) {
+        const { nodes, totalCount, pageInfo } = data.user.followers;
+        allFollowers.nodes?.push(...(nodes as User[]));
+        if (allFollowers.totalCount === 0) {
+          allFollowers.totalCount = totalCount;
         }
-
-        hasNextPageFollowers =
-          data.user?.followers.pageInfo?.hasNextPage || false;
-        currentCursorFollowers =
-          data.user?.followers.pageInfo?.endCursor || null;
+        hasNextPageFollowers = pageInfo?.hasNextPage || false;
+        currentCursorFollowers = pageInfo?.endCursor || null;
       }
 
       // Process Following data
-      if (hasNextPageFollowing) {
-        // Only process if we were expecting more
-        const currentFollowingNodes = data.user?.following.nodes || [];
-        allFollowing.nodes?.push(...currentFollowingNodes);
-        if (
-          allFollowing.totalCount === 0 &&
-          data.user?.following.totalCount !== undefined
-        ) {
-          allFollowing.totalCount = data.user.following.totalCount;
+      if (hasNextPageFollowing && data.user?.following) {
+        const { nodes, totalCount, pageInfo } = data.user.following;
+        allFollowing.nodes?.push(...(nodes as User[]));
+        if (allFollowing.totalCount === 0) {
+          allFollowing.totalCount = totalCount;
         }
-
-        hasNextPageFollowing =
-          data.user?.following.pageInfo?.hasNextPage || false;
-        currentCursorFollowing =
-          data.user?.following.pageInfo?.endCursor || null;
+        hasNextPageFollowing = pageInfo?.hasNextPage || false;
+        currentCursorFollowing = pageInfo?.endCursor || null;
       }
 
-      // Small delay between requests to be polite to the GitHub API
+      // *** Report Progress ***
+      // Invoke the callback with the latest numbers after each API call.
+      onProgress?.({
+        fetchedFollowers: allFollowers.nodes?.length || 0,
+        totalFollowers: allFollowers.totalCount,
+        fetchedFollowing: allFollowing.nodes?.length || 0,
+        totalFollowing: allFollowing.totalCount,
+      });
+
+      // Small delay to be polite to the GitHub API
       if (hasNextPageFollowers || hasNextPageFollowing) {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
-      console.error('Error fetching all follow and following data:', error);
+      console.error('Error fetching paginated follow data:', error);
+      // Re-throw the error to be caught by React Query
       throw new Error(
-        error.message || 'Failed to fetch all follow and following data.'
+        error.response?.errors?.[0]?.message ||
+          'Failed to fetch paginated follow data.'
       );
     }
   }

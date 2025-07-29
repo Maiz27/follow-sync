@@ -1,6 +1,9 @@
 import { ReactNode } from 'react';
 import { SessionProvider } from 'next-auth/react';
-import Providers from '../provider';
+import Providers from '@/lib/context/provider';
+import { ProgressProvider } from '@/lib/context/progress';
+import { Toaster } from '@/components/ui/sonner';
+import { GlobalProgressIndicator } from '@/components/utils/progress';
 
 export default function Layout({
   children,
@@ -9,7 +12,13 @@ export default function Layout({
 }>) {
   return (
     <Providers>
-      <SessionProvider>{children}</SessionProvider>
+      <SessionProvider>
+        <ProgressProvider>
+          {children}
+          <GlobalProgressIndicator />
+          <Toaster />
+        </ProgressProvider>
+      </SessionProvider>
     </Providers>
   );
 }
