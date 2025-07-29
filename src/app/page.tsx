@@ -20,7 +20,7 @@ export default async function Home() {
         <SignIn />
       </Section>
 
-      <Dashboard />
+      {/* <Dashboard /> */}
     </>
   );
 }
