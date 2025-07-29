@@ -2,10 +2,17 @@ import { gql } from 'graphql-request';
 
 export const FRAGMENT_USER_INFO = gql`
   fragment UserInfo on User {
+    id
     login
     name
     avatarUrl
     url
+    followers {
+      totalCount
+    }
+    following {
+      totalCount
+    }
   }
 `;
 

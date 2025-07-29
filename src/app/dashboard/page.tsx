@@ -42,8 +42,8 @@ const ClientDashboard = () => {
         <Analyzer
           followers={followers.nodes!}
           following={following.nodes!}
-          oneWayOut={nonMutualsYouFollow}
-          oneWayIn={nonMutualsFollowingYou}
+          oneWayOut={nonMutualsFollowingYou}
+          oneWayIn={nonMutualsYouFollow}
         />
       </Section>
     </>

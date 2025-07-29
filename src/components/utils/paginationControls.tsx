@@ -31,7 +31,7 @@ const PaginationControls: React.FC<PaginationControlsProps> = ({
   }
 
   return (
-    <Pagination>
+    <Pagination className='mt-8'>
       <PaginationContent>
         <PaginationItem>
           <PaginationPrevious

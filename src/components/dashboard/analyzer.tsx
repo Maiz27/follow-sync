@@ -9,6 +9,10 @@ import {
 import TabManager from '../utils/tabsManager';
 import { UserInfoFragment } from '@/lib/gql/types';
 import FollowersTab from './tabs/followersTab';
+import { formatNumber } from '@/lib/utils';
+import FollowingTab from './tabs/followingTab';
+import NonFollowersTab from './tabs/nonFollowersTab';
+import NonFollowingTab from './tabs/nonFollowingTab';
 
 type AnalyzerProps = {
   followers: (UserInfoFragment | null)[];
@@ -26,26 +30,26 @@ const Analyzer = ({
   const networkTabsData = [
     {
       id: 'followers',
-      label: `Audience (${followers.length})`,
+      label: `Audience (${formatNumber(followers.length)})`,
       component: <FollowersTab followers={followers} />,
       componentProps: followers,
     },
     {
       id: 'following',
-      label: `Network (${following.length})`,
-      component: <DummyComponent />,
+      label: `Network (${formatNumber(following.length)})`,
+      component: <FollowingTab following={following} />,
       componentProps: following,
     },
     {
       id: 'one-way-out',
-      label: `One-Way Out (${oneWayOut.length})`,
-      component: <DummyComponent />,
+      label: `One-Way Out (${formatNumber(oneWayOut.length)})`,
+      component: <NonFollowersTab oneWayOut={oneWayOut} />,
       componentProps: oneWayOut,
     },
     {
       id: 'one-way-in',
-      label: `One-Way In (${oneWayIn.length})`,
-      component: <DummyComponent />,
+      label: `One-Way In (${formatNumber(oneWayIn.length)})`,
+      component: <NonFollowingTab oneWayIn={oneWayIn} />,
       componentProps: oneWayIn,
     },
   ];
@@ -66,7 +70,3 @@ const Analyzer = ({
 };
 
 export default Analyzer;
-
-const DummyComponent = () => {
-  return <div>Dummy Component</div>;
-};

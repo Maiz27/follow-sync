@@ -1,17 +1,17 @@
 import React from 'react';
 import { UserInfoFragment } from '@/lib/gql/types';
 import PaginatedList from '@/components/utils/paginatedList';
+import ConnectionCard from '../connectionCard';
 
 export type FollowersTabProps = {
   followers: (UserInfoFragment | null)[];
 };
 
-const FollowersTab: React.FC<FollowersTabProps> = ({ followers }) => {
-  console.log(followers);
+const FollowersTab = ({ followers }: FollowersTabProps) => {
   return (
     <PaginatedList
       data={followers}
-      renderItem={(item) => <p>{item!.login}</p>}
+      renderItem={(item) => <ConnectionCard user={item!} />}
     />
   );
 };
