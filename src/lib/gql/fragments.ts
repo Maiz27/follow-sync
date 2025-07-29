@@ -1,11 +1,18 @@
-import { gql } from '@apollo/client';
+import { gql } from 'graphql-request';
 
 export const FRAGMENT_USER_INFO = gql`
   fragment UserInfo on User {
+    id
     login
     name
     avatarUrl
     url
+    followers {
+      totalCount
+    }
+    following {
+      totalCount
+    }
   }
 `;
 
@@ -26,8 +33,6 @@ export const FRAGMENT_FOLLOWER_FIELDS = gql`
       ...UserInfo
     }
   }
-  ${FRAGMENT_PAGE_INFO}
-  ${FRAGMENT_USER_INFO}
 `;
 
 export const FRAGMENT_FOLLOWING_FIELDS = gql`
@@ -40,6 +45,4 @@ export const FRAGMENT_FOLLOWING_FIELDS = gql`
       ...UserInfo
     }
   }
-  ${FRAGMENT_PAGE_INFO}
-  ${FRAGMENT_USER_INFO}
 `;

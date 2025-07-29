@@ -2,7 +2,6 @@ import SignIn from '@/components/auth/signIn';
 import { Heading } from '@/components/utils/heading';
 import { Section } from '@/components/utils/section';
 import { SubText } from '@/components/utils/subText';
-import Dashboard from '@/components/dashboard/dashboard';
 
 export default async function Home() {
   return (
@@ -19,8 +18,6 @@ export default async function Home() {
 
         <SignIn />
       </Section>
-
-      <Dashboard />
     </>
   );
 }

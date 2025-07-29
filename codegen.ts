@@ -22,13 +22,22 @@ const config: CodegenConfig = {
     // 'lib/gql/**/*.graphql',
   ],
   generates: {
-    // you could generate back into lib/gql or a separate types folder
     'src/lib/gql/types.ts': {
       plugins: [
+        // ADD THIS BLOCK AT THE BEGINNING OF THE PLUGINS ARRAY
+        {
+          add: {
+            content: '/* eslint-disable @typescript-eslint/no-explicit-any */',
+          },
+        },
+        // END OF ADDED BLOCK
         'typescript',
         'typescript-operations',
         'typed-document-node', // ← this one wraps your types in DocumentNode<>
       ],
+      // You can add specific configuration for the 'add' plugin here if needed,
+      // but 'content' is usually sufficient.
+      // e.g., config: { add: { content: '...', placement: 'prepend' } }
     },
   },
 };

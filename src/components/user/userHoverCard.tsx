@@ -1,17 +1,16 @@
-import React from 'react';
 import Link from 'next/link';
 import { auth } from '@/app/auth';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   HoverCard,
-  HoverCardContent,
   HoverCardTrigger,
+  HoverCardContent,
 } from '@/components/ui/hover-card';
 import { Button } from '../ui/button';
-import { LuBuilding2, LuLink, LuMapPin } from 'react-icons/lu';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { LuBuilding2, LuMapPin, LuLink } from 'react-icons/lu';
 import { SiX } from 'react-icons/si';
 
-const UserHoverCard = async () => {
+export const UserHoverCard = async () => {
   const session = await auth();
 
   if (!session) {
@@ -43,7 +42,7 @@ const UserHoverCard = async () => {
         <Button variant='link'>@{user.login}</Button>
       </HoverCardTrigger>
       <HoverCardContent className='w-fit max-w-md'>
-        <div className='flex justify-between gap-4'>
+        <div className='flex h-full w-full justify-between gap-4'>
           <Avatar className='h-fit w-24 overflow-hidden rounded-full'>
             <AvatarImage src={user.image!} />
             <AvatarFallback>{user.name?.split(' ')[0][0]}</AvatarFallback>
@@ -93,5 +92,3 @@ const UserHoverCard = async () => {
     </HoverCard>
   );
 };
-
-export default UserHoverCard;

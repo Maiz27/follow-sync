@@ -2,11 +2,7 @@ import NextAuth, { Profile } from 'next-auth';
 import GitHub from 'next-auth/providers/github';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [
-    GitHub({
-      authorization: { params: { scope: 'read:user user:follow' } },
-    }),
-  ],
+  providers: [GitHub],
 
   callbacks: {
     async jwt({ token, account, profile }) {

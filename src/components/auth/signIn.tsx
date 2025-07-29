@@ -1,7 +1,7 @@
 import React from 'react';
 import { auth, signIn } from '@/app/auth';
 import { Button } from '../ui/button';
-import UserHoverCard from '../user/userHoverCard';
+import { UserHoverCard } from '../user/userHoverCard';
 import { LuGithub } from 'react-icons/lu';
 
 const SignIn = async () => {
@@ -21,7 +21,7 @@ const SignIn = async () => {
       <form
         action={async () => {
           'use server';
-          await signIn('github');
+          await signIn('github', { redirectTo: '/dashboard' });
         }}
       >
         <Button type='submit'>

@@ -1,52 +1,33 @@
-import { gql } from '@apollo/client';
+import { gql } from 'graphql-request';
 import {
   FRAGMENT_FOLLOWER_FIELDS,
   FRAGMENT_FOLLOWING_FIELDS,
   FRAGMENT_PAGE_INFO,
+  FRAGMENT_USER_INFO,
 } from './fragments';
 
-export const GET_USER_FOLLOWERS_LOGIN = gql`
-  query GetUserFollowersLogin(
+export const GET_USER_FOLLOWERS_AND_FOLLOWING = gql`
+  query GetUserFollowersAndFollowing(
     $login: String!
     $firstFollowers: Int = 100
     $afterFollowers: String
-  ) {
-    user(login: $login) {
-      followers(first: $firstFollowers, after: $afterFollowers) {
-        totalCount
-        pageInfo {
-          ...PageInfo
-        }
-        nodes {
-          login
-        }
-      }
-    }
-  }
-
-  ${FRAGMENT_PAGE_INFO}
-`;
-
-export const GET_USER_FOLLOWING_LOGIN = gql`
-  query GetUserFollowingLogin(
-    $login: String!
     $firstFollowing: Int = 100
     $afterFollowing: String
   ) {
     user(login: $login) {
+      followers(first: $firstFollowers, after: $afterFollowers) {
+        ...FollowerFields
+      }
       following(first: $firstFollowing, after: $afterFollowing) {
-        totalCount
-        pageInfo {
-          ...PageInfo
-        }
-        nodes {
-          login
-        }
+        ...FollowingFields
       }
     }
   }
 
+  ${FRAGMENT_USER_INFO}
   ${FRAGMENT_PAGE_INFO}
+  ${FRAGMENT_FOLLOWER_FIELDS}
+  ${FRAGMENT_FOLLOWING_FIELDS}
 `;
 
 export const GET_USER_FOLLOWERS = gql`
@@ -62,6 +43,8 @@ export const GET_USER_FOLLOWERS = gql`
     }
   }
 
+  ${FRAGMENT_USER_INFO}
+  ${FRAGMENT_PAGE_INFO}
   ${FRAGMENT_FOLLOWER_FIELDS}
 `;
 
@@ -78,5 +61,7 @@ export const GET_USER_FOLLOWING = gql`
     }
   }
 
+  ${FRAGMENT_USER_INFO}
+  ${FRAGMENT_PAGE_INFO}
   ${FRAGMENT_FOLLOWING_FIELDS}
 `;
