@@ -37,10 +37,13 @@ const ClientDashboard = () => {
           }}
         />
         <Analyzer
-          followers={followers || []}
-          following={following || []}
-          oneWayOut={nonMutualsFollowingYou}
-          oneWayIn={nonMutualsYouFollow}
+          lastSync={data.timestamp}
+          network={{
+            followers: data.network.followers!,
+            following: data.network.following!,
+            oneWayOut: nonMutualsFollowingYou,
+            oneWayIn: nonMutualsYouFollow,
+          }}
         />
       </Section>
     </>

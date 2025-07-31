@@ -1,32 +1,12 @@
 import { GraphQLClient } from 'graphql-request';
 import { GET_GIST_BY_NAME, GET_VIEWER_GISTS } from './gql/queries';
-import type {
-  FollowerFieldsFragment,
-  GetGistByNameQuery,
-  GetViewerGistsQuery,
-} from './gql/types';
+import { CacheGist, CachedData } from './types';
+import type { GetGistByNameQuery, GetViewerGistsQuery } from './gql/types';
 import {
   GIST_FILENAME,
   GIST_ID_STORAGE_KEY,
   GIST_DESCRIPTION,
 } from './constants';
-
-export interface CachedData {
-  timestamp: number;
-  ghosts: string[];
-  network: {
-    followers: FollowerFieldsFragment['nodes'];
-    following: FollowerFieldsFragment['nodes'];
-  };
-  metadata: {
-    totalConnections: number;
-    fetchDuration: number;
-    cacheVersion: string;
-  };
-}
-
-// Type guard for our Gist object from GraphQL.
-type CacheGist = GetGistByNameQuery['viewer']['gist'];
 
 /**
  * Parses the content of a Gist object retrieved from the GraphQL API.

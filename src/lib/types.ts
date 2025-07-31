@@ -1,3 +1,22 @@
+import { FollowerFieldsFragment, GetGistByNameQuery } from './gql/types';
+
+export interface CachedData {
+  timestamp: number;
+  ghosts: string[];
+  network: {
+    followers: FollowerFieldsFragment['nodes'];
+    following: FollowerFieldsFragment['nodes'];
+  };
+  metadata: {
+    totalConnections: number;
+    fetchDuration: number;
+    cacheVersion: string;
+  };
+}
+
+// Type guard for our Gist object from GraphQL.
+export type CacheGist = GetGistByNameQuery['viewer']['gist'];
+
 export type textSizes =
   | 'xs'
   | 'sm'
@@ -10,12 +29,3 @@ export type textSizes =
   | '5xl'
   | '6xl'
   | '7xl';
-
-export type FollowLogin = {
-  totalCount: number;
-  nodes: LoginNode[];
-};
-
-export type LoginNode = {
-  login: string;
-} | null;

@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 
 import { useClientAuthenticatedGraphQLClient } from '@/lib/gql/client';
 import { fetchAllUserFollowersAndFollowing } from '@/lib/gql/fetchers';
-import { findCacheGist, parseCache, writeCache, CachedData } from '@/lib/gist';
+import { findCacheGist, parseCache, writeCache } from '@/lib/gist';
 import {
   QUERY_KEY_USER_NETWORK,
   STALE_TIME_LARGE,
@@ -12,6 +12,7 @@ import {
   STALE_TIME_SMALL,
 } from '@/lib/constants';
 import { useProgress } from '../context/progress';
+import { CachedData } from '../types';
 
 /**
  * A hook that handles all network data logic:
