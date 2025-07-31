@@ -56,22 +56,20 @@ export const textSizesClasses: Record<NonNullable<textSizes>, string> = {
   '7xl': 'text-7xl',
 };
 
-export const getNonMutuals = ({
-  followers,
-  following,
-}: {
-  followers: Pick<FollowerFieldsFragment, 'nodes' | 'totalCount'>;
-  following: Pick<FollowingFieldsFragment, 'nodes' | 'totalCount'>;
+export const getNonMutuals = (network: {
+  followers: FollowerFieldsFragment['nodes'];
+  following: FollowingFieldsFragment['nodes'];
 }) => {
-  const followerLogins = new Set(followers.nodes!.map((u) => u!.login));
-  const followingLogins = new Set(following.nodes!.map((u) => u!.login));
+  const { followers, following } = network;
+  const followerLogins = new Set(followers!.map((u) => u!.login));
+  const followingLogins = new Set(following!.map((u) => u!.login));
 
   // Calculate non-mutuals using only logins
-  const nonMutualsFollowingYou = following.nodes!.filter(
+  const nonMutualsFollowingYou = following!.filter(
     (u) => !followerLogins.has(u!.login)
   );
 
-  const nonMutualsYouFollow = followers.nodes!.filter(
+  const nonMutualsYouFollow = followers!.filter(
     (u) => !followingLogins.has(u!.login)
   );
 

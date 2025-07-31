@@ -66,12 +66,12 @@ export const GET_USER_FOLLOWING = gql`
   ${FRAGMENT_FOLLOWING_FIELDS}
 `;
 
-export const GET_GIST_BY_ID = gql`
-  query GetGistById($id: ID!) {
-    node(id: $id) {
-      __typename
-      ... on Gist {
+export const GET_GIST_BY_NAME = gql`
+  query GetGistByName($name: String!) {
+    viewer {
+      gist(name: $name) {
         id
+        name
         description
         files {
           name

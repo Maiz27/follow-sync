@@ -1,18 +1,22 @@
 import { GraphQLClient } from 'graphql-request';
-import { GET_GIST_BY_ID, GET_VIEWER_GISTS } from './gql/queries';
-import type { GetGistByIdQuery, GetViewerGistsQuery, User } from './gql/types';
+import { GET_GIST_BY_NAME, GET_VIEWER_GISTS } from './gql/queries';
+import type {
+  FollowerFieldsFragment,
+  GetGistByNameQuery,
+  GetViewerGistsQuery,
+} from './gql/types';
 
 // Constants for identifying and storing the cache
 const GIST_DESCRIPTION = 'FollowSync Cache v1';
-const GIST_FILENAME = 'followSync.cache.json';
+const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
 const GIST_ID_STORAGE_KEY = 'followSync_gist_id';
 
 export interface CachedData {
   timestamp: number;
   ghosts: string[];
   network: {
-    followers: User[];
-    following: User[];
+    followers: FollowerFieldsFragment['nodes'];
+    following: FollowerFieldsFragment['nodes'];
   };
   metadata: {
     totalConnections: number;
@@ -21,8 +25,8 @@ export interface CachedData {
   };
 }
 
-// Type guard for our Gist object from GraphQL
-type CacheGist = Extract<GetGistByIdQuery['node'], { __typename: 'Gist' }>;
+// Type guard for our Gist object from GraphQL.
+type CacheGist = GetGistByNameQuery['viewer']['gist'];
 
 /**
  * Parses the content of a Gist object retrieved from the GraphQL API.
@@ -31,7 +35,7 @@ type CacheGist = Extract<GetGistByIdQuery['node'], { __typename: 'Gist' }>;
  */
 export const parseCache = (gist: CacheGist): CachedData | null => {
   try {
-    const file = gist.files?.find((f) => f?.name === GIST_FILENAME);
+    const file = gist?.files?.find((f) => f?.name === GIST_FILENAME);
     const content = file?.text;
     if (!content) return null;
     return JSON.parse(content) as CachedData;
@@ -54,14 +58,17 @@ export const findCacheGist = async (
 
   if (storedGistId) {
     try {
-      const data = await client.request<GetGistByIdQuery>(GET_GIST_BY_ID, {
-        id: storedGistId,
+      // CHANGE the query being called and the variable name
+      const data = await client.request<GetGistByNameQuery>(GET_GIST_BY_NAME, {
+        name: storedGistId,
       });
-      if (
-        data.node?.__typename === 'Gist' &&
-        data.node.description === GIST_DESCRIPTION
-      ) {
-        return data.node;
+
+      // ADJUST the path to the gist object
+      const foundGist = data.viewer.gist;
+
+      if (foundGist && foundGist.description === GIST_DESCRIPTION) {
+        // The __typename check is no longer needed with this specific query
+        return foundGist;
       }
     } catch (error) {
       console.warn(

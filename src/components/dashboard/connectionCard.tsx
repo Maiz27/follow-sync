@@ -18,7 +18,6 @@ type ConnectionCardProps = {
 };
 
 const ConnectionCard = ({ user, children }: ConnectionCardProps) => {
-  console.log(user.name, '===> ID: ', user.id);
   return (
     <Card>
       <CardHeader className='flex items-center gap-2'>
