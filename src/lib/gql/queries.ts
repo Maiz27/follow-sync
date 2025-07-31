@@ -65,3 +65,36 @@ export const GET_USER_FOLLOWING = gql`
   ${FRAGMENT_PAGE_INFO}
   ${FRAGMENT_FOLLOWING_FIELDS}
 `;
+
+export const GET_GIST_BY_ID = gql`
+  query GetGistById($id: ID!) {
+    node(id: $id) {
+      __typename
+      ... on Gist {
+        id
+        description
+        files {
+          name
+          text
+        }
+      }
+    }
+  }
+`;
+
+export const GET_VIEWER_GISTS = gql`
+  query GetViewerGists($number: Int!) {
+    viewer {
+      gists(first: $number, orderBy: { field: CREATED_AT, direction: DESC }) {
+        nodes {
+          id
+          description
+          files {
+            name
+            text
+          }
+        }
+      }
+    }
+  }
+`;
