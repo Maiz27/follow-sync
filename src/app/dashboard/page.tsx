@@ -5,15 +5,14 @@ import { useSession } from 'next-auth/react';
 import Stats from '@/components/dashboard/stats';
 import Analyzer from '@/components/dashboard/analyzer';
 import { Section } from '@/components/utils/section';
-import { useUserNetwork } from '@/lib/hooks/useUserNetwork';
+import { useNetworkData } from '@/lib/hooks/useNetworkManager';
 import { getNonMutuals } from '@/lib/utils';
 
 const ClientDashboard = () => {
   const { data: session } = useSession();
   const username = session?.user?.login;
-  const { data, isLoading, isError, error } = useUserNetwork({
-    username: username!,
-  });
+
+  const { data, isLoading, isError, error } = useNetworkData(username);
 
   if (isLoading) return <div>Loading...</div>;
 

@@ -5,11 +5,11 @@ import type {
   GetGistByNameQuery,
   GetViewerGistsQuery,
 } from './gql/types';
-
-// Constants for identifying and storing the cache
-const GIST_DESCRIPTION = 'FollowSync Cache v1';
-const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
-const GIST_ID_STORAGE_KEY = 'followSync_gist_id';
+import {
+  GIST_FILENAME,
+  GIST_ID_STORAGE_KEY,
+  GIST_DESCRIPTION,
+} from './constants';
 
 export interface CachedData {
   timestamp: number;
@@ -57,6 +57,7 @@ export const findCacheGist = async (
   const storedGistId = window.localStorage.getItem(GIST_ID_STORAGE_KEY);
 
   if (storedGistId) {
+    console.log('Found stored gist id in localStorage', storedGistId);
     try {
       // CHANGE the query being called and the variable name
       const data = await client.request<GetGistByNameQuery>(GET_GIST_BY_NAME, {
@@ -91,6 +92,7 @@ export const findCacheGist = async (
   );
 
   if (foundGist) {
+    console.log('Found gist in user gists', searchData);
     window.localStorage.setItem(GIST_ID_STORAGE_KEY, foundGist.id);
     return foundGist as CacheGist;
   }
@@ -123,7 +125,7 @@ export const writeCache = async (
     body: JSON.stringify({
       description: GIST_DESCRIPTION,
       files: { [GIST_FILENAME]: { content } },
-      public: false,
+      public: true,
     }),
   });
 
