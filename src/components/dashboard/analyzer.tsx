@@ -9,23 +9,25 @@ import {
 import TabManager from '../utils/tabsManager';
 import { UserInfoFragment } from '@/lib/gql/types';
 import FollowersTab from './tabs/followersTab';
-import { formatNumber } from '@/lib/utils';
+import { formatNumber, timeAgo } from '@/lib/utils';
 import FollowingTab from './tabs/followingTab';
 import NonFollowersTab from './tabs/nonFollowersTab';
 import NonFollowingTab from './tabs/nonFollowingTab';
+import { IoSync } from 'react-icons/io5';
 
 type AnalyzerProps = {
-  followers: (UserInfoFragment | null)[];
-  following: (UserInfoFragment | null)[];
-  oneWayOut: (UserInfoFragment | null)[];
-  oneWayIn: (UserInfoFragment | null)[];
+  lastSync: number;
+  network: {
+    followers: (UserInfoFragment | null)[];
+    following: (UserInfoFragment | null)[];
+    oneWayOut: (UserInfoFragment | null)[];
+    oneWayIn: (UserInfoFragment | null)[];
+  };
 };
 
 const Analyzer = ({
-  followers,
-  following,
-  oneWayOut,
-  oneWayIn,
+  lastSync,
+  network: { followers, following, oneWayOut, oneWayIn },
 }: AnalyzerProps) => {
   const networkTabsData = [
     {
@@ -61,6 +63,11 @@ const Analyzer = ({
         <CardDescription>
           Explore detailed lists for comprehensive network understanding.
         </CardDescription>
+
+        <span className='flex items-center gap-2'>
+          <IoSync /> Last synced: {timeAgo(lastSync)}
+        </span>
+
         <CardContent className='h-full w-full px-0'>
           <TabManager tabs={networkTabsData} defaultValue='followers' />
         </CardContent>

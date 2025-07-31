@@ -1,19 +1,18 @@
 'use client';
 
 import React from 'react';
-import Stats from '@/components/dashboard/stats';
-import { Section } from '@/components/utils/section';
-import { useUserNetwork } from '@/lib/hooks/useUserNetwork';
-import { getNonMutuals } from '@/lib/utils';
 import { useSession } from 'next-auth/react';
+import Stats from '@/components/dashboard/stats';
 import Analyzer from '@/components/dashboard/analyzer';
+import { Section } from '@/components/utils/section';
+import { useNetworkData } from '@/lib/hooks/useNetworkManager';
+import { getNonMutuals } from '@/lib/utils';
 
 const ClientDashboard = () => {
   const { data: session } = useSession();
   const username = session?.user?.login;
-  const { data, isLoading, isError, error } = useUserNetwork({
-    username: username!,
-  });
+
+  const { data, isLoading, isError, error } = useNetworkData(username);
 
   if (isLoading) return <div>Loading...</div>;
 
@@ -21,13 +20,11 @@ const ClientDashboard = () => {
 
   if (!data) return <div>No data</div>;
 
-  const { followers, following } = data!;
+  const { nonMutualsFollowingYou, nonMutualsYouFollow } = getNonMutuals(
+    data.network
+  );
 
-  const { nonMutualsFollowingYou, nonMutualsYouFollow } = getNonMutuals({
-    followers,
-    following,
-  });
-
+  const { followers, following } = data.network;
   return (
     <>
       <Section className='my-10 grid gap-2 py-0'>
@@ -35,15 +32,18 @@ const ClientDashboard = () => {
           stats={{
             nonMutualsFollowingYou: nonMutualsFollowingYou.length,
             nonMutualsYouFollow: nonMutualsYouFollow.length,
-            following: following.totalCount,
-            followers: followers.totalCount,
+            following: following?.length || 0,
+            followers: followers?.length || 0,
           }}
         />
         <Analyzer
-          followers={followers.nodes!}
-          following={following.nodes!}
-          oneWayOut={nonMutualsFollowingYou}
-          oneWayIn={nonMutualsYouFollow}
+          lastSync={data.timestamp}
+          network={{
+            followers: data.network.followers!,
+            following: data.network.following!,
+            oneWayOut: nonMutualsFollowingYou,
+            oneWayIn: nonMutualsYouFollow,
+          }}
         />
       </Section>
     </>
