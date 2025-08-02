@@ -34,18 +34,20 @@ const TabManager = <TTabs extends Tab[]>({
       defaultValue={initialDefaultValue}
       className={cn('h-full w-full', tabsContainerClassName)}
     >
-      <TabsList
-        className={cn(
-          'grid h-full w-full grid-cols-2 lg:grid-cols-4',
-          tabsListClassName
-        )}
-      >
-        {tabs.map((tab) => (
-          <TabsTrigger key={tab.id} value={tab.id}>
-            {tab.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
+      <div className='inline-flex w-full justify-evenly overflow-x-auto bg-muted'>
+        <TabsList
+          className={cn(
+            'w-auto gap-4 px-4 lg:w-full lg:gap-0 lg:px-0',
+            tabsListClassName
+          )}
+        >
+          {tabs.map((tab) => (
+            <TabsTrigger key={tab.id} value={tab.id}>
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
 
       {tabs.map((tab) => (
         <TabsContent key={tab.id} value={tab.id}>

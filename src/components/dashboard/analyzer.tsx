@@ -13,12 +13,15 @@ import { formatNumber } from '@/lib/utils';
 import FollowingTab from './tabs/followingTab';
 import NonFollowersTab from './tabs/nonFollowersTab';
 import NonFollowingTab from './tabs/nonFollowingTab';
+import GhostsTab from './tabs/ghostsTab';
 
 type AnalyzerProps = {
   followers: (UserInfoFragment | null)[];
   following: (UserInfoFragment | null)[];
   oneWayOut: (UserInfoFragment | null)[];
   oneWayIn: (UserInfoFragment | null)[];
+  ghosts: UserInfoFragment[];
+  isCheckingGhosts: boolean;
 };
 
 const Analyzer = ({
@@ -26,6 +29,8 @@ const Analyzer = ({
   following,
   oneWayOut,
   oneWayIn,
+  ghosts,
+  isCheckingGhosts,
 }: AnalyzerProps) => {
   const networkTabsData = [
     {
@@ -52,6 +57,12 @@ const Analyzer = ({
       component: <NonFollowingTab oneWayIn={oneWayIn} />,
       componentProps: oneWayIn,
     },
+    {
+      id: 'ghosts',
+      label: `Ghosts (${formatNumber(ghosts.length)})`,
+      component: <GhostsTab ghosts={ghosts} isChecking={isCheckingGhosts} />,
+      componentProps: ghosts,
+    },
   ];
 
   return (
@@ -61,7 +72,7 @@ const Analyzer = ({
         <CardDescription>
           Explore detailed lists for comprehensive network understanding.
         </CardDescription>
-        <CardContent className='h-full w-full px-0'>
+        <CardContent className='h-full w-full overflow-hidden px-0'>
           <TabManager tabs={networkTabsData} defaultValue='followers' />
         </CardContent>
       </CardHeader>

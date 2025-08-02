@@ -1,12 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 import Stats from '@/components/dashboard/stats';
+import Analyzer from '@/components/dashboard/analyzer';
 import { Section } from '@/components/utils/section';
 import { useUserNetwork } from '@/lib/hooks/useUserNetwork';
+import { useGhostDetector } from '@/lib/hooks/useGhostDetector';
 import { getNonMutuals } from '@/lib/utils';
-import { useSession } from 'next-auth/react';
-import Analyzer from '@/components/dashboard/analyzer';
 
 const ClientDashboard = () => {
   const { data: session } = useSession();
@@ -15,6 +16,23 @@ const ClientDashboard = () => {
     username: username!,
   });
 
+  const nonMutuals = useMemo(() => {
+    if (!data) {
+      return { nonMutualsFollowingYou: [], nonMutualsYouFollow: [] };
+    }
+    return getNonMutuals(data);
+  }, [data]);
+
+  const combinedNonMutuals = useMemo(
+    () => [
+      ...nonMutuals.nonMutualsFollowingYou,
+      ...nonMutuals.nonMutualsYouFollow,
+    ],
+    [nonMutuals]
+  );
+
+  const { ghosts, isChecking } = useGhostDetector(combinedNonMutuals);
+
   if (isLoading) return <div>Loading...</div>;
 
   if (isError) return <div>Error: {error?.message}</div>;
@@ -22,11 +40,7 @@ const ClientDashboard = () => {
   if (!data) return <div>No data</div>;
 
   const { followers, following } = data!;
-
-  const { nonMutualsFollowingYou, nonMutualsYouFollow } = getNonMutuals({
-    followers,
-    following,
-  });
+  const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
 
   return (
     <>
@@ -44,6 +58,8 @@ const ClientDashboard = () => {
           following={following.nodes!}
           oneWayOut={nonMutualsFollowingYou}
           oneWayIn={nonMutualsYouFollow}
+          ghosts={ghosts}
+          isCheckingGhosts={isChecking}
         />
       </Section>
     </>
