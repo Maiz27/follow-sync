@@ -16,7 +16,7 @@ const GhostsTab = ({ ghosts, isChecking }: GhostsTabProps) => {
   return (
     <PaginatedList
       data={ghosts}
-      renderItem={(item) => <ConnectionCard user={item!} />}
+      renderItem={(item) => <ConnectionCard user={item!} isGhost />}
     />
   );
 };

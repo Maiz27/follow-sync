@@ -35,6 +35,7 @@ export type CacheStoreState = {
     nonMutualsYouFollow: UserInfoFragment[];
   };
   ghosts: UserInfoFragment[];
+  ghostsSet: Set<string>;
   timestamp: number | null;
   isCheckingGhosts: boolean;
   gistId: string | null;
@@ -49,6 +50,7 @@ export type CacheStoreActions = {
     progress: ProgressCallbacks
   ) => Promise<CacheStoreState['network']>;
   setGhosts: (ghosts: UserInfoFragment[], accessToken: string) => Promise<void>;
+  isGhost: (login: string) => boolean;
   loadFromCache: (cachedData: CachedData) => void;
   setGistId: (gistId: string | null) => void;
 };
@@ -59,6 +61,7 @@ const initialState: CacheStoreState = {
   network: { followers: [], following: [] },
   nonMutuals: { nonMutualsFollowingYou: [], nonMutualsYouFollow: [] },
   ghosts: [],
+  ghostsSet: new Set(),
   timestamp: null,
   isCheckingGhosts: false,
   gistId: null,
@@ -187,8 +190,12 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
     }
   },
 
+  isGhost: (login) => {
+    return get().ghostsSet.has(login);
+  },
+
   setGhosts: async (ghosts, accessToken) => {
-    set({ ghosts, isCheckingGhosts: false });
+    set({ ghosts, ghostsSet: new Set(ghosts.map(g => g.login)), isCheckingGhosts: false });
     const { network, timestamp, metadata, gistId } = get();
 
     if (!metadata || !timestamp || !network) return;

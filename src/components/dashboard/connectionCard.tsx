@@ -12,14 +12,26 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { formatNumber } from '@/lib/utils';
 
+import { Badge } from '../ui/badge';
+import { LuGhost } from 'react-icons/lu';
+
 type ConnectionCardProps = {
   user: UserInfoFragment;
   children?: React.ReactNode;
+  isGhost?: boolean;
 };
 
-const ConnectionCard = ({ user, children }: ConnectionCardProps) => {
+const ConnectionCard = ({ user, children, isGhost }: ConnectionCardProps) => {
   return (
-    <Card>
+    <Card className='relative'>
+      {isGhost && (
+        <div className='absolute top-0 right-0'>
+          <Badge variant='destructive'>
+            <LuGhost />
+            Ghost
+          </Badge>
+        </div>
+      )}
       <CardHeader className='flex items-center gap-2'>
         <Avatar>
           <AvatarImage src={user.avatarUrl} loading='lazy' />
@@ -33,6 +45,7 @@ const ConnectionCard = ({ user, children }: ConnectionCardProps) => {
           className='hover:underline'
         >
           <CardTitle className='text-sm'>{user.name}</CardTitle>
+
           <CardDescription className='text-xs'>@{user.login}</CardDescription>
         </Link>
       </CardHeader>
