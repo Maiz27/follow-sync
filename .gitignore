@@ -43,3 +43,5 @@ next-env.d.ts
 # vscode
 .vscode/*
 
+# GEMINI CLI
+/.gemini
