@@ -1,11 +1,11 @@
-import { FollowerFieldsFragment, GetGistByNameQuery } from './gql/types';
+import { GetGistByNameQuery, UserInfoFragment } from './gql/types';
 
 export interface CachedData {
   timestamp: number;
-  ghosts: string[];
+  ghosts: UserInfoFragment[];
   network: {
-    followers: FollowerFieldsFragment['nodes'];
-    following: FollowerFieldsFragment['nodes'];
+    followers: UserInfoFragment[];
+    following: UserInfoFragment[];
   };
   metadata: {
     totalConnections: number;

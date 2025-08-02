@@ -1,27 +1,32 @@
-import { useState, useEffect } from 'react';
-import { UserInfoFragment } from '@/lib/gql/types';
+import { useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { useCacheStore } from '@/lib/store/cache';
 
 const BATCH_SIZE = 10;
 const DELAY_BETWEEN_BATCHES = 1000; // 1 second
 
-type GhostDetectorResult = {
-  ghosts: UserInfoFragment[];
-  isChecking: boolean;
-};
-
-export const useGhostDetector = (
-  nonMutuals: UserInfoFragment[]
-): GhostDetectorResult => {
-  const [ghosts, setGhosts] = useState<UserInfoFragment[]>([]);
-  const [isChecking, setIsChecking] = useState<boolean>(false);
+export const useGhostDetector = () => {
+  const { data: session } = useSession();
+  const accessToken = session?.accessToken;
+  const {
+    nonMutuals: { nonMutualsYouFollow, nonMutualsFollowingYou },
+    setGhosts,
+  } = useCacheStore();
 
   useEffect(() => {
     const detectGhosts = async () => {
-      if (nonMutuals.length === 0) {
+      if (
+        nonMutualsYouFollow.length === 0 ||
+        nonMutualsFollowingYou.length === 0 ||
+        !accessToken
+      ) {
         return;
       }
 
-      const potentialGhosts = nonMutuals.filter(
+      const potentialGhosts = [
+        ...nonMutualsYouFollow,
+        ...nonMutualsFollowingYou,
+      ].filter(
         (user) =>
           user?.followers.totalCount === 0 && user?.following.totalCount === 0
       );
@@ -30,8 +35,7 @@ export const useGhostDetector = (
         return;
       }
 
-      setIsChecking(true);
-      const confirmedGhosts: UserInfoFragment[] = [];
+      const confirmedGhosts = [];
 
       for (let i = 0; i < potentialGhosts.length; i += BATCH_SIZE) {
         const batch = potentialGhosts.slice(i, i + BATCH_SIZE);
@@ -51,11 +55,7 @@ export const useGhostDetector = (
             const batchGhosts = batch.filter((user) =>
               ghostUsernames.includes(user?.login)
             );
-            confirmedGhosts.push(...(batchGhosts as UserInfoFragment[]));
-            setGhosts((prev) => [
-              ...prev,
-              ...(batchGhosts as UserInfoFragment[]),
-            ]);
+            confirmedGhosts.push(...batchGhosts);
           }
         } catch (error) {
           console.error('Error verifying ghost batch:', error);
@@ -68,11 +68,9 @@ export const useGhostDetector = (
         }
       }
 
-      setIsChecking(false);
+      await setGhosts(confirmedGhosts, accessToken);
     };
 
     detectGhosts();
-  }, [nonMutuals]);
-
-  return { ghosts, isChecking };
+  }, [nonMutualsFollowingYou, nonMutualsYouFollow, accessToken, setGhosts]);
 };

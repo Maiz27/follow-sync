@@ -2,11 +2,7 @@ import { GraphQLClient } from 'graphql-request';
 import { GET_GIST_BY_NAME, GET_VIEWER_GISTS } from './gql/queries';
 import { CacheGist, CachedData } from './types';
 import type { GetGistByNameQuery, GetViewerGistsQuery } from './gql/types';
-import {
-  GIST_FILENAME,
-  GIST_ID_STORAGE_KEY,
-  GIST_DESCRIPTION,
-} from './constants';
+import { GIST_FILENAME, GIST_DESCRIPTION } from './constants';
 
 /**
  * Parses the content of a Gist object retrieved from the GraphQL API.
@@ -32,23 +28,16 @@ export const parseCache = (gist: CacheGist): CachedData | null => {
  * @returns The Gist object from GraphQL or null if not found.
  */
 export const findCacheGist = async (
-  client: GraphQLClient
+  client: GraphQLClient,
+  gistId?: string | null
 ): Promise<CacheGist | null> => {
-  const storedGistId = window.localStorage.getItem(GIST_ID_STORAGE_KEY);
-
-  if (storedGistId) {
-    console.log('Found stored gist id in localStorage', storedGistId);
+  if (gistId) {
     try {
-      // CHANGE the query being called and the variable name
       const data = await client.request<GetGistByNameQuery>(GET_GIST_BY_NAME, {
-        name: storedGistId,
+        name: gistId,
       });
-
-      // ADJUST the path to the gist object
       const foundGist = data.viewer.gist;
-
       if (foundGist && foundGist.description === GIST_DESCRIPTION) {
-        // The __typename check is no longer needed with this specific query
         return foundGist;
       }
     } catch (error) {
@@ -57,7 +46,6 @@ export const findCacheGist = async (
         error
       );
     }
-    window.localStorage.removeItem(GIST_ID_STORAGE_KEY);
   }
 
   const searchData = await client.request<GetViewerGistsQuery>(
@@ -71,13 +59,7 @@ export const findCacheGist = async (
     (gist) => gist?.description === GIST_DESCRIPTION
   );
 
-  if (foundGist) {
-    console.log('Found gist in user gists', searchData);
-    window.localStorage.setItem(GIST_ID_STORAGE_KEY, foundGist.id);
-    return foundGist as CacheGist;
-  }
-
-  return null;
+  return (foundGist as CacheGist) || null;
 };
 
 /**
@@ -89,7 +71,7 @@ export const findCacheGist = async (
 export const writeCache = async (
   token: string,
   data: CachedData,
-  gistId?: string
+  gistId?: string | null
 ) => {
   const content = JSON.stringify(data, null, 2);
   const method = gistId ? 'PATCH' : 'POST';
@@ -115,7 +97,5 @@ export const writeCache = async (
     throw new Error('Failed to write to Gist cache.');
   }
 
-  const newGist = await response.json();
-  window.localStorage.setItem(GIST_ID_STORAGE_KEY, newGist.id);
-  return newGist;
+  return response.json();
 };

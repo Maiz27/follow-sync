@@ -4,8 +4,6 @@ export async function POST(req: NextRequest) {
   try {
     const { usernames } = await req.json();
 
-    console.log('Verifying ghosts Hit...');
-
     if (!Array.isArray(usernames) || usernames.length === 0) {
       return NextResponse.json(
         { error: 'Usernames must be a non-empty array' },

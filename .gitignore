@@ -45,4 +45,4 @@ next-env.d.ts
 .vscode/*
 
 # GEMINI CLI
-/.gemini
+/.gemini/
