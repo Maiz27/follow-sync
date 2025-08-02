@@ -4,17 +4,17 @@ import React, { useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import Stats from '@/components/dashboard/stats';
 import Analyzer from '@/components/dashboard/analyzer';
+import Analyzer from '@/components/dashboard/analyzer';
 import { Section } from '@/components/utils/section';
-import { useUserNetwork } from '@/lib/hooks/useUserNetwork';
+import { useNetworkData } from '@/lib/hooks/useNetworkManager';
 import { useGhostDetector } from '@/lib/hooks/useGhostDetector';
 import { getNonMutuals } from '@/lib/utils';
 
 const ClientDashboard = () => {
   const { data: session } = useSession();
   const username = session?.user?.login;
-  const { data, isLoading, isError, error } = useUserNetwork({
-    username: username!,
-  });
+
+  const { data, isLoading, isError, error } = useNetworkData(username);
 
   const nonMutuals = useMemo(() => {
     if (!data) {
@@ -49,15 +49,18 @@ const ClientDashboard = () => {
           stats={{
             nonMutualsFollowingYou: nonMutualsFollowingYou.length,
             nonMutualsYouFollow: nonMutualsYouFollow.length,
-            following: following.totalCount,
-            followers: followers.totalCount,
+            following: following?.length || 0,
+            followers: followers?.length || 0,
           }}
         />
         <Analyzer
-          followers={followers.nodes!}
-          following={following.nodes!}
-          oneWayOut={nonMutualsFollowingYou}
-          oneWayIn={nonMutualsYouFollow}
+          lastSync={data.timestamp}
+          network={{
+            followers: data.network.followers!,
+            following: data.network.following!,
+            oneWayOut: nonMutualsFollowingYou,
+            oneWayIn: nonMutualsYouFollow,
+          }}
           ghosts={ghosts}
           isCheckingGhosts={isChecking}
         />

@@ -3,6 +3,11 @@ import GitHub from 'next-auth/providers/github';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [GitHub],
+  session: {
+    strategy: 'jwt',
+    maxAge: 60 * 60 * 24, // 1 day
+    updateAge: 60 * 60 * 6, // 6 hours
+  },
 
   callbacks: {
     async jwt({ token, account, profile }) {
