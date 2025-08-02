@@ -6,44 +6,43 @@ import Stats from '@/components/dashboard/stats';
 import Analyzer from '@/components/dashboard/analyzer';
 import { Section } from '@/components/utils/section';
 import { useNetworkData } from '@/lib/hooks/useNetworkManager';
-import { getNonMutuals } from '@/lib/utils';
+import { useGhostDetector } from '@/lib/hooks/useGhostDetector';
+import { useCacheStore } from '@/lib/store/cache';
 
 const ClientDashboard = () => {
   const { data: session } = useSession();
   const username = session?.user?.login;
 
-  const { data, isLoading, isError, error } = useNetworkData(username);
+  const { isLoading, isError, error } = useNetworkData(username);
+  const { network, nonMutuals, ghosts, timestamp, isCheckingGhosts } =
+    useCacheStore();
+
+  useGhostDetector();
 
   if (isLoading) return <div>Loading...</div>;
-
   if (isError) return <div>Error: {error?.message}</div>;
 
-  if (!data) return <div>No data</div>;
-
-  const { nonMutualsFollowingYou, nonMutualsYouFollow } = getNonMutuals(
-    data.network
-  );
-
-  const { followers, following } = data.network;
   return (
     <>
       <Section className='my-10 grid gap-2 py-0'>
         <Stats
           stats={{
-            nonMutualsFollowingYou: nonMutualsFollowingYou.length,
-            nonMutualsYouFollow: nonMutualsYouFollow.length,
-            following: following?.length || 0,
-            followers: followers?.length || 0,
+            nonMutualsFollowingYou: nonMutuals.nonMutualsFollowingYou.length,
+            nonMutualsYouFollow: nonMutuals.nonMutualsYouFollow.length,
+            following: network.following.length,
+            followers: network.followers.length,
           }}
         />
         <Analyzer
-          lastSync={data.timestamp}
+          lastSync={timestamp!}
           network={{
-            followers: data.network.followers!,
-            following: data.network.following!,
-            oneWayOut: nonMutualsFollowingYou,
-            oneWayIn: nonMutualsYouFollow,
+            followers: network.followers,
+            following: network.following,
+            oneWayOut: nonMutuals.nonMutualsFollowingYou,
+            oneWayIn: nonMutuals.nonMutualsYouFollow,
           }}
+          ghosts={ghosts}
+          isCheckingGhosts={isCheckingGhosts}
         />
       </Section>
     </>

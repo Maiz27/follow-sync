@@ -13,6 +13,7 @@ import { formatNumber, timeAgo } from '@/lib/utils';
 import FollowingTab from './tabs/followingTab';
 import NonFollowersTab from './tabs/nonFollowersTab';
 import NonFollowingTab from './tabs/nonFollowingTab';
+import GhostsTab from './tabs/ghostsTab';
 import { IoSync } from 'react-icons/io5';
 
 type AnalyzerProps = {
@@ -23,11 +24,15 @@ type AnalyzerProps = {
     oneWayOut: (UserInfoFragment | null)[];
     oneWayIn: (UserInfoFragment | null)[];
   };
+  ghosts: UserInfoFragment[];
+  isCheckingGhosts: boolean;
 };
 
 const Analyzer = ({
   lastSync,
   network: { followers, following, oneWayOut, oneWayIn },
+  ghosts,
+  isCheckingGhosts,
 }: AnalyzerProps) => {
   const networkTabsData = [
     {
@@ -54,6 +59,12 @@ const Analyzer = ({
       component: <NonFollowingTab oneWayIn={oneWayIn} />,
       componentProps: oneWayIn,
     },
+    {
+      id: 'ghosts',
+      label: `Ghosts (${formatNumber(ghosts.length)})`,
+      component: <GhostsTab ghosts={ghosts} isChecking={isCheckingGhosts} />,
+      componentProps: ghosts,
+    },
   ];
 
   return (
@@ -68,7 +79,7 @@ const Analyzer = ({
           <IoSync /> Last synced: {timeAgo(lastSync)}
         </span>
 
-        <CardContent className='h-full w-full px-0'>
+        <CardContent className='h-full w-full overflow-hidden px-0'>
           <TabManager tabs={networkTabsData} defaultValue='followers' />
         </CardContent>
       </CardHeader>

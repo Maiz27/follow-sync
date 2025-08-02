@@ -1,7 +1,11 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { textSizes } from './types';
-import { FollowerFieldsFragment, FollowingFieldsFragment } from './gql/types';
+import {
+  FollowerFieldsFragment,
+  FollowingFieldsFragment,
+  UserInfoFragment,
+} from './gql/types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -97,8 +101,8 @@ export const getNonMutuals = (network: {
   );
 
   const stats = {
-    nonMutualsFollowingYou,
-    nonMutualsYouFollow,
+    nonMutualsFollowingYou: nonMutualsFollowingYou as UserInfoFragment[],
+    nonMutualsYouFollow: nonMutualsYouFollow as UserInfoFragment[],
   };
 
   return stats;
