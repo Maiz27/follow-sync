@@ -174,14 +174,16 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
         dataToCache,
         get().gistName
       );
+
       set({
         network,
         timestamp,
         nonMutuals: getNonMutuals(network),
         metadata: dataToCache.metadata,
       });
-      get().setGistName(newGist.name);
 
+      // write to cache returns the name as id
+      get().setGistName(newGist.id);
       complete();
 
       return network;
