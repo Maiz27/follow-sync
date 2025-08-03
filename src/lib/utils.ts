@@ -6,6 +6,9 @@ import {
   FollowingFieldsFragment,
   UserInfoFragment,
 } from './gql/types';
+import { Metadata } from 'next';
+import { OpenGraph } from 'next/dist/lib/metadata/types/opengraph-types';
+import { BASEURL, METADATA } from './constants';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -106,4 +109,55 @@ export const getNonMutuals = (network: {
   };
 
   return stats;
+};
+
+export const getPageMetadata = (name: string): Metadata | undefined => {
+  const pageMetaData = METADATA.get(name);
+
+  if (pageMetaData)
+    return {
+      metadataBase: new URL(BASEURL),
+      title: pageMetaData.title,
+      description: pageMetaData.description,
+      alternates: {
+        canonical: pageMetaData.url,
+      },
+      icons: {
+        icon: pageMetaData.icon,
+        shortcut: pageMetaData.icon,
+        apple: '/imgs/logo/apple-icon.png',
+        other: {
+          rel: 'apple-touch-icon-precomposed',
+          url: pageMetaData.icon,
+        },
+      },
+      openGraph: {
+        type: pageMetaData.type,
+        url: pageMetaData.url,
+        title: pageMetaData.title,
+        description: pageMetaData.description,
+        siteName: pageMetaData.title,
+        images: [
+          {
+            url: pageMetaData.image,
+          },
+        ],
+      } as OpenGraph,
+      twitter: {
+        card: 'summary_large_image',
+        site: pageMetaData.url,
+        images: [
+          {
+            url: pageMetaData.image,
+          },
+        ],
+      },
+      robots: {
+        index: true,
+        follow: true,
+        'max-snippet': 50,
+        'max-image-preview': 'large',
+        'max-video-preview': -1,
+      },
+    };
 };

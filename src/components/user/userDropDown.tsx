@@ -25,7 +25,13 @@ const UserDropDown = async () => {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Avatar className='cursor-pointer'>
-          <AvatarImage src={user.image!} alt={user.name!} />
+          <AvatarImage
+            width={24}
+            height={24}
+            loading='lazy'
+            src={user.image!}
+            alt={user.name!}
+          />
           <AvatarFallback>{user.name?.split(' ')[0]![0]}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>

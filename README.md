@@ -73,6 +73,9 @@ AUTH_SECRET="YOUR_AUTH_SECRET"
 
 # Personal Access Token (for graphql code generation)
 GITHUB_PAT="YOUR_GITHUB_PAT"
+
+# Domain
+NEXT_PUBLIC_DOMAIN="follow-sync.vercel.app"
 ```
 
 ### 3. Install Dependencies & Run
