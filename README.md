@@ -36,7 +36,7 @@ This project is currently in active development.
 - [x] **Phase 1:** Authentication & App Shell
 - [x] **Phase 2:** Core Data Pipeline (GraphQL)
 - [x] **Phase 3:** Adaptive Gist Caching
-- [ ] **Phase 4:** Ghost-Detection Pipeline
+- [x] **Phase 4:** Ghost-Detection Pipeline
 - [ ] **Phase 5:** Follow/Unfollow Operations
 - [ ] **Phase 6:** UI Components & Polish
 - [ ] **Phase 7:** Performance, Monitoring & Testing
@@ -70,6 +70,9 @@ AUTH_GITHUB_SECRET="YOUR_CLIENT_SECRET"
 # A random string for signing tokens.
 # You can generate one with: openssl rand -hex 32
 AUTH_SECRET="YOUR_AUTH_SECRET"
+
+# Personal Access Token (for graphql code generation)
+GITHUB_PAT="YOUR_GITHUB_PAT"
 ```
 
 ### 3. Install Dependencies & Run
