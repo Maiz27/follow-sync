@@ -29,12 +29,12 @@ export const parseCache = (gist: CacheGist): CachedData | null => {
  */
 export const findCacheGist = async (
   client: GraphQLClient,
-  gistId?: string | null
+  gistName?: string | null
 ): Promise<CacheGist | null> => {
-  if (gistId) {
+  if (gistName) {
     try {
       const data = await client.request<GetGistByNameQuery>(GET_GIST_BY_NAME, {
-        name: gistId,
+        name: gistName,
       });
       const foundGist = data.viewer.gist;
       if (foundGist && foundGist.description === GIST_DESCRIPTION) {
@@ -54,6 +54,8 @@ export const findCacheGist = async (
       number: 20,
     }
   );
+
+  console.log('Searching for Gist:', searchData.viewer.gists.nodes);
 
   const foundGist = searchData.viewer.gists.nodes?.find(
     (gist) => gist?.description === GIST_DESCRIPTION

@@ -10,12 +10,14 @@ export const useGhostDetector = () => {
   const accessToken = session?.accessToken;
   const {
     nonMutuals: { nonMutualsYouFollow, nonMutualsFollowingYou },
+    ghosts,
     setGhosts,
   } = useCacheStore();
 
   useEffect(() => {
     const detectGhosts = async () => {
       if (
+        ghosts.length > 0 ||
         nonMutualsYouFollow.length === 0 ||
         nonMutualsFollowingYou.length === 0 ||
         !accessToken
@@ -72,5 +74,11 @@ export const useGhostDetector = () => {
     };
 
     detectGhosts();
-  }, [nonMutualsFollowingYou, nonMutualsYouFollow, accessToken, setGhosts]);
+  }, [
+    nonMutualsFollowingYou,
+    nonMutualsYouFollow,
+    accessToken,
+    setGhosts,
+    ghosts.length,
+  ]);
 };

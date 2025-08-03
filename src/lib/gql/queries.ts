@@ -87,7 +87,7 @@ export const GET_VIEWER_GISTS = gql`
     viewer {
       gists(first: $number, orderBy: { field: CREATED_AT, direction: DESC }) {
         nodes {
-          id
+          name
           description
           files {
             name

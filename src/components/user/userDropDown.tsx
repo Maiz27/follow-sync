@@ -2,7 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { auth } from '@/app/auth';
 import { AvatarFallback, Avatar, AvatarImage } from '../ui/avatar';
-import SignOut from '../auth/signOut';
+import { SignOutButton } from '../auth/buttons';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +25,13 @@ const UserDropDown = async () => {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Avatar className='cursor-pointer'>
-          <AvatarImage src={user.image!} alt={user.name!} />
+          <AvatarImage
+            width={24}
+            height={24}
+            loading='lazy'
+            src={user.image!}
+            alt={user.name!}
+          />
           <AvatarFallback>{user.name?.split(' ')[0]![0]}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
@@ -47,7 +53,7 @@ const UserDropDown = async () => {
         <DropdownMenuSeparator />
 
         <DropdownMenuItem className='focus:'>
-          <SignOut />
+          <SignOutButton>Sign out</SignOutButton>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
