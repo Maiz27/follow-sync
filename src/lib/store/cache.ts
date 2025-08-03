@@ -74,8 +74,6 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
   setGistName: (gistName) => {
     if (gistName) {
       window.localStorage.setItem(GIST_ID_STORAGE_KEY, gistName);
-    } else {
-      window.localStorage.removeItem(GIST_ID_STORAGE_KEY);
     }
     set({ gistName });
   },
@@ -111,15 +109,15 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
         else staleTime = STALE_TIME_LARGE;
 
         const isStale = Date.now() - cachedData.timestamp > staleTime;
+        get().loadFromCache(cachedData);
         // If cache is NOT stale, return it immediately.
         if (!isStale) {
           console.log('Cache is fresh, returning data.');
           toast.info('Loaded fresh data from cache.');
-          get().loadFromCache(cachedData);
           return cachedData.network;
         }
         // If it is stale, proceed to network fetch.
-        toast.warning('Cache is stale, fetching fresh data...');
+        console.warn('Cache is stale, fetching fresh data...');
       }
     }
 
@@ -185,7 +183,6 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
       get().setGistName(newGist.name);
 
       complete();
-      toast.success('Successfully synced and cached your network!');
 
       return network;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -216,6 +213,6 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
       metadata,
     };
     const newGist = await writeCache(accessToken, dataToCache, gistName);
-    get().setGistName(newGist.id);
+    get().setGistName(newGist.name);
   },
 }));
