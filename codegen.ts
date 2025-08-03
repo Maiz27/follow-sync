@@ -8,7 +8,7 @@ const config: CodegenConfig = {
       'https://api.github.com/graphql': {
         headers: {
           // 1. A GitHub personal access token (with "repo" or "read:org" scope as needed)
-          Authorization: `Bearer ${process.env.FS_GITHUB_TOKEN}`,
+          Authorization: `Bearer ${process.env.GITHUB_PAT}`,
           // 2. Any string identifying your app or project
           'User-Agent': 'follow-sync-codegen',
         },
