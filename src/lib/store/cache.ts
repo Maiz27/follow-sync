@@ -38,7 +38,7 @@ export type CacheStoreState = {
   ghostsSet: Set<string>;
   timestamp: number | null;
   isCheckingGhosts: boolean;
-  gistId: string | null;
+  gistName: string | null;
   metadata: CachedData['metadata'] | null;
 };
 
@@ -52,7 +52,7 @@ export type CacheStoreActions = {
   setGhosts: (ghosts: UserInfoFragment[], accessToken: string) => Promise<void>;
   isGhost: (login: string) => boolean;
   loadFromCache: (cachedData: CachedData) => void;
-  setGistId: (gistId: string | null) => void;
+  setGistName: (gistName: string | null) => void;
 };
 
 export type CacheStore = CacheStoreState & CacheStoreActions;
@@ -64,20 +64,20 @@ const initialState: CacheStoreState = {
   ghostsSet: new Set(),
   timestamp: null,
   isCheckingGhosts: false,
-  gistId: null,
+  gistName: null,
   metadata: null,
 };
 
 export const useCacheStore = create<CacheStore>((set, get) => ({
   ...initialState,
 
-  setGistId: (gistId) => {
-    if (gistId) {
-      window.localStorage.setItem(GIST_ID_STORAGE_KEY, gistId);
+  setGistName: (gistName) => {
+    if (gistName) {
+      window.localStorage.setItem(GIST_ID_STORAGE_KEY, gistName);
     } else {
       window.localStorage.removeItem(GIST_ID_STORAGE_KEY);
     }
-    set({ gistId });
+    set({ gistName });
   },
 
   loadFromCache: (cachedData) => {
@@ -94,14 +94,15 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
     progress
   ) => {
     const { show, update, complete, fail } = progress;
-    const storedGistId = window.localStorage.getItem(GIST_ID_STORAGE_KEY);
-    set({ gistId: storedGistId });
+    const gistName = window.localStorage.getItem(GIST_ID_STORAGE_KEY);
+    set({ gistName });
 
-    const foundGist = await findCacheGist(client, storedGistId);
-    console.log('foundGist', foundGist);
+    const foundGist = await findCacheGist(client, gistName);
+
     if (foundGist) {
       const cachedData = parseCache(foundGist);
       if (cachedData) {
+        get().setGistName(foundGist.name);
         const totalConnections = cachedData.metadata.totalConnections;
         let staleTime = 0;
 
@@ -170,14 +171,18 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
         },
       };
 
-      const newGist = await writeCache(accessToken, dataToCache, get().gistId);
+      const newGist = await writeCache(
+        accessToken,
+        dataToCache,
+        get().gistName
+      );
       set({
         network,
         timestamp,
         nonMutuals: getNonMutuals(network),
         metadata: dataToCache.metadata,
       });
-      get().setGistId(newGist.id);
+      get().setGistName(newGist.name);
 
       complete();
       toast.success('Successfully synced and cached your network!');
@@ -195,8 +200,12 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
   },
 
   setGhosts: async (ghosts, accessToken) => {
-    set({ ghosts, ghostsSet: new Set(ghosts.map(g => g.login)), isCheckingGhosts: false });
-    const { network, timestamp, metadata, gistId } = get();
+    set({
+      ghosts,
+      ghostsSet: new Set(ghosts.map((g) => g.login)),
+      isCheckingGhosts: false,
+    });
+    const { network, timestamp, metadata, gistName } = get();
 
     if (!metadata || !timestamp || !network) return;
 
@@ -206,7 +215,7 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
       timestamp,
       metadata,
     };
-    const newGist = await writeCache(accessToken, dataToCache, gistId);
-    get().setGistId(newGist.id);
+    const newGist = await writeCache(accessToken, dataToCache, gistName);
+    get().setGistName(newGist.id);
   },
 }));
