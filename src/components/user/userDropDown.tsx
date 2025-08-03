@@ -2,7 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { auth } from '@/app/auth';
 import { AvatarFallback, Avatar, AvatarImage } from '../ui/avatar';
-import SignOut from '../auth/signOut';
+import { SignOutButton } from '../auth/buttons';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,7 +47,7 @@ const UserDropDown = async () => {
         <DropdownMenuSeparator />
 
         <DropdownMenuItem className='focus:'>
-          <SignOut />
+          <SignOutButton>Sign out</SignOutButton>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

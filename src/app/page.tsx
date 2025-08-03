@@ -1,4 +1,4 @@
-import SignIn from '@/components/auth/signIn';
+import GetStarted from '@/components/auth/getStarted';
 import { Heading } from '@/components/utils/heading';
 import { Section } from '@/components/utils/section';
 import { SubText } from '@/components/utils/subText';
@@ -16,7 +16,7 @@ export default async function Home() {
           you're always in sync with your professional network.`}
         </SubText>
 
-        <SignIn />
+        <GetStarted />
       </Section>
     </>
   );

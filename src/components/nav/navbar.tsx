@@ -1,9 +1,9 @@
 import React from 'react';
 import Link from 'next/link';
-import { auth, signIn } from '@/app/auth';
+import { auth } from '@/app/auth';
 import Logo from './logo';
 import UserDropDown from '../user/userDropDown';
-import { Button } from '../ui/button';
+import { SignInButton } from '../auth/buttons';
 import { ThemeToggle } from '../theme/themeToggle';
 import { Separator } from '../ui/separator';
 import { LuGithub } from 'react-icons/lu';
@@ -34,17 +34,10 @@ const GetStarted = async () => {
   const session = await auth();
   if (!session) {
     return (
-      <form
-        action={async () => {
-          'use server';
-          await signIn('github');
-        }}
-      >
-        <Button type='submit' size='sm'>
-          <LuGithub />
-          Get Started
-        </Button>
-      </form>
+      <SignInButton>
+        <LuGithub />
+        Get Started
+      </SignInButton>
     );
   }
 
