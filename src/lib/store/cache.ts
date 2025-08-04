@@ -53,6 +53,13 @@ export type CacheStoreActions = {
   isGhost: (login: string) => boolean;
   loadFromCache: (cachedData: CachedData) => void;
   setGistName: (gistName: string | null) => void;
+  writeCache: (
+    accessToken: string,
+    data: CachedData,
+    gistName: string | null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) => Promise<any>;
+  getState: () => CacheStoreState;
 };
 
 export type CacheStore = CacheStoreState & CacheStoreActions;
@@ -77,6 +84,12 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
     }
     set({ gistName });
   },
+
+  writeCache: async (accessToken, data, gistName) => {
+    return await writeCache(accessToken, data, gistName);
+  },
+
+  getState: () => get(),
 
   loadFromCache: (cachedData) => {
     set({
