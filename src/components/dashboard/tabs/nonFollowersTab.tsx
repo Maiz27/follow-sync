@@ -1,35 +1,42 @@
 import React from 'react';
 import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
-import { UserInfoFragment } from '@/lib/gql/types';
+import { TabHeader } from './tabHeader';
 import { useFollowManager } from '@/lib/hooks/useFollowManager';
 import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
-import { TabHeader } from './tabHeader';
+import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
+import { UserInfoFragment } from '@/lib/gql/types';
 
 type NonFollowersTabProps = {
-  oneWayOut: (UserInfoFragment | null)[];
+  oneWayOut: UserInfoFragment[];
 };
 
 const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
   const { unfollowMutation } = useFollowManager();
-  const { isPending, mutate } = unfollowMutation;
-  const { selectedIds, handleSelect } = useSelectionManager(
+  const { isPending, mutate, mutateAsync } = unfollowMutation;
+
+  const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
     oneWayOut.map((u) => u!.id)
   );
+  const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
+    useBulkOperation(mutateAsync, 'Unfollowing');
 
-  const handleBulkUnfollow = () => {
-    // TODO: Implement bulk unfollow logic
-    console.log('Bulk unfollowing:', selectedIds);
+  const handleBulkUnfollow = async () => {
+    const usersToUnfollow = oneWayOut.filter(
+      (u) => u && selectedIds.has(u.id)
+    ) as UserInfoFragment[];
+    await bulkUnfollow(usersToUnfollow);
+    clearSelection();
   };
 
   return (
-    <>
+    <div>
       <TabHeader
         selectedCount={selectedIds.size}
         action={{
           label: 'Unfollow Selected',
           onBulkAction: handleBulkUnfollow,
-          isBulkActionLoading: false,
+          isBulkActionLoading: isBulkUnfollowing,
         }}
       />
       <PaginatedList
@@ -49,7 +56,7 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
           />
         )}
       />
-    </>
+    </div>
   );
 };
 

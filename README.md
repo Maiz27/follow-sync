@@ -38,7 +38,7 @@ This project is currently in active development.
 - [x] **Phase 2:** Core Data Pipeline (GraphQL)
 - [x] **Phase 3:** Adaptive Gist Caching
 - [x] **Phase 4:** Ghost-Detection Pipeline
-- [ ] **Phase 5:** Follow/Unfollow Operations
+- [x] **Phase 5:** Follow/Unfollow Operations
 - [ ] **Phase 6:** UI Components & Polish
 - [ ] **Phase 7:** Performance, Monitoring & Testing
 

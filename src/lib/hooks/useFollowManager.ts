@@ -26,8 +26,7 @@ export const useFollowManager = () => {
       ghosts,
       timestamp: Date.now(),
       metadata: {
-        totalConnections:
-          network.followers.length + network.following.length,
+        totalConnections: network.followers.length + network.following.length,
         fetchDuration: metadata?.fetchDuration || 0,
         cacheVersion: metadata?.cacheVersion || '1.0',
       },
@@ -60,9 +59,8 @@ export const useFollowManager = () => {
       }
       toast.error(`Failed to follow @${userToFollow.login}: ${err.message}`);
     },
-    onSuccess: (data, variables) => {
+    onSuccess: () => {
       persistChanges();
-      toast.success(`Successfully followed @${variables.login}`);
     },
   });
 
@@ -94,9 +92,8 @@ export const useFollowManager = () => {
         `Failed to unfollow @${userToUnfollow.login}: ${err.message}`
       );
     },
-    onSuccess: (data, variables) => {
+    onSuccess: () => {
       persistChanges();
-      toast.success(`Successfully unfollowed @${variables.login}`);
     },
   });
 

@@ -2,25 +2,29 @@ import React from 'react';
 import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
 import { TabHeader } from './tabHeader';
-import { UserInfoFragment } from '@/lib/gql/types';
 import { useFollowManager } from '@/lib/hooks/useFollowManager';
 import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
+import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
+import { UserInfoFragment } from '@/lib/gql/types';
 
 type FollowingTabProps = {
-  following: (UserInfoFragment | null)[];
+  following: UserInfoFragment[];
 };
 
 const FollowingTab = ({ following }: FollowingTabProps) => {
   const { unfollowMutation } = useFollowManager();
-  const { isPending, mutate } = unfollowMutation;
+  const { isPending, mutate, mutateAsync } = unfollowMutation;
 
-  const { selectedIds, handleSelect } = useSelectionManager(
+  const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
     following.map((u) => u!.id)
   );
+  const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
+    useBulkOperation(mutateAsync, 'Unfollowing');
 
-  const handleBulkUnfollow = () => {
-    // TODO: Implement bulk unfollow logic
-    console.log('Bulk unfollowing:', selectedIds);
+  const handleBulkUnfollow = async () => {
+    const usersToUnfollow = following.filter((u) => u && selectedIds.has(u.id));
+    await bulkUnfollow(usersToUnfollow);
+    clearSelection();
   };
 
   return (
@@ -30,7 +34,7 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
         action={{
           label: 'Unfollow Selected',
           onBulkAction: handleBulkUnfollow,
-          isBulkActionLoading: false,
+          isBulkActionLoading: isBulkUnfollowing,
         }}
       />
       <PaginatedList

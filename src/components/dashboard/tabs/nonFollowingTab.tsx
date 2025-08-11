@@ -2,25 +2,29 @@ import React from 'react';
 import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
 import { TabHeader } from './tabHeader';
-import { UserInfoFragment } from '@/lib/gql/types';
 import { useFollowManager } from '@/lib/hooks/useFollowManager';
 import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
+import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
+import { UserInfoFragment } from '@/lib/gql/types';
 
 type NonFollowingTabProps = {
-  oneWayIn: (UserInfoFragment | null)[];
+  oneWayIn: UserInfoFragment[];
 };
 
 const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
   const { followMutation } = useFollowManager();
-  const { isPending, mutate } = followMutation;
+  const { isPending, mutate, mutateAsync } = followMutation;
 
-  const { selectedIds, handleSelect } = useSelectionManager(
+  const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
     oneWayIn.map((u) => u!.id)
   );
+  const { execute: bulkUnfollow, isPending: isBulkFollowing } =
+    useBulkOperation(mutateAsync, 'Following');
 
-  const handleBulkFollow = () => {
-    // TODO: Implement bulk unfollow logic
-    console.log('Bulk unfollowing:', selectedIds);
+  const handleBulkFollow = async () => {
+    const usersToFollow = oneWayIn.filter((u) => u && selectedIds.has(u.id));
+    await bulkUnfollow(usersToFollow);
+    clearSelection();
   };
 
   return (
@@ -28,9 +32,9 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
       <TabHeader
         selectedCount={selectedIds.size}
         action={{
-          label: 'follow Selected',
+          label: 'Follow Selected',
           onBulkAction: handleBulkFollow,
-          isBulkActionLoading: false,
+          isBulkActionLoading: isBulkFollowing,
         }}
       />
 

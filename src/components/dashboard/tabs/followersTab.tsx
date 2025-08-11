@@ -4,7 +4,7 @@ import ConnectionCard from '../connectionCard';
 import { UserInfoFragment } from '@/lib/gql/types';
 
 export type FollowersTabProps = {
-  followers: (UserInfoFragment | null)[];
+  followers: UserInfoFragment[];
 };
 
 const FollowersTab = ({ followers }: FollowersTabProps) => {
