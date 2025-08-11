@@ -1,5 +1,6 @@
 import { useSession } from 'next-auth/react';
 import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useCacheStore } from '@/lib/store/cache';
 import { followUser, unfollowUser } from '@/lib/gql/fetchers';
 import { useClientAuthenticatedGraphQLClient } from '@/lib/gql/client';
@@ -57,8 +58,12 @@ export const useFollowManager = () => {
           nonMutuals: context.previousState.nonMutuals,
         });
       }
+      toast.error(`Failed to follow @${userToFollow.login}: ${err.message}`);
     },
-    onSuccess: persistChanges,
+    onSuccess: (data, variables) => {
+      persistChanges();
+      toast.success(`Successfully followed @${variables.login}`);
+    },
   });
 
   const unfollowMutation = useMutation({
@@ -85,8 +90,14 @@ export const useFollowManager = () => {
           nonMutuals: context.previousState.nonMutuals,
         });
       }
+      toast.error(
+        `Failed to unfollow @${userToUnfollow.login}: ${err.message}`
+      );
     },
-    onSuccess: persistChanges,
+    onSuccess: (data, variables) => {
+      persistChanges();
+      toast.success(`Successfully unfollowed @${variables.login}`);
+    },
   });
 
   return { followMutation, unfollowMutation };

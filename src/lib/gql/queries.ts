@@ -85,7 +85,11 @@ export const GET_GIST_BY_NAME = gql`
 export const GET_VIEWER_GISTS = gql`
   query GetViewerGists($number: Int!) {
     viewer {
-      gists(first: $number, orderBy: { field: CREATED_AT, direction: DESC }) {
+      gists(
+        first: $number
+        privacy: SECRET
+        orderBy: { field: CREATED_AT, direction: DESC }
+      ) {
         nodes {
           name
           description
