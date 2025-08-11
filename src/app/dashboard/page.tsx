@@ -7,15 +7,12 @@ import Analyzer from '@/components/dashboard/analyzer';
 import { Section } from '@/components/utils/section';
 import { useNetworkData } from '@/lib/hooks/useNetworkManager';
 import { useGhostDetector } from '@/lib/hooks/useGhostDetector';
-import { useCacheStore } from '@/lib/store/cache';
 
 const ClientDashboard = () => {
   const { data: session } = useSession();
   const username = session?.user?.login;
 
   const { isLoading, isError, error } = useNetworkData(username);
-  const { network, nonMutuals, ghosts, timestamp, isCheckingGhosts } =
-    useCacheStore();
 
   useGhostDetector();
 
@@ -25,25 +22,8 @@ const ClientDashboard = () => {
   return (
     <>
       <Section className='my-10 grid gap-2 py-0'>
-        <Stats
-          stats={{
-            nonMutualsFollowingYou: nonMutuals.nonMutualsFollowingYou.length,
-            nonMutualsYouFollow: nonMutuals.nonMutualsYouFollow.length,
-            following: network.following.length,
-            followers: network.followers.length,
-          }}
-        />
-        <Analyzer
-          lastSync={timestamp!}
-          network={{
-            followers: network.followers,
-            following: network.following,
-            oneWayOut: nonMutuals.nonMutualsFollowingYou,
-            oneWayIn: nonMutuals.nonMutualsYouFollow,
-          }}
-          ghosts={ghosts}
-          isCheckingGhosts={isCheckingGhosts}
-        />
+        <Stats />
+        <Analyzer />
       </Section>
     </>
   );

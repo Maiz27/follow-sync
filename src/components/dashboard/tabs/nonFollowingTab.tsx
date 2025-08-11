@@ -2,20 +2,29 @@ import React from 'react';
 import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
 import { UserInfoFragment } from '@/lib/gql/types';
-import { useCacheStore } from '@/lib/store/cache';
+import { useFollowManager } from '@/lib/hooks/useFollowManager';
 
 type NonFollowingTabProps = {
   oneWayIn: (UserInfoFragment | null)[];
+  username?: string;
 };
 
-const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
-  const isGhost = useCacheStore((state) => state.isGhost);
+const NonFollowingTab = ({ oneWayIn, username }: NonFollowingTabProps) => {
+  const { followMutation } = useFollowManager(username);
+  const { isPending, mutate } = followMutation;
 
   return (
     <PaginatedList
       data={oneWayIn}
       renderItem={(item) => (
-        <ConnectionCard user={item!} isGhost={isGhost(item!.login)} />
+        <ConnectionCard
+          user={item!}
+          action={{
+            onClick: () => mutate(item!),
+            label: 'Follow',
+            loading: isPending,
+          }}
+        />
       )}
     />
   );

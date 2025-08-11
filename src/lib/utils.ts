@@ -95,11 +95,11 @@ export const getNonMutuals = (network: {
   const followingLogins = new Set(following!.map((u) => u!.login));
 
   // Calculate non-mutuals using only logins
-  const nonMutualsFollowingYou = following!.filter(
+  const nonMutualsYouFollow = following!.filter(
     (u) => !followerLogins.has(u!.login)
   );
 
-  const nonMutualsYouFollow = followers!.filter(
+  const nonMutualsFollowingYou = followers!.filter(
     (u) => !followingLogins.has(u!.login)
   );
 

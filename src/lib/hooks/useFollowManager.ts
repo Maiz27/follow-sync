@@ -12,11 +12,9 @@ export const useFollowManager = (username?: string) => {
   const { client } = useClientAuthenticatedGraphQLClient();
   const { data: session } = useSession();
   const queryClient = useQueryClient();
-  const { getState, gistName, writeCache } = useCacheStore((state) => ({
-    getState: state.getState,
-    gistName: state.gistName,
-    writeCache: state.writeCache,
-  }));
+  const getState = useCacheStore((state) => state.getState);
+  const gistName = useCacheStore((state) => state.gistName);
+  const writeCache = useCacheStore((state) => state.writeCache);
 
   const persistChanges = async () => {
     if (!session?.accessToken) return;

@@ -8,20 +8,28 @@ import {
   CardContent,
   CardFooter,
 } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { useCacheStore } from '@/lib/store/cache';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { formatNumber } from '@/lib/utils';
-
-import { Badge } from '../ui/badge';
 import { LuGhost } from 'react-icons/lu';
 
 type ConnectionCardProps = {
   user: UserInfoFragment;
-  children?: React.ReactNode;
-  isGhost?: boolean;
+  action?: {
+    label: string;
+    onClick: () => void;
+    isDisabled?: boolean;
+    loading?: boolean;
+  };
 };
 
-const ConnectionCard = ({ user, children, isGhost }: ConnectionCardProps) => {
+const ConnectionCard = ({ user, action }: ConnectionCardProps) => {
+  const { onClick, label, loading, isDisabled } = action || {};
+  const isGhost = useCacheStore((state) => state.ghostsSet.has(user.login));
+
   return (
     <Card className='relative'>
       {isGhost && (
@@ -55,7 +63,19 @@ const ConnectionCard = ({ user, children, isGhost }: ConnectionCardProps) => {
           <p>Following: {formatNumber(user.following.totalCount)}</p>
         </div>
       </CardContent>
-      <CardFooter>{children}</CardFooter>
+      <CardFooter>
+        {!isGhost && action && (
+          <Button
+            size='sm'
+            variant='outline'
+            onClick={onClick}
+            disabled={isDisabled || loading}
+            className={loading ? 'animate-pulse cursor-progress' : ''}
+          >
+            {label}
+          </Button>
+        )}
+      </CardFooter>
     </Card>
   );
 };

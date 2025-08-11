@@ -51,6 +51,7 @@ export type CacheStoreActions = {
   ) => Promise<CacheStoreState['network']>;
   setGhosts: (ghosts: UserInfoFragment[], accessToken: string) => Promise<void>;
   isGhost: (login: string) => boolean;
+  setIsCheckingGhosts: (isCheckingGhosts: boolean) => void;
   loadFromCache: (cachedData: CachedData) => void;
   setGistName: (gistName: string | null) => void;
   writeCache: (
@@ -70,7 +71,7 @@ const initialState: CacheStoreState = {
   ghosts: [],
   ghostsSet: new Set(),
   timestamp: null,
-  isCheckingGhosts: false,
+  isCheckingGhosts: true,
   gistName: null,
   metadata: null,
 };
@@ -95,6 +96,7 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
     set({
       ...cachedData,
       nonMutuals: getNonMutuals(cachedData.network),
+      ghostsSet: new Set(cachedData.ghosts.map((g) => g.login)),
     });
   },
 
@@ -209,6 +211,10 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
 
   isGhost: (login) => {
     return get().ghostsSet.has(login);
+  },
+
+  setIsCheckingGhosts: (isCheckingGhosts) => {
+    set({ isCheckingGhosts });
   },
 
   setGhosts: async (ghosts, accessToken) => {
