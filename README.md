@@ -6,6 +6,7 @@
 
 - **Comprehensive Network Analysis:** Get a clear picture of who you follow that doesn't follow you back, and vice-versa.
 - **Ghost Account Detection:** Identify "ghost" connections—accounts that have been deleted or suspended but still appear in your network lists. This provides a more accurate understanding of your active network, as these connections cannot be removed through the API.
+- **Single-Click Follow/Unfollow:** Manage your network directly from the FollowSync interface with optimistic UI updates for a seamless experience.
 - **Adaptive Caching:** Utilizes your own GitHub Gists as a database, with an intelligent caching mechanism to respect GitHub's API rate limits while keeping your data fresh.
 - **Secure & Private:** All your network data is stored in a private Gist that you own. FollowSync never stores your data on its servers.
 - **Bulk Actions:** (Coming Soon) Perform follow and unfollow operations on multiple users at once.
