@@ -1,41 +1,34 @@
 import { useSession } from 'next-auth/react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useCacheStore, CacheStoreState } from '@/lib/store/cache';
+import { useMutation } from '@tanstack/react-query';
+import { useCacheStore } from '@/lib/store/cache';
 import { followUser, unfollowUser } from '@/lib/gql/fetchers';
 import { useClientAuthenticatedGraphQLClient } from '@/lib/gql/client';
-import { QUERY_KEY_USER_NETWORK } from '@/lib/constants';
 import { getNonMutuals } from '@/lib/utils';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { CachedData } from '@/lib/types';
 
-export const useFollowManager = (username?: string) => {
+export const useFollowManager = () => {
   const { client } = useClientAuthenticatedGraphQLClient();
   const { data: session } = useSession();
-  const queryClient = useQueryClient();
-  const getState = useCacheStore((state) => state.getState);
-  const gistName = useCacheStore((state) => state.gistName);
-  const writeCache = useCacheStore((state) => state.writeCache);
+  const { getState, gistName, writeCache, updateNetwork } = useCacheStore();
 
   const persistChanges = async () => {
     if (!session?.accessToken) return;
 
-    const queryState = queryClient.getQueryData<CacheStoreState>([
-      QUERY_KEY_USER_NETWORK,
-      username,
-    ]);
-    if (!queryState) return;
+    const currentState = getState();
+    const { network, ghosts, metadata } = currentState;
 
-    const fullState = getState();
+    if (!network) return;
+
     const dataToCache: CachedData = {
-      network: queryState.network,
-      ghosts: fullState.ghosts,
+      network,
+      ghosts,
       timestamp: Date.now(),
       metadata: {
         totalConnections:
-          queryState.network.followers.length +
-          queryState.network.following.length,
-        fetchDuration: fullState.metadata?.fetchDuration || 0,
-        cacheVersion: fullState.metadata?.cacheVersion || '1.0',
+          network.followers.length + network.following.length,
+        fetchDuration: metadata?.fetchDuration || 0,
+        cacheVersion: metadata?.cacheVersion || '1.0',
       },
     };
 
@@ -48,40 +41,21 @@ export const useFollowManager = (username?: string) => {
       return followUser({ client, userId: userToFollow.id });
     },
     onMutate: async (userToFollow: UserInfoFragment) => {
-      await queryClient.cancelQueries({
-        queryKey: [QUERY_KEY_USER_NETWORK, username],
-      });
+      const previousState = getState();
+      const newFollowing = [...previousState.network.following, userToFollow];
+      const newNetwork = { ...previousState.network, following: newFollowing };
+      const newNonMutuals = getNonMutuals(newNetwork);
 
-      const previousState = queryClient.getQueryData<CacheStoreState>([
-        QUERY_KEY_USER_NETWORK,
-        username,
-      ]);
-
-      queryClient.setQueryData<CacheStoreState>(
-        [QUERY_KEY_USER_NETWORK, username],
-        (old) => {
-          if (!old) return old;
-
-          const newFollowing = [...old.network.following, userToFollow];
-          const newNetwork = { ...old.network, following: newFollowing };
-          const newNonMutuals = getNonMutuals(newNetwork);
-
-          return {
-            ...old,
-            network: newNetwork,
-            nonMutuals: newNonMutuals,
-          };
-        }
-      );
+      updateNetwork({ network: newNetwork, nonMutuals: newNonMutuals });
 
       return { previousState };
     },
     onError: (err, userToFollow, context) => {
       if (context?.previousState) {
-        queryClient.setQueryData(
-          [QUERY_KEY_USER_NETWORK, username],
-          context.previousState
-        );
+        updateNetwork({
+          network: context.previousState.network,
+          nonMutuals: context.previousState.nonMutuals,
+        });
       }
     },
     onSuccess: persistChanges,
@@ -93,42 +67,23 @@ export const useFollowManager = (username?: string) => {
       return unfollowUser({ client, userId: userToUnfollow.id });
     },
     onMutate: async (userToUnfollow: UserInfoFragment) => {
-      await queryClient.cancelQueries({
-        queryKey: [QUERY_KEY_USER_NETWORK, username],
-      });
-
-      const previousState = queryClient.getQueryData<CacheStoreState>([
-        QUERY_KEY_USER_NETWORK,
-        username,
-      ]);
-
-      queryClient.setQueryData<CacheStoreState>(
-        [QUERY_KEY_USER_NETWORK, username],
-        (old) => {
-          if (!old) return old;
-
-          const newFollowing = old.network.following.filter(
-            (u) => u.id !== userToUnfollow.id
-          );
-          const newNetwork = { ...old.network, following: newFollowing };
-          const newNonMutuals = getNonMutuals(newNetwork);
-
-          return {
-            ...old,
-            network: newNetwork,
-            nonMutuals: newNonMutuals,
-          };
-        }
+      const previousState = getState();
+      const newFollowing = previousState.network.following.filter(
+        (u) => u.id !== userToUnfollow.id
       );
+      const newNetwork = { ...previousState.network, following: newFollowing };
+      const newNonMutuals = getNonMutuals(newNetwork);
+
+      updateNetwork({ network: newNetwork, nonMutuals: newNonMutuals });
 
       return { previousState };
     },
     onError: (err, userToUnfollow, context) => {
       if (context?.previousState) {
-        queryClient.setQueryData(
-          [QUERY_KEY_USER_NETWORK, username],
-          context.previousState
-        );
+        updateNetwork({
+          network: context.previousState.network,
+          nonMutuals: context.previousState.nonMutuals,
+        });
       }
     },
     onSuccess: persistChanges,

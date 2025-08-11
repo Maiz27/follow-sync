@@ -61,6 +61,10 @@ export type CacheStoreActions = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ) => Promise<any>;
   getState: () => CacheStoreState;
+  updateNetwork: (data: {
+    network: CacheStoreState['network'];
+    nonMutuals: CacheStoreState['nonMutuals'];
+  }) => void;
 };
 
 export type CacheStore = CacheStoreState & CacheStoreActions;
@@ -97,6 +101,13 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
       ...cachedData,
       nonMutuals: getNonMutuals(cachedData.network),
       ghostsSet: new Set(cachedData.ghosts.map((g) => g.login)),
+    });
+  },
+
+  updateNetwork: (data) => {
+    set({
+      network: data.network,
+      nonMutuals: data.nonMutuals,
     });
   },
 

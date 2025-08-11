@@ -6,11 +6,10 @@ import { useFollowManager } from '@/lib/hooks/useFollowManager';
 
 type FollowingTabProps = {
   following: (UserInfoFragment | null)[];
-  username?: string;
 };
 
-const FollowingTab = ({ following, username }: FollowingTabProps) => {
-  const { unfollowMutation } = useFollowManager(username);
+const FollowingTab = ({ following }: FollowingTabProps) => {
+  const { unfollowMutation } = useFollowManager();
   const { isPending, mutate } = unfollowMutation;
 
   return (

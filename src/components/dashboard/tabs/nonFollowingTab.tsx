@@ -6,11 +6,10 @@ import { useFollowManager } from '@/lib/hooks/useFollowManager';
 
 type NonFollowingTabProps = {
   oneWayIn: (UserInfoFragment | null)[];
-  username?: string;
 };
 
-const NonFollowingTab = ({ oneWayIn, username }: NonFollowingTabProps) => {
-  const { followMutation } = useFollowManager(username);
+const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
+  const { followMutation } = useFollowManager();
   const { isPending, mutate } = followMutation;
 
   return (

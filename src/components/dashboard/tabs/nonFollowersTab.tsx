@@ -6,11 +6,10 @@ import { useFollowManager } from '@/lib/hooks/useFollowManager';
 
 type NonFollowersTabProps = {
   oneWayOut: (UserInfoFragment | null)[];
-  username?: string;
 };
 
-const NonFollowersTab = ({ oneWayOut, username }: NonFollowersTabProps) => {
-  const { unfollowMutation } = useFollowManager(username);
+const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
+  const { unfollowMutation } = useFollowManager();
   const { isPending, mutate } = unfollowMutation;
 
   return (
