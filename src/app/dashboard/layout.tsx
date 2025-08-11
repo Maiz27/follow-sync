@@ -20,7 +20,7 @@ export default function Layout({
         <ProgressProvider>
           {children}
           <GlobalProgressIndicator />
-          <Toaster />
+          <Toaster expand={true} />
         </ProgressProvider>
       </SessionProvider>
     </Providers>

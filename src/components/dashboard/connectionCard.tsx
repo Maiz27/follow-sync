@@ -60,7 +60,14 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
         )}
         <CardHeader className='flex items-center gap-2'>
           <Avatar>
-            <AvatarImage src={user.avatarUrl} loading='lazy' />
+            <AvatarImage
+              width={50}
+              height={50}
+              src={user.avatarUrl}
+              alt={user.name || user.login}
+              title={user.name || user.login}
+              loading='lazy'
+            />
             <AvatarFallback>{user.name?.split(' ')[0][0]}</AvatarFallback>
           </Avatar>
 
