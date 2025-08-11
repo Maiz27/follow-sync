@@ -40,6 +40,7 @@ export type CacheStoreState = {
   isCheckingGhosts: boolean;
   gistName: string | null;
   metadata: CachedData['metadata'] | null;
+  forceNextRefresh: boolean;
 };
 
 export type CacheStoreActions = {
@@ -65,6 +66,7 @@ export type CacheStoreActions = {
     network: CacheStoreState['network'];
     nonMutuals: CacheStoreState['nonMutuals'];
   }) => void;
+  setForceNextRefresh: (force: boolean) => void;
 };
 
 export type CacheStore = CacheStoreState & CacheStoreActions;
@@ -78,6 +80,7 @@ const initialState: CacheStoreState = {
   isCheckingGhosts: true,
   gistName: null,
   metadata: null,
+  forceNextRefresh: false,
 };
 
 export const useCacheStore = create<CacheStore>((set, get) => ({
@@ -111,6 +114,10 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
     });
   },
 
+  setForceNextRefresh: (force) => {
+    set({ forceNextRefresh: force });
+  },
+
   initializeAndFetchNetwork: async (
     client,
     username,
@@ -121,29 +128,33 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
     const gistName = window.localStorage.getItem(GIST_ID_STORAGE_KEY);
     set({ gistName });
 
-    const foundGist = await findCacheGist(client, gistName);
+    const forceRefresh = get().forceNextRefresh;
+    if (forceRefresh) {
+      get().setForceNextRefresh(false); // Reset the flag
+    }
 
-    if (foundGist) {
-      const cachedData = parseCache(foundGist);
-      if (cachedData) {
-        get().setGistName(foundGist.name);
-        const totalConnections = cachedData.metadata.totalConnections;
-        let staleTime = 0;
+    if (!forceRefresh) {
+      const foundGist = await findCacheGist(client, gistName);
+      if (foundGist) {
+        const cachedData = parseCache(foundGist);
+        if (cachedData) {
+          get().setGistName(foundGist.name);
+          const totalConnections = cachedData.metadata.totalConnections;
+          let staleTime = 0;
 
-        if (totalConnections < 2000) staleTime = STALE_TIME_SMALL;
-        else if (totalConnections < 10000) staleTime = STALE_TIME_MEDIUM;
-        else staleTime = STALE_TIME_LARGE;
+          if (totalConnections < 2000) staleTime = STALE_TIME_SMALL;
+          else if (totalConnections < 10000) staleTime = STALE_TIME_MEDIUM;
+          else staleTime = STALE_TIME_LARGE;
 
-        const isStale = Date.now() - cachedData.timestamp > staleTime;
-        get().loadFromCache(cachedData);
-        // If cache is NOT stale, return it immediately.
-        if (!isStale) {
-          console.log('Cache is fresh, returning data.');
-          toast.info('Loaded fresh data from cache.');
-          return cachedData.network;
+          const isStale = Date.now() - cachedData.timestamp > staleTime;
+          get().loadFromCache(cachedData);
+          if (!isStale) {
+            console.log('Cache is fresh, returning data.');
+            toast.info('Loaded fresh data from cache.');
+            return cachedData.network;
+          }
+          console.warn('Cache is stale, fetching fresh data...');
         }
-        // If it is stale, proceed to network fetch.
-        console.warn('Cache is stale, fetching fresh data...');
       }
     }
 
@@ -208,7 +219,6 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
         metadata: dataToCache.metadata,
       });
 
-      // write to cache returns the name as id
       get().setGistName(newGist.id);
       complete();
 
