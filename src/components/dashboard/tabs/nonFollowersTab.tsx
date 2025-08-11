@@ -1,23 +1,62 @@
 import React from 'react';
 import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
+import { TabHeader } from './tabHeader';
+import { useFollowManager } from '@/lib/hooks/useFollowManager';
+import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
+import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
 import { UserInfoFragment } from '@/lib/gql/types';
-import { useCacheStore } from '@/lib/store/cache';
 
 type NonFollowersTabProps = {
-  oneWayOut: (UserInfoFragment | null)[];
+  oneWayOut: UserInfoFragment[];
 };
 
 const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
-  const isGhost = useCacheStore((state) => state.isGhost);
+  const { unfollowMutation } = useFollowManager();
+  const { isPending, mutate, mutateAsync } = unfollowMutation;
+
+  const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
+    oneWayOut.map((u) => u!.id)
+  );
+  const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
+    useBulkOperation(mutateAsync, 'Unfollowing');
+
+  const handleBulkUnfollow = async () => {
+    const usersToUnfollow = oneWayOut.filter(
+      (u) => u && selectedIds.has(u.id)
+    ) as UserInfoFragment[];
+    await bulkUnfollow(usersToUnfollow);
+    clearSelection();
+  };
 
   return (
-    <PaginatedList
-      data={oneWayOut}
-      renderItem={(item) => (
-        <ConnectionCard user={item!} isGhost={isGhost(item!.login)} />
-      )}
-    />
+    <div>
+      <TabHeader
+        selectedCount={selectedIds.size}
+        action={{
+          label: 'Unfollow Selected',
+          onBulkAction: handleBulkUnfollow,
+          isBulkActionLoading: isBulkUnfollowing,
+        }}
+      />
+      <PaginatedList
+        data={oneWayOut}
+        renderItem={(item) => (
+          <ConnectionCard
+            user={item!}
+            selection={{
+              isSelected: selectedIds.has(item!.id),
+              onSelect: handleSelect,
+            }}
+            action={{
+              onClick: () => mutate(item!),
+              label: 'Unfollow',
+              loading: isPending,
+            }}
+          />
+        )}
+      />
+    </div>
   );
 };
 

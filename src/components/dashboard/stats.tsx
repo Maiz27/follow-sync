@@ -6,21 +6,15 @@ import {
   CardHeader,
   CardTitle,
 } from '../ui/card';
-import { LuEye, LuHeart, LuUserX, LuUserPlus } from 'react-icons/lu';
+import { useCacheStore } from '@/lib/store/cache';
 import { formatNumber } from '@/lib/utils';
+import { LuEye, LuHeart, LuUserX, LuUserPlus } from 'react-icons/lu';
 
-type StatsProps = {
-  stats: {
-    followers: number;
-    following: number;
-    nonMutualsFollowingYou: number;
-    nonMutualsYouFollow: number;
-  };
-};
+const Stats = () => {
+  const { network, nonMutuals } = useCacheStore();
+  const { followers, following } = network;
+  const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
 
-const Stats = ({
-  stats: { followers, following, nonMutualsFollowingYou, nonMutualsYouFollow },
-}: StatsProps) => {
   const list = [
     {
       label: 'Your Audience (Followers)',
@@ -36,13 +30,13 @@ const Stats = ({
     },
     {
       label: 'One-Way Out (You Follow)',
-      value: nonMutualsFollowingYou,
+      value: nonMutualsYouFollow,
       icon: LuUserX,
       description: 'Users you follow who have not followed you back.',
     },
     {
       label: 'One-Way In (They Follow)',
-      value: nonMutualsYouFollow,
+      value: nonMutualsFollowingYou,
       icon: LuUserPlus,
       description: 'Users who follow you, but you have not followed them back.',
     },
@@ -67,7 +61,7 @@ const Stats = ({
             </CardHeader>
             <CardContent className='grid place-items-center'>
               <span className='text-5xl text-primary'>
-                {formatNumber(item.value)}
+                {formatNumber(item.value.length)}
               </span>
             </CardContent>
           </Card>

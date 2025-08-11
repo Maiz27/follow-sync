@@ -89,7 +89,7 @@ export const writeCache = async (
     body: JSON.stringify({
       description: GIST_DESCRIPTION,
       files: { [GIST_FILENAME]: { content } },
-      public: true,
+      public: false,
     }),
   });
 

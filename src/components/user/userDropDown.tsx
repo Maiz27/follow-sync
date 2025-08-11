@@ -31,6 +31,7 @@ const UserDropDown = async () => {
             loading='lazy'
             src={user.image!}
             alt={user.name!}
+            title={user.name!}
           />
           <AvatarFallback>{user.name?.split(' ')[0]![0]}</AvatarFallback>
         </Avatar>

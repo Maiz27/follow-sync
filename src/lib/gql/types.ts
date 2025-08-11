@@ -35750,6 +35750,30 @@ export type FollowingFieldsFragment = {
   } | null> | null;
 };
 
+export type FollowUserMutationVariables = Exact<{
+  userId: Scalars['ID']['input'];
+}>;
+
+export type FollowUserMutation = {
+  __typename?: 'Mutation';
+  followUser?: {
+    __typename?: 'FollowUserPayload';
+    user?: { __typename?: 'User'; id: string; login: string } | null;
+  } | null;
+};
+
+export type UnfollowUserMutationVariables = Exact<{
+  userId: Scalars['ID']['input'];
+}>;
+
+export type UnfollowUserMutation = {
+  __typename?: 'Mutation';
+  unfollowUser?: {
+    __typename?: 'UnfollowUserPayload';
+    user?: { __typename?: 'User'; id: string; login: string } | null;
+  } | null;
+};
+
 export type GetUserFollowersAndFollowingQueryVariables = Exact<{
   login: Scalars['String']['input'];
   firstFollowers?: InputMaybe<Scalars['Int']['input']>;
@@ -36172,6 +36196,143 @@ export const FollowingFieldsFragmentDoc = {
     },
   ],
 } as unknown as DocumentNode<FollowingFieldsFragment, unknown>;
+export const FollowUserDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'FollowUser' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'userId' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'ID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'followUser' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: {
+                  kind: 'ObjectValue',
+                  fields: [
+                    {
+                      kind: 'ObjectField',
+                      name: { kind: 'Name', value: 'userId' },
+                      value: {
+                        kind: 'Variable',
+                        name: { kind: 'Name', value: 'userId' },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'user' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'login' } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<FollowUserMutation, FollowUserMutationVariables>;
+export const UnfollowUserDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'UnfollowUser' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: {
+            kind: 'Variable',
+            name: { kind: 'Name', value: 'userId' },
+          },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'ID' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'unfollowUser' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: {
+                  kind: 'ObjectValue',
+                  fields: [
+                    {
+                      kind: 'ObjectField',
+                      name: { kind: 'Name', value: 'userId' },
+                      value: {
+                        kind: 'Variable',
+                        name: { kind: 'Name', value: 'userId' },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'user' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'login' } },
+                    ],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  UnfollowUserMutation,
+  UnfollowUserMutationVariables
+>;
 export const GetUserFollowersAndFollowingDocument = {
   kind: 'Document',
   definitions: [

@@ -1,23 +1,61 @@
 import React from 'react';
 import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
+import { TabHeader } from './tabHeader';
+import { useFollowManager } from '@/lib/hooks/useFollowManager';
+import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
+import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
 import { UserInfoFragment } from '@/lib/gql/types';
-import { useCacheStore } from '@/lib/store/cache';
 
 type NonFollowingTabProps = {
-  oneWayIn: (UserInfoFragment | null)[];
+  oneWayIn: UserInfoFragment[];
 };
 
 const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
-  const isGhost = useCacheStore((state) => state.isGhost);
+  const { followMutation } = useFollowManager();
+  const { isPending, mutate, mutateAsync } = followMutation;
+
+  const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
+    oneWayIn.map((u) => u!.id)
+  );
+  const { execute: bulkUnfollow, isPending: isBulkFollowing } =
+    useBulkOperation(mutateAsync, 'Following');
+
+  const handleBulkFollow = async () => {
+    const usersToFollow = oneWayIn.filter((u) => u && selectedIds.has(u.id));
+    await bulkUnfollow(usersToFollow);
+    clearSelection();
+  };
 
   return (
-    <PaginatedList
-      data={oneWayIn}
-      renderItem={(item) => (
-        <ConnectionCard user={item!} isGhost={isGhost(item!.login)} />
-      )}
-    />
+    <>
+      <TabHeader
+        selectedCount={selectedIds.size}
+        action={{
+          label: 'Follow Selected',
+          onBulkAction: handleBulkFollow,
+          isBulkActionLoading: isBulkFollowing,
+        }}
+      />
+
+      <PaginatedList
+        data={oneWayIn}
+        renderItem={(item) => (
+          <ConnectionCard
+            user={item!}
+            selection={{
+              isSelected: selectedIds.has(item!.id),
+              onSelect: handleSelect,
+            }}
+            action={{
+              onClick: () => mutate(item!),
+              label: 'Follow',
+              loading: isPending,
+            }}
+          />
+        )}
+      />
+    </>
   );
 };
 

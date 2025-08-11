@@ -1,9 +1,15 @@
 import { GET_USER_FOLLOWERS_AND_FOLLOWING } from '@/lib/gql/queries';
+import { FOLLOW_USER, UNFOLLOW_USER } from '@/lib/gql/mutations';
+
 import type {
   FollowerFieldsFragment,
   FollowingFieldsFragment,
+  FollowUserMutation,
+  FollowUserMutationVariables,
   GetUserFollowersAndFollowingQuery,
   GetUserFollowersAndFollowingQueryVariables,
+  UnfollowUserMutation,
+  UnfollowUserMutationVariables,
   User,
 } from '@/lib/gql/types';
 import { GraphQLClient } from 'graphql-request';
@@ -113,4 +119,58 @@ export const fetchAllUserFollowersAndFollowing = async ({
   }
 
   return { followers: allFollowers, following: allFollowing };
+};
+
+/**
+ * Follows a user on GitHub.
+ * @param client - The authenticated GraphQL client.
+ * @param userId - The ID of the user to follow.
+ */
+export const followUser = async ({
+  client,
+  userId,
+}: {
+  client: GraphQLClient;
+  userId: string;
+}) => {
+  try {
+    const response = await client.request<
+      FollowUserMutation,
+      FollowUserMutationVariables
+    >(FOLLOW_USER, { userId });
+    return response;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (error: any) {
+    console.error('Error following user:', error);
+    throw new Error(
+      error.response?.errors?.[0]?.message || 'Failed to follow user.'
+    );
+  }
+};
+
+/**
+ * Unfollows a user on GitHub.
+ * @param client - The authenticated GraphQL client.
+ * @param userId - The ID of the user to unfollow.
+ */
+export const unfollowUser = async ({
+  client,
+  userId,
+}: {
+  client: GraphQLClient;
+  userId: string;
+}) => {
+  try {
+    const response = await client.request<
+      UnfollowUserMutation,
+      UnfollowUserMutationVariables
+    >(UNFOLLOW_USER, { userId });
+    return response;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (error: any) {
+    console.error('Error unfollowing user:', error);
+    throw new Error(
+      error.response?.errors?.[0]?.message || 'Failed to unfollow user.'
+    );
+  }
 };

@@ -9,10 +9,10 @@ import { useProgress } from '@/lib/context/progress';
 export const useNetworkData = (username?: string) => {
   const { client, status: authStatus } = useClientAuthenticatedGraphQLClient();
   const { data: session } = useSession();
-  const { initializeAndFetchNetwork } = useCacheStore();
+  const { initializeAndFetchNetwork, setForceNextRefresh } = useCacheStore();
   const progress = useProgress();
 
-  return useQuery({
+  const queryResult = useQuery({
     queryKey: [QUERY_KEY_USER_NETWORK, username],
     queryFn: async () => {
       if (!client || !username || !session?.accessToken) {
@@ -32,4 +32,11 @@ export const useNetworkData = (username?: string) => {
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });
+
+  const forceRefetch = async () => {
+    setForceNextRefresh(true);
+    await queryResult.refetch();
+  };
+
+  return { ...queryResult, refetch: forceRefetch };
 };

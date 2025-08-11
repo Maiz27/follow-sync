@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { ThemeProvider } from '@/components/theme/themeProvider';
 import Navbar from '@/components/nav/navbar';
 import { Favicons } from '@/components/utils/Favicon';
@@ -6,6 +6,9 @@ import { getPageMetadata } from '@/lib/utils';
 import './globals.css';
 
 export const metadata: Metadata = getPageMetadata('home')!;
+export const viewport: Viewport = {
+  themeColor: { media: '(prefers-color-scheme: dark)', color: '#171717' },
+};
 
 export default function RootLayout({
   children,
