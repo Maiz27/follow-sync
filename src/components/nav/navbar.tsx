@@ -6,6 +6,7 @@ import UserDropDown from '../user/userDropDown';
 import { SignInButton } from '../auth/buttons';
 import { ThemeToggle } from '../theme/themeToggle';
 import { Separator } from '../ui/separator';
+import { GITHUB_REPO_URL } from '@/lib/constants';
 import { LuGithub } from 'react-icons/lu';
 import { SiGithub } from 'react-icons/si';
 
@@ -25,7 +26,7 @@ const Navbar = () => {
           <Separator orientation='vertical' className='ml-2' />
 
           <Link
-            href='https://github.com/maiz27/follow-sync'
+            href={GITHUB_REPO_URL}
             target='_blank'
             rel='noopener noreferrer'
             className='grid size-9 place-items-center text-lg hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50'
