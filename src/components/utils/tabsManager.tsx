@@ -32,12 +32,12 @@ const TabManager = <TTabs extends Tab[]>({
   return (
     <Tabs
       defaultValue={initialDefaultValue}
-      className={cn('h-full w-full', tabsContainerClassName)}
+      className={cn('h-full w-full max-w-full', tabsContainerClassName)}
     >
-      <div className='inline-flex w-full justify-evenly overflow-x-auto bg-muted'>
+      <div className='inline-flex h-14 w-full justify-center overflow-x-auto bg-muted md:h-auto'>
         <TabsList
           className={cn(
-            'w-auto gap-4 px-4 lg:w-full lg:gap-0 lg:px-0',
+            'flex-wrap justify-center gap-2 overflow-y-visible px-2 lg:w-full lg:flex-nowrap lg:justify-evenly lg:gap-0 lg:px-0',
             tabsListClassName
           )}
         >
