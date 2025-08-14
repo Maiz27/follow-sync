@@ -44,8 +44,11 @@ const UserDropDown = async () => {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem className='focus:'>
-          <Link href='/dashboard' className='flex items-center gap-2'>
+        <DropdownMenuItem>
+          <Link
+            href='/dashboard'
+            className='flex h-full w-full items-center gap-2'
+          >
             <LuLayoutDashboard />
             Dashboard
           </Link>
@@ -53,7 +56,7 @@ const UserDropDown = async () => {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem className='focus:'>
+        <DropdownMenuItem>
           <SignOutButton>Sign out</SignOutButton>
         </DropdownMenuItem>
       </DropdownMenuContent>

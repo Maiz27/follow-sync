@@ -7,6 +7,7 @@ import { SignInButton } from '../auth/buttons';
 import { ThemeToggle } from '../theme/themeToggle';
 import { Separator } from '../ui/separator';
 import { LuGithub } from 'react-icons/lu';
+import { SiGithub } from 'react-icons/si';
 
 const Navbar = () => {
   return (
@@ -20,7 +21,20 @@ const Navbar = () => {
         </Link>
         <div className='flex h-4 items-center space-x-2'>
           <GetStarted />
+
           <Separator orientation='vertical' className='ml-2' />
+
+          <Link
+            href='https://github.com/maiz27/follow-sync'
+            target='_blank'
+            rel='noopener noreferrer'
+            className='grid size-9 place-items-center text-lg hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50'
+          >
+            <SiGithub />
+          </Link>
+
+          <Separator orientation='vertical' className='ml-2' />
+
           <ThemeToggle />
         </div>
       </div>
