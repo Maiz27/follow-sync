@@ -138,3 +138,8 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+div[data-slot='dropdown-menu-item'] > *:first-child {
+  /* styles for the first direct child only */
+  @apply px-2 py-1.5;
+}

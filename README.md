@@ -39,7 +39,7 @@ This project is currently in active development.
 - [x] **Phase 3:** Adaptive Gist Caching
 - [x] **Phase 4:** Ghost-Detection Pipeline
 - [x] **Phase 5:** Follow/Unfollow Operations
-- [ ] **Phase 6:** UI Components & Polish
+- [x] **Phase 6:** UI/UX Polish & Onboarding
 - [ ] **Phase 7:** Performance, Monitoring & Testing
 
 ## Getting Started for Local Development

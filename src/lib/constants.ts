@@ -1,3 +1,5 @@
+import { LuEye, LuHeart, LuUserX, LuUserPlus } from 'react-icons/lu';
+
 // Query Keys
 export const QUERY_KEY_USER_NETWORK = 'user-network';
 
@@ -14,7 +16,9 @@ export const STALE_TIME_LARGE = 1000 * 60 * 60 * 6; // 6 hours
 // Metadata
 export const DOMAIN = process.env.NEXT_PUBLIC_DOMAIN ?? 'localhost';
 
-export const BASEURL = `https://${DOMAIN}`;
+export const BASE_URL = `https://${DOMAIN}`;
+
+export const GITHUB_REPO_URL = 'https://github.com/maiz27/follow-sync';
 
 export const METADATA = new Map([
   [
@@ -23,9 +27,9 @@ export const METADATA = new Map([
       title: 'Follow Sync | GitHub Follower Management Tool',
       description:
         'The best way to manage your GitHub followers. Track, analyze, and grow your network effortlessly. Get insights into non-followers, fans, and more.',
-      url: BASEURL,
+      url: BASE_URL,
       icon: '/imgs/logo/favicon.ico',
-      image: `${BASEURL}/imgs/logo/og.png`,
+      image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',
     },
   ],
@@ -35,10 +39,33 @@ export const METADATA = new Map([
       title: 'Dashboard | Follow Sync',
       description:
         'Analyze your GitHub network. View your followers, following, non-followers, fans, and ghosts.',
-      url: `${BASEURL}/dashboard`,
+      url: `${BASE_URL}/dashboard`,
       icon: '/imgs/logo/favicon.ico',
-      image: `${BASEURL}/imgs/logo/og.png`,
+      image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',
     },
   ],
 ]);
+
+export const STATS_DATA = [
+  {
+    label: 'Your Audience (Followers)',
+    icon: LuEye,
+    description: 'Users currently following your GitHub profile.',
+  },
+  {
+    label: 'Your Network (Following)',
+    icon: LuHeart,
+    description: 'Users you are currently following on GitHub.',
+  },
+  {
+    label: 'One-Way Out (You Follow)',
+    icon: LuUserX,
+    description: 'Users you follow who have not followed you back.',
+  },
+  {
+    label: 'One-Way In (They Follow)',
+    icon: LuUserPlus,
+    description: 'Users who follow you, but you have not followed them back.',
+  },
+];

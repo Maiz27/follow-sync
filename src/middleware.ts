@@ -12,5 +12,13 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: [
+    /*
+     * Match all request paths except for:
+     * - API routes (`/api/`)
+     * - Next.js internal files (`/_next/`)
+     * - Static files in `public` (`/.*\\..*`) - this specifically excludes files with an extension
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\..*).*)',
+  ],
 };

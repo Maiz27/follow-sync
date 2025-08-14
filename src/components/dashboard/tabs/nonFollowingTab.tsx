@@ -1,11 +1,13 @@
 import React from 'react';
 import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
+import EmptyState from '@/components/ui/empty-state';
 import { TabHeader } from './tabHeader';
 import { useFollowManager } from '@/lib/hooks/useFollowManager';
 import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
 import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
 import { UserInfoFragment } from '@/lib/gql/types';
+import { LuUserPlus } from 'react-icons/lu';
 
 type NonFollowingTabProps = {
   oneWayIn: UserInfoFragment[];
@@ -26,6 +28,16 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
     await bulkUnfollow(usersToFollow);
     clearSelection();
   };
+
+  if (oneWayIn.length === 0) {
+    return (
+      <EmptyState
+        icon={LuUserPlus}
+        title='No One-Way In Connections'
+        description="You are following everyone who follows you. That's great!"
+      />
+    );
+  }
 
   return (
     <>

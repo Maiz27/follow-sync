@@ -8,7 +8,7 @@ import {
 } from './gql/types';
 import { Metadata } from 'next';
 import { OpenGraph } from 'next/dist/lib/metadata/types/opengraph-types';
-import { BASEURL, METADATA } from './constants';
+import { BASE_URL, METADATA } from './constants';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -116,7 +116,7 @@ export const getPageMetadata = (name: string): Metadata | undefined => {
 
   if (pageMetaData)
     return {
-      metadataBase: new URL(BASEURL),
+      metadataBase: new URL(BASE_URL),
       title: pageMetaData.title,
       description: pageMetaData.description,
       alternates: {
