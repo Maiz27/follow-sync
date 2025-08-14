@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
           username,
           isGhost: response.status === 404,
         };
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (error) {
         return {
           username,
@@ -34,6 +35,7 @@ export async function POST(req: NextRequest) {
       .map((result) => result.username);
 
     return NextResponse.json({ ghosts });
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (error) {
     return NextResponse.json(
       { error: 'Internal Server Error' },
