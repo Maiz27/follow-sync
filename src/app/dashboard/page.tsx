@@ -4,6 +4,7 @@ import React from 'react';
 import { useSession } from 'next-auth/react';
 import Stats from '@/components/dashboard/stats';
 import Analyzer from '@/components/dashboard/analyzer';
+import DashboardSkeleton from '@/components/dashboard/dashboardSkeleton';
 import { Section } from '@/components/utils/section';
 import { useNetworkData } from '@/lib/hooks/useNetworkManager';
 import { useGhostDetector } from '@/lib/hooks/useGhostDetector';
@@ -17,7 +18,7 @@ const ClientDashboard = () => {
 
   useGhostDetector();
 
-  if (isPending) return <div>Loading...</div>;
+  if (isPending) return <DashboardSkeleton />;
   if (isError) return <div>Error: {error?.message}</div>;
 
   return (
