@@ -6,42 +6,21 @@ import {
   CardHeader,
   CardTitle,
 } from '../ui/card';
-import { useCacheStore } from '@/lib/store/cache';
 import { formatNumber } from '@/lib/utils';
-import { LuEye, LuHeart, LuUserX, LuUserPlus } from 'react-icons/lu';
+import { IconType } from 'react-icons';
 
-const Stats = () => {
-  const { network, nonMutuals } = useCacheStore();
-  const { followers, following } = network;
-  const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
+export interface StatData {
+  label: string;
+  value: number;
+  icon: IconType;
+  description: string;
+}
 
-  const list = [
-    {
-      label: 'Your Audience (Followers)',
-      value: followers,
-      icon: LuEye,
-      description: 'Users currently following your GitHub profile.',
-    },
-    {
-      label: 'Your Network (Following)',
-      value: following,
-      icon: LuHeart,
-      description: 'Users you are currently following on GitHub.',
-    },
-    {
-      label: 'One-Way Out (You Follow)',
-      value: nonMutualsYouFollow,
-      icon: LuUserX,
-      description: 'Users you follow who have not followed you back.',
-    },
-    {
-      label: 'One-Way In (They Follow)',
-      value: nonMutualsFollowingYou,
-      icon: LuUserPlus,
-      description: 'Users who follow you, but you have not followed them back.',
-    },
-  ];
+interface StatsProps {
+  list: StatData[];
+}
 
+const Stats = ({ list }: StatsProps) => {
   return (
     <div className='grid w-full place-items-center gap-2 md:grid-cols-2 lg:grid-cols-4'>
       {list.map((item, index) => {
@@ -61,7 +40,7 @@ const Stats = () => {
             </CardHeader>
             <CardContent className='grid place-items-center'>
               <span className='text-5xl text-primary'>
-                {formatNumber(item.value.length)}
+                {formatNumber(item.value)}
               </span>
             </CardContent>
           </Card>

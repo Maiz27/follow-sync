@@ -1,3 +1,5 @@
+import { LuEye, LuHeart, LuUserX, LuUserPlus } from 'react-icons/lu';
+
 // Query Keys
 export const QUERY_KEY_USER_NETWORK = 'user-network';
 
@@ -42,3 +44,26 @@ export const METADATA = new Map([
     },
   ],
 ]);
+
+export const STATS_DATA = [
+  {
+    label: 'Your Audience (Followers)',
+    icon: LuEye,
+    description: 'Users currently following your GitHub profile.',
+  },
+  {
+    label: 'Your Network (Following)',
+    icon: LuHeart,
+    description: 'Users you are currently following on GitHub.',
+  },
+  {
+    label: 'One-Way Out (You Follow)',
+    icon: LuUserX,
+    description: 'Users you follow who have not followed you back.',
+  },
+  {
+    label: 'One-Way In (They Follow)',
+    icon: LuUserPlus,
+    description: 'Users who follow you, but you have not followed them back.',
+  },
+];
