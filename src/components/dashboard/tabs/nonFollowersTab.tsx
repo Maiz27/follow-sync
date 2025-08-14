@@ -1,11 +1,13 @@
 import React from 'react';
 import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
+import EmptyState from '@/components/ui/empty-state';
 import { TabHeader } from './tabHeader';
 import { useFollowManager } from '@/lib/hooks/useFollowManager';
 import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
 import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
 import { UserInfoFragment } from '@/lib/gql/types';
+import { LuUserX } from 'react-icons/lu';
 
 type NonFollowersTabProps = {
   oneWayOut: UserInfoFragment[];
@@ -28,6 +30,16 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
     await bulkUnfollow(usersToUnfollow);
     clearSelection();
   };
+
+  if (oneWayOut.length === 0) {
+    return (
+      <EmptyState
+        icon={LuUserX}
+        title='No One-Way Out Connections'
+        description="Everyone you follow also follows you back. That's great!"
+      />
+    );
+  }
 
   return (
     <div>
