@@ -14,19 +14,22 @@ type FollowingTabProps = {
 };
 
 const FollowingTab = ({ following }: FollowingTabProps) => {
-  const { unfollowMutation } = useFollowManager();
+  const { unfollowMutation, persistChanges, incrementActionCount } =
+    useFollowManager();
   const { isPending, mutate, mutateAsync } = unfollowMutation;
 
   const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
     following.map((u) => u!.id)
   );
   const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
-    useBulkOperation(mutateAsync, 'Unfollowing');
+    useBulkOperation(mutateAsync, 'Unfollowing', () => {
+      persistChanges();
+      clearSelection();
+    });
 
   const handleBulkUnfollow = async () => {
     const usersToUnfollow = following.filter((u) => u && selectedIds.has(u.id));
     await bulkUnfollow(usersToUnfollow);
-    clearSelection();
   };
 
   if (following.length === 0) {
@@ -59,7 +62,13 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
               onSelect: handleSelect,
             }}
             action={{
-              onClick: () => mutate(item!),
+              onClick: () =>
+                mutate(item!, {
+                  onSuccess: () => {
+                    persistChanges();
+                    incrementActionCount();
+                  },
+                }),
               label: 'Unfollow',
               loading: isPending,
             }}

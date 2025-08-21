@@ -61,10 +61,6 @@ export const useFollowManager = () => {
       }
       toast.error(`Failed to follow @${userToFollow.login}: ${err.message}`);
     },
-    onSuccess: () => {
-      persistChanges();
-      incrementActionCount();
-    },
   });
 
   const unfollowMutation = useMutation({
@@ -95,11 +91,12 @@ export const useFollowManager = () => {
         `Failed to unfollow @${userToUnfollow.login}: ${err.message}`
       );
     },
-    onSuccess: () => {
-      persistChanges();
-      incrementActionCount();
-    },
   });
 
-  return { followMutation, unfollowMutation };
+  return {
+    followMutation,
+    unfollowMutation,
+    persistChanges,
+    incrementActionCount,
+  };
 };

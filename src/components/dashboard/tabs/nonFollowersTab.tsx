@@ -14,21 +14,24 @@ type NonFollowersTabProps = {
 };
 
 const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
-  const { unfollowMutation } = useFollowManager();
+  const { unfollowMutation, persistChanges, incrementActionCount } =
+    useFollowManager();
   const { isPending, mutate, mutateAsync } = unfollowMutation;
 
   const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
     oneWayOut.map((u) => u!.id)
   );
   const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
-    useBulkOperation(mutateAsync, 'Unfollowing');
+    useBulkOperation(mutateAsync, 'Unfollowing', () => {
+      persistChanges();
+      clearSelection();
+    });
 
   const handleBulkUnfollow = async () => {
     const usersToUnfollow = oneWayOut.filter(
       (u) => u && selectedIds.has(u.id)
     ) as UserInfoFragment[];
     await bulkUnfollow(usersToUnfollow);
-    clearSelection();
   };
 
   if (oneWayOut.length === 0) {
@@ -61,7 +64,13 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
               onSelect: handleSelect,
             }}
             action={{
-              onClick: () => mutate(item!),
+              onClick: () =>
+                mutate(item!, {
+                  onSuccess: () => {
+                    persistChanges();
+                    incrementActionCount();
+                  },
+                }),
               label: 'Unfollow',
               loading: isPending,
             }}
