@@ -8,27 +8,42 @@ import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
 import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { LuUserX } from 'react-icons/lu';
+import { TAB_DESCRIPTIONS } from '@/lib/constants';
+
+const TAB_ID = 'nonFollowers';
 
 type NonFollowersTabProps = {
   oneWayOut: UserInfoFragment[];
 };
 
 const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
-  const { unfollowMutation } = useFollowManager();
+  const { unfollowMutation, persistChanges, incrementActionCount } =
+    useFollowManager();
   const { isPending, mutate, mutateAsync } = unfollowMutation;
 
-  const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
-    oneWayOut.map((u) => u!.id)
+  const {
+    selectedIds,
+    handleSelect,
+    clearSelection,
+    handleDeselect,
+    handleSelectPage,
+    isAllSelected,
+  } = useSelectionManager(
+    TAB_ID,
+    oneWayOut.map((u) => u!.login)
   );
+
   const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
-    useBulkOperation(mutateAsync, 'Unfollowing');
+    useBulkOperation(mutateAsync, 'Unfollowing', () => {
+      persistChanges();
+      clearSelection();
+    });
 
   const handleBulkUnfollow = async () => {
     const usersToUnfollow = oneWayOut.filter(
       (u) => u && selectedIds.has(u.id)
     ) as UserInfoFragment[];
     await bulkUnfollow(usersToUnfollow);
-    clearSelection();
   };
 
   if (oneWayOut.length === 0) {
@@ -44,7 +59,12 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
   return (
     <div>
       <TabHeader
+        description={TAB_DESCRIPTIONS[TAB_ID]}
         selectedCount={selectedIds.size}
+        selection={{
+          onSelectAll: handleSelectPage,
+          isAllSelected: isAllSelected,
+        }}
         action={{
           label: 'Unfollow Selected',
           onBulkAction: handleBulkUnfollow,
@@ -52,16 +72,26 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
         }}
       />
       <PaginatedList
+        listId={TAB_ID}
         data={oneWayOut}
         renderItem={(item) => (
           <ConnectionCard
             user={item!}
             selection={{
-              isSelected: selectedIds.has(item!.id),
+              isSelected: selectedIds.has(item!.login),
               onSelect: handleSelect,
             }}
             action={{
-              onClick: () => mutate(item!),
+              onClick: () =>
+                mutate(item!, {
+                  onSuccess: () => {
+                    if (selectedIds.has(item!.login)) {
+                      handleDeselect(item!.login);
+                    }
+                    persistChanges();
+                    incrementActionCount();
+                  },
+                }),
               label: 'Unfollow',
               loading: isPending,
             }}

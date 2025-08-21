@@ -15,10 +15,11 @@ export const STALE_TIME_LARGE = 1000 * 60 * 60 * 6; // 6 hours
 
 // Metadata
 export const DOMAIN = process.env.NEXT_PUBLIC_DOMAIN ?? 'localhost';
-
 export const BASE_URL = `https://${DOMAIN}`;
 
 export const GITHUB_REPO_URL = 'https://github.com/maiz27/follow-sync';
+
+export const PAGE_COUNT = 100;
 
 export const METADATA = new Map([
   [
@@ -46,6 +47,14 @@ export const METADATA = new Map([
     },
   ],
 ]);
+
+export const TAB_DESCRIPTIONS = {
+  followers: 'Users currently following your GitHub profile.',
+  following: 'Users you are currently following on GitHub.',
+  nonFollowers: 'Users you follow who have not followed you back.',
+  nonFollowing: 'Users who follow you, but you have not followed them back.',
+  ghosts: 'Users who have deleted their GitHub profile.',
+};
 
 export const STATS_DATA = [
   {

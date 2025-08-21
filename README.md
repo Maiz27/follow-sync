@@ -1,5 +1,7 @@
 # FollowSync: Your GitHub Network Manager
 
+![FollowSync Preview](/public/imgs/preview.jpg)
+
 **FollowSync** is a modern GitHub network manager designed for power users. It helps you discover non-mutual connections, identify "ghost" accounts, and analyze your network efficiently.
 
 ## Features
@@ -16,7 +18,7 @@
 - **Framework:** [Next.js](https://nextjs.org/) 15+ (App Router)
 - **Language:** [TypeScript](https://www.typescriptlang.org/)
 - **State Management:** [TanStack Query (React Query)](https://tanstack.com/query/latest)
-- **Authentication:** [NextAuth.js](https://next-auth.js.org/) with GitHub App OAuth
+- **Authentication:** [NextAuth.js](https://next-auth.js.org/) with GitHub OAuth
 - **API:** [GitHub GraphQL API](https://docs.github.com/en/graphql)
 - **Styling:** [Tailwind CSS](https://tailwindcss.com/)
 - **Hosting:** [Vercel](https://vercel.com/)
@@ -25,7 +27,7 @@
 
 FollowSync employs a **client-heavy, GitHub-as-Infrastructure** architecture. It leverages GitHub's own systems for authentication, data fetching, and even data persistence.
 
-1. **Authentication:** You install the FollowSync GitHub App, granting it limited, user-scoped permissions.
+1. **Authentication:** You authorize the FollowSync GitHub OAuth App, granting it limited, user-scoped permissions.
 2. **Data Fetching:** The app calls the GitHub GraphQL API to fetch your follower and following lists.
 3. **Analysis & Caching:** The data is analyzed in the client to find non-mutuals. The results are then stored in a private GitHub Gist owned by you. This Gist acts as a cache for all subsequent loads.
 4. **UI:** The interface is built with React Server Components and loads instantly from the Gist cache, triggering background refreshes based on the age and size of your network data.
@@ -40,22 +42,21 @@ This project is currently in active development.
 - [x] **Phase 4:** Ghost-Detection Pipeline
 - [x] **Phase 5:** Follow/Unfollow Operations
 - [x] **Phase 6:** UI/UX Polish & Onboarding
-- [ ] **Phase 7:** Performance, Monitoring & Testing
+- [x] **Phase 7:** Performance Improvements & Testing
 
 ## Getting Started for Local Development
 
-To run this project locally, you first need to create and configure a GitHub App.
+To run this project locally, you first need to create and configure a GitHub OAuth App.
 
-### 1. Create a GitHub App
+### 1. Create a GitHub OAuth App
 
-1. Go to **Settings** > **Developer settings** > **GitHub Apps** and click **New GitHub App**.
+1. Go to **Settings** > **Developer settings** > **OAuth Apps** and click **New OAuth App**.
 2. Fill in the required application details:
+   - **Application name:** `FollowSync (local)`
    - **Homepage URL:** `http://localhost:3000`
-   - **Callback URL:** `http://localhost:3000/api/auth/callback/github`
-3. Under **Permissions**, go to **Account permissions** and set the following:
-   - **Followers:** `Read and write`
-   - **Gists:** `Read and write`
-4. Create the app. On the next page, generate a **client secret** and copy it.
+   - **Authorization callback URL:** `http://localhost:3000/api/auth/callback/github`
+3. Click **Register application**.
+4. On the next page, generate a **client secret** and copy it.
 
 ### 2. Configure Environment Variables
 

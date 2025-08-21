@@ -8,7 +8,8 @@ type AsyncMutationFn = (user: UserInfoFragment) => Promise<unknown>;
 
 export const useBulkOperation = (
   mutationFn: AsyncMutationFn,
-  actionName: string
+  actionName: string,
+  onBulkSuccess?: () => void
 ) => {
   const { show, update, complete, fail } = useProgress();
   const [isPending, setIsPending] = useState(false);
@@ -44,8 +45,12 @@ export const useBulkOperation = (
         },
       ]);
 
-      // Add the 500ms delay
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Add a small delay to avoid rate limiting
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    if (onBulkSuccess) {
+      onBulkSuccess();
     }
 
     if (errorCount > 0) {

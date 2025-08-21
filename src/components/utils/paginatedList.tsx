@@ -2,20 +2,23 @@ import React from 'react';
 import List from './list';
 import PaginationControls from './paginationControls';
 import { usePaginatedList } from '@/lib/hooks/usePaginatedList';
+import { PAGE_COUNT } from '@/lib/constants';
 
 interface PaginatedListProps<T> {
+  listId: string;
   data: T[];
+  renderItem: (item: T) => React.ReactNode;
   itemsPerPage?: number;
   maxPagesToShow?: number;
-  renderItem: (item: T) => React.ReactNode;
   gridClassName?: string;
   emptyMessage?: string;
   paginationControlsClassName?: string;
 }
 
 const PaginatedList = <T,>({
+  listId,
   data,
-  itemsPerPage = 50,
+  itemsPerPage = PAGE_COUNT,
   maxPagesToShow = 5,
   renderItem,
   gridClassName,
@@ -30,7 +33,7 @@ const PaginatedList = <T,>({
     nextPage,
     prevPage,
     displayedPageNumbers,
-  } = usePaginatedList({ data, itemsPerPage, maxPagesToShow });
+  } = usePaginatedList({ listId, data, itemsPerPage, maxPagesToShow });
 
   return (
     <div className='flex flex-col'>
