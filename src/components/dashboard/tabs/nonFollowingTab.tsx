@@ -8,6 +8,9 @@ import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
 import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { LuUserPlus } from 'react-icons/lu';
+import { TAB_DESCRIPTIONS } from '@/lib/constants';
+
+const TAB_ID = 'nonFollowing';
 
 type NonFollowingTabProps = {
   oneWayIn: UserInfoFragment[];
@@ -18,8 +21,16 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
     useFollowManager();
   const { isPending, mutate, mutateAsync } = followMutation;
 
-  const { selectedIds, handleSelect, clearSelection, handleDeselect } = useSelectionManager(
-    oneWayIn.map((u) => u!.id)
+  const {
+    selectedIds,
+    handleSelect,
+    clearSelection,
+    handleDeselect,
+    handleSelectPage,
+    isAllSelected,
+  } = useSelectionManager(
+    TAB_ID,
+    oneWayIn.map((u) => u!.login)
   );
   const { execute: bulkFollow, isPending: isBulkFollowing } = useBulkOperation(
     mutateAsync,
@@ -48,7 +59,12 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
   return (
     <>
       <TabHeader
+        description={TAB_DESCRIPTIONS[TAB_ID]}
         selectedCount={selectedIds.size}
+        selection={{
+          onSelectAll: handleSelectPage,
+          isAllSelected: isAllSelected,
+        }}
         action={{
           label: 'Follow Selected',
           onBulkAction: handleBulkFollow,
@@ -57,20 +73,21 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
       />
 
       <PaginatedList
+        listId={TAB_ID}
         data={oneWayIn}
         renderItem={(item) => (
           <ConnectionCard
             user={item!}
             selection={{
-              isSelected: selectedIds.has(item!.id),
+              isSelected: selectedIds.has(item!.login),
               onSelect: handleSelect,
             }}
             action={{
               onClick: () =>
                 mutate(item!, {
                   onSuccess: () => {
-                    if (selectedIds.has(item!.id)) {
-                      handleDeselect(item!.id);
+                    if (selectedIds.has(item!.login)) {
+                      handleDeselect(item!.login);
                     }
                     persistChanges();
                     incrementActionCount();

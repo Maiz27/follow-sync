@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { usePaginationStore } from '../store/pagination';
 
 interface UsePaginatedListOptions<T> {
+  listId: string;
   data: T[];
   itemsPerPage?: number;
   maxPagesToShow?: number;
@@ -18,11 +20,13 @@ interface UsePaginatedListReturn<T> {
 }
 
 export const usePaginatedList = <T>({
+  listId,
   data,
   itemsPerPage = 10,
   maxPagesToShow = 5,
 }: UsePaginatedListOptions<T>): UsePaginatedListReturn<T> => {
-  const [currentPage, setCurrentPage] = useState(1);
+  const { pagination, setCurrentPage } = usePaginationStore();
+  const currentPage = pagination[listId]?.currentPage ?? 1;
 
   const totalPages = Math.ceil(data.length / itemsPerPage);
 
@@ -34,66 +38,56 @@ export const usePaginatedList = <T>({
   // Logic for displayed page numbers
   const displayedPageNumbers = useMemo(() => {
     const pages: (number | '...')[] = [];
-    const ellipsisThreshold = 2; // How many pages before/after current page to show ellipsis
+    const ellipsisThreshold = 2;
 
-    if (totalPages <= 1) return []; // No pagination needed
+    if (totalPages <= 1) return [];
 
     if (totalPages <= maxPagesToShow) {
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i);
       }
     } else {
-      // Always add the first page
       pages.push(1);
-
-      // Determine the start and end of the numbers around the current page
       let start = Math.max(2, currentPage - ellipsisThreshold);
       let end = Math.min(totalPages - 1, currentPage + ellipsisThreshold);
 
-      // Adjust start/end if they get too close to the beginning/end
       if (currentPage - 1 < ellipsisThreshold) {
-        end = maxPagesToShow - 2; // Adjust end to fill up maxPagesToShow from start
+        end = maxPagesToShow - 2;
       }
       if (totalPages - currentPage < ellipsisThreshold + 1) {
-        start = totalPages - maxPagesToShow + 3; // Adjust start to fill up from end
+        start = totalPages - maxPagesToShow + 3;
       }
 
-      // Add ellipsis if needed after the first page
       if (start > 2) {
         pages.push('...');
       }
 
-      // Add pages around the current page
       for (let i = start; i <= end; i++) {
         pages.push(i);
       }
 
-      // Add ellipsis if needed before the last page
       if (end < totalPages - 1) {
         pages.push('...');
       }
 
-      // Always add the last page (unless it's already included and totalPages > 1)
       if (totalPages > 1 && !pages.includes(totalPages)) {
         pages.push(totalPages);
       }
     }
     return pages;
-  }, [currentPage, totalPages, maxPagesToShow]); // Dependencies for memoization
-  // --- END Logic for displayed page numbers ---
+  }, [currentPage, totalPages, maxPagesToShow]);
 
-  // Function to go to a specific page number
   const goToPage = useCallback(
     (page: number) => {
       if (page >= 1 && page <= totalPages) {
-        setCurrentPage(page);
+        setCurrentPage(listId, page);
       } else if (page < 1) {
-        setCurrentPage(1);
+        setCurrentPage(listId, 1);
       } else {
-        setCurrentPage(totalPages);
+        setCurrentPage(listId, totalPages);
       }
     },
-    [totalPages]
+    [totalPages, listId, setCurrentPage]
   );
 
   const nextPage = useCallback(() => {
@@ -104,14 +98,13 @@ export const usePaginatedList = <T>({
     goToPage(currentPage - 1);
   }, [currentPage, goToPage]);
 
-  // Reset page to 1 if data changes or items per page changes such that the current page is no longer valid
   useEffect(() => {
     if (currentPage > totalPages && totalPages > 0) {
-      setCurrentPage(totalPages);
+      setCurrentPage(listId, totalPages);
     } else if (totalPages === 0 && currentPage !== 1) {
-      setCurrentPage(1);
+      setCurrentPage(listId, 1);
     }
-  }, [data.length, itemsPerPage, totalPages, currentPage]);
+  }, [data.length, itemsPerPage, totalPages, currentPage, listId, setCurrentPage]);
 
   return {
     currentPageItems,

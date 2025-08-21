@@ -4,6 +4,10 @@ import EmptyState from '@/components/ui/empty-state';
 import ConnectionCard from '../connectionCard';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { LuEye } from 'react-icons/lu';
+import { TabHeader } from './tabHeader';
+import { TAB_DESCRIPTIONS } from '@/lib/constants';
+
+const TAB_ID = 'followers';
 
 export type FollowersTabProps = {
   followers: UserInfoFragment[];
@@ -21,10 +25,19 @@ const FollowersTab = ({ followers }: FollowersTabProps) => {
   }
 
   return (
-    <PaginatedList
-      data={followers}
-      renderItem={(item) => <ConnectionCard user={item!} />}
-    />
+    <>
+      <TabHeader
+        description={TAB_DESCRIPTIONS[TAB_ID]}
+        selectedCount={undefined}
+        action={undefined}
+        selection={undefined}
+      />
+      <PaginatedList
+        listId={TAB_ID}
+        data={followers}
+        renderItem={(item) => <ConnectionCard user={item!} />}
+      />
+    </>
   );
 };
 

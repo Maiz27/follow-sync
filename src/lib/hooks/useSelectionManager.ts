@@ -1,7 +1,27 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useCacheStore } from '@/lib/store/cache';
+import { usePaginationStore } from '@/lib/store/pagination';
+import { PAGE_COUNT } from '@/lib/constants';
 
-export const useSelectionManager = (itemIds: string[] = []) => {
+export const useSelectionManager = (listId: string, itemIds: string[] = []) => {
   const [selectedIds, setSelectedIds] = useState(new Set<string>());
+  const ghosts = useCacheStore((state) => state.ghostsSet);
+  const { pagination } = usePaginationStore();
+  const currentPage = pagination[listId]?.currentPage ?? 1;
+
+  useEffect(() => {
+    clearSelection();
+  }, [currentPage]);
+
+  const pageItemIds = useMemo(() => {
+    const indexOfLastItem = currentPage * PAGE_COUNT;
+    const indexOfFirstItem = indexOfLastItem - PAGE_COUNT;
+    return itemIds.slice(indexOfFirstItem, indexOfLastItem);
+  }, [itemIds, currentPage]);
+
+  const nonGhostPageItemIds = useMemo(() => {
+    return pageItemIds.filter((id) => !ghosts.has(id));
+  }, [pageItemIds, ghosts]);
 
   const handleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -25,6 +45,22 @@ export const useSelectionManager = (itemIds: string[] = []) => {
     });
   };
 
+  const handleSelectPage = () => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      const allPageItemsSelected = nonGhostPageItemIds.every((id) =>
+        newSet.has(id)
+      );
+
+      if (allPageItemsSelected) {
+        nonGhostPageItemIds.forEach((id) => newSet.delete(id));
+      } else {
+        nonGhostPageItemIds.forEach((id) => newSet.add(id));
+      }
+      return newSet;
+    });
+  };
+
   const handleSelectAll = () => {
     setSelectedIds((prev) => {
       if (prev.size === itemIds.length) {
@@ -39,15 +75,18 @@ export const useSelectionManager = (itemIds: string[] = []) => {
     setSelectedIds(new Set<string>());
   };
 
-  const isAllSelected = useMemo(
-    () => itemIds.length > 0 && selectedIds.size === itemIds.length,
-    [selectedIds, itemIds]
-  );
+  const isAllSelected = useMemo(() => {
+    return (
+      nonGhostPageItemIds.length > 0 &&
+      nonGhostPageItemIds.every((id) => selectedIds.has(id))
+    );
+  }, [selectedIds, nonGhostPageItemIds]);
 
   return {
     selectedIds,
     handleSelect,
     handleDeselect,
+    handleSelectPage,
     handleSelectAll,
     clearSelection,
     isAllSelected,

@@ -5,6 +5,10 @@ import ConnectionCard from '../connectionCard';
 import { useCacheStore } from '@/lib/store/cache';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { LuGhost } from 'react-icons/lu';
+import { TabHeader } from './tabHeader';
+import { TAB_DESCRIPTIONS } from '@/lib/constants';
+
+const TAB_ID = 'ghosts';
 
 type GhostsTabProps = {
   ghosts: UserInfoFragment[];
@@ -28,10 +32,19 @@ const GhostsTab = ({ ghosts }: GhostsTabProps) => {
   }
 
   return (
-    <PaginatedList
-      data={ghosts}
-      renderItem={(item) => <ConnectionCard user={item!} />}
-    />
+    <>
+      <TabHeader
+        description={TAB_DESCRIPTIONS[TAB_ID]}
+        selectedCount={undefined}
+        action={undefined}
+        selection={undefined}
+      />
+      <PaginatedList
+        listId={TAB_ID}
+        data={ghosts}
+        renderItem={(item) => <ConnectionCard user={item!} />}
+      />
+    </>
   );
 };
 
