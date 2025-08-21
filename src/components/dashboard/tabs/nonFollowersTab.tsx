@@ -18,7 +18,7 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
     useFollowManager();
   const { isPending, mutate, mutateAsync } = unfollowMutation;
 
-  const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
+  const { selectedIds, handleSelect, clearSelection, handleDeselect } = useSelectionManager(
     oneWayOut.map((u) => u!.id)
   );
   const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
@@ -67,6 +67,9 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
               onClick: () =>
                 mutate(item!, {
                   onSuccess: () => {
+                    if (selectedIds.has(item!.id)) {
+                      handleDeselect(item!.id);
+                    }
                     persistChanges();
                     incrementActionCount();
                   },

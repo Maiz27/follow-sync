@@ -18,9 +18,8 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
     useFollowManager();
   const { isPending, mutate, mutateAsync } = unfollowMutation;
 
-  const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
-    following.map((u) => u!.id)
-  );
+  const { selectedIds, handleSelect, clearSelection, handleDeselect } =
+    useSelectionManager(following.map((u) => u!.id));
   const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
     useBulkOperation(mutateAsync, 'Unfollowing', () => {
       persistChanges();
@@ -65,6 +64,9 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
               onClick: () =>
                 mutate(item!, {
                   onSuccess: () => {
+                    if (selectedIds.has(item!.id)) {
+                      handleDeselect(item!.id);
+                    }
                     persistChanges();
                     incrementActionCount();
                   },

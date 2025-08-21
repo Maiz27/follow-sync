@@ -15,6 +15,16 @@ export const useSelectionManager = (itemIds: string[] = []) => {
     });
   };
 
+  const handleDeselect = (id: string) => {
+    setSelectedIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      }
+      return newSet;
+    });
+  };
+
   const handleSelectAll = () => {
     setSelectedIds((prev) => {
       if (prev.size === itemIds.length) {
@@ -37,6 +47,7 @@ export const useSelectionManager = (itemIds: string[] = []) => {
   return {
     selectedIds,
     handleSelect,
+    handleDeselect,
     handleSelectAll,
     clearSelection,
     isAllSelected,

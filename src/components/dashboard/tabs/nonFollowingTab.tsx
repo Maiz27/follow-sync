@@ -18,7 +18,7 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
     useFollowManager();
   const { isPending, mutate, mutateAsync } = followMutation;
 
-  const { selectedIds, handleSelect, clearSelection } = useSelectionManager(
+  const { selectedIds, handleSelect, clearSelection, handleDeselect } = useSelectionManager(
     oneWayIn.map((u) => u!.id)
   );
   const { execute: bulkFollow, isPending: isBulkFollowing } = useBulkOperation(
@@ -69,6 +69,9 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
               onClick: () =>
                 mutate(item!, {
                   onSuccess: () => {
+                    if (selectedIds.has(item!.id)) {
+                      handleDeselect(item!.id);
+                    }
                     persistChanges();
                     incrementActionCount();
                   },
