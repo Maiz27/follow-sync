@@ -42,7 +42,7 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
   );
 
   const handleBulkFollow = async () => {
-    const usersToFollow = oneWayIn.filter((u) => u && selectedIds.has(u.id));
+    const usersToFollow = oneWayIn.filter((u) => u && selectedIds.has(u.login));
     await bulkFollow(usersToFollow);
   };
 

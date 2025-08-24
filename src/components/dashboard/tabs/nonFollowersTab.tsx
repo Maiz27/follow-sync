@@ -41,7 +41,7 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
 
   const handleBulkUnfollow = async () => {
     const usersToUnfollow = oneWayOut.filter(
-      (u) => u && selectedIds.has(u.id)
+      (u) => u && selectedIds.has(u.login)
     ) as UserInfoFragment[];
     await bulkUnfollow(usersToUnfollow);
   };

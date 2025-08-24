@@ -40,7 +40,9 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
     });
 
   const handleBulkUnfollow = async () => {
-    const usersToUnfollow = following.filter((u) => u && selectedIds.has(u.id));
+    const usersToUnfollow = following.filter(
+      (u) => u && selectedIds.has(u.login)
+    );
     await bulkUnfollow(usersToUnfollow);
   };
 

@@ -40,7 +40,7 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
       {selection && !isGhost && (
         <Checkbox
           checked={selection.isSelected}
-          onCheckedChange={() => selection.onSelect(user.id)}
+          onCheckedChange={() => selection.onSelect(user.login)}
           className='absolute top-2 right-2 z-10'
         />
       )}
