@@ -9,9 +9,10 @@ export const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
 export const GIST_ID_STORAGE_KEY = 'followSync_gist_id';
 
 // Adaptive Stale Times (in milliseconds)
-export const STALE_TIME_SMALL = 1000 * 60 * 10; // 10 minutes
-export const STALE_TIME_MEDIUM = 1000 * 60 * 60; // 1 hour
-export const STALE_TIME_LARGE = 1000 * 60 * 60 * 6; // 6 hours
+export const STALE_TIME_SMALL = 1000 * 60 * 15; // 15 minutes
+export const STALE_TIME_MEDIUM = 1000 * 60 * 60 * 3; // 3 hours
+export const STALE_TIME_LARGE = 1000 * 60 * 60 * 12; // 12 hours
+export const STALE_TIME_MANUAL_ONLY = Infinity; // Never stale, requires manual refresh
 
 // Metadata
 export const DOMAIN = process.env.NEXT_PUBLIC_DOMAIN ?? 'localhost';

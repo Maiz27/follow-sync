@@ -7,6 +7,7 @@ import { fetchAllUserFollowersAndFollowing } from '@/lib/gql/fetchers';
 import {
   GIST_ID_STORAGE_KEY,
   STALE_TIME_LARGE,
+  STALE_TIME_MANUAL_ONLY,
   STALE_TIME_MEDIUM,
   STALE_TIME_SMALL,
 } from '@/lib/constants';
@@ -142,18 +143,39 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
           const totalConnections = cachedData.metadata.totalConnections;
           let staleTime = 0;
 
-          if (totalConnections < 2000) staleTime = STALE_TIME_SMALL;
-          else if (totalConnections < 10000) staleTime = STALE_TIME_MEDIUM;
-          else staleTime = STALE_TIME_LARGE;
+          if (totalConnections < 2000) {
+            staleTime = STALE_TIME_SMALL;
+          } else if (totalConnections < 10000) {
+            staleTime = STALE_TIME_MEDIUM;
+          } else if (totalConnections < 50000) {
+            staleTime = STALE_TIME_LARGE;
+          } else {
+            staleTime = STALE_TIME_MANUAL_ONLY;
+          }
 
           const isStale = Date.now() - cachedData.timestamp > staleTime;
           get().loadFromCache(cachedData);
+
           if (!isStale) {
             console.log('Cache is fresh, returning data.');
             toast.info('Loaded fresh data from cache.');
             return cachedData.network;
           }
-          console.warn('Cache is stale, fetching fresh data...');
+
+          // For manual-only tier, show a different message
+          if (staleTime === STALE_TIME_MANUAL_ONLY) {
+            console.warn(
+              'Cache is stale, but auto-refresh is disabled for large networks. Awaiting manual refresh.'
+            );
+            toast.info(
+              'Data loaded from cache. Refresh manually for the latest update.'
+            );
+            return cachedData.network;
+          }
+
+          console.warn(
+            'Cache is stale, fetching fresh data in the background...'
+          );
         }
       }
     }
