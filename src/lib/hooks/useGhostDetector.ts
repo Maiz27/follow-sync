@@ -16,11 +16,8 @@ export const useGhostDetector = () => {
   } = useCacheStore();
 
   useEffect(() => {
-    setIsCheckingGhosts(true);
-
     const detectGhosts = async () => {
       if (
-        ghosts.length > 0 ||
         nonMutualsYouFollow.length === 0 ||
         nonMutualsFollowingYou.length === 0 ||
         !accessToken
@@ -28,6 +25,8 @@ export const useGhostDetector = () => {
         setIsCheckingGhosts(false);
         return;
       }
+
+      setIsCheckingGhosts(true);
 
       const potentialGhosts = [
         ...nonMutualsYouFollow,
@@ -37,14 +36,20 @@ export const useGhostDetector = () => {
           user?.followers.totalCount === 0 && user?.following.totalCount === 0
       );
 
-      if (potentialGhosts.length === 0) {
+      const newPotentialGhosts = potentialGhosts.filter(
+        (potentialGhost) =>
+          !ghosts.some((existingGhost) => existingGhost.login === potentialGhost.login)
+      );
+
+      if (newPotentialGhosts.length === 0) {
+        setIsCheckingGhosts(false);
         return;
       }
 
       const confirmedGhosts = [];
 
-      for (let i = 0; i < potentialGhosts.length; i += BATCH_SIZE) {
-        const batch = potentialGhosts.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < newPotentialGhosts.length; i += BATCH_SIZE) {
+        const batch = newPotentialGhosts.slice(i, i + BATCH_SIZE);
         const usernames = batch.map((user) => user?.login);
 
         try {
@@ -67,15 +72,18 @@ export const useGhostDetector = () => {
           console.error('Error verifying ghost batch:', error);
         }
 
-        if (i + BATCH_SIZE < potentialGhosts.length) {
+        if (i + BATCH_SIZE < newPotentialGhosts.length) {
           await new Promise((resolve) =>
             setTimeout(resolve, DELAY_BETWEEN_BATCHES)
           );
         }
       }
 
+      if (confirmedGhosts.length > 0) {
+        await setGhosts([...ghosts, ...confirmedGhosts], accessToken);
+      }
+
       setIsCheckingGhosts(false);
-      await setGhosts(confirmedGhosts, accessToken);
     };
 
     detectGhosts();
@@ -84,7 +92,7 @@ export const useGhostDetector = () => {
     nonMutualsYouFollow,
     accessToken,
     setGhosts,
-    ghosts.length,
+    ghosts,
     setIsCheckingGhosts,
   ]);
 };

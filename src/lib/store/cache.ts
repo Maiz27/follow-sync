@@ -261,18 +261,24 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
   },
 
   setGhosts: async (ghosts, accessToken) => {
+    const allGhosts = [...get().ghosts, ...ghosts];
+    const uniqueGhostsMap = new Map();
+    allGhosts.forEach(g => uniqueGhostsMap.set(g.login, g));
+    const uniqueGhosts = Array.from(uniqueGhostsMap.values());
+
     set({
-      ghosts,
-      ghostsSet: new Set(ghosts.map((g) => g.login)),
+      ghosts: uniqueGhosts,
+      ghostsSet: new Set(uniqueGhosts.map((g) => g.login)),
       isCheckingGhosts: false,
     });
+
     const { network, timestamp, metadata, gistName } = get();
 
     if (!metadata || !timestamp || !network) return;
 
     const dataToCache: CachedData = {
       network,
-      ghosts,
+      ghosts: uniqueGhosts,
       timestamp,
       metadata,
     };
