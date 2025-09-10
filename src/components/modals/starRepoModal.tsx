@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import React from 'react';
 import {
   Dialog,
@@ -7,18 +8,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { LuStar } from 'react-icons/lu';
-import Link from 'next/link';
 import { GITHUB_REPO_URL } from '@/lib/constants';
+import { useModalsStore } from '@/lib/store/modals';
+import { LuStar } from 'react-icons/lu';
 
-interface StarRepoModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
+const StarRepoModal = () => {
+  const { modal, closeModal } = useModalsStore();
 
-const StarRepoModal = ({ isOpen, onClose }: StarRepoModalProps) => {
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={modal?.type === 'star'} onOpenChange={closeModal}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Like the app? Star it on GitHub!</DialogTitle>
@@ -29,7 +27,7 @@ const StarRepoModal = ({ isOpen, onClose }: StarRepoModalProps) => {
           </DialogDescription>
         </DialogHeader>
         <div className='flex justify-end gap-4 py-4'>
-          <Button variant='outline' onClick={onClose}>
+          <Button variant='outline' onClick={closeModal}>
             Later
           </Button>
           <Link

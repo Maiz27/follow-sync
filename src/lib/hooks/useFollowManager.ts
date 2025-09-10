@@ -7,13 +7,13 @@ import { useClientAuthenticatedGraphQLClient } from '@/lib/gql/client';
 import { getNonMutuals } from '@/lib/utils';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { CachedData } from '@/lib/types';
-import { useModalStore } from '@/lib/store/modal';
+import { useModalsStore } from '@/lib/store/modals';
 
 export const useFollowManager = () => {
   const { client } = useClientAuthenticatedGraphQLClient();
   const { data: session } = useSession();
   const { getState, gistName, writeCache, updateNetwork } = useCacheStore();
-  const { incrementActionCount } = useModalStore();
+  const { incrementActionCount } = useModalsStore();
 
   const persistChanges = async () => {
     if (!session?.accessToken) return;
