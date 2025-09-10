@@ -1,12 +1,14 @@
 import { GetGistByNameQuery, UserInfoFragment } from './gql/types';
+import { SettingsState } from './store/settings';
 
 export interface CachedData {
-  timestamp: number;
-  ghosts: UserInfoFragment[];
   network: {
     followers: UserInfoFragment[];
     following: UserInfoFragment[];
   };
+  ghosts: UserInfoFragment[];
+  settings: SettingsState;
+  timestamp: number;
   metadata: {
     totalConnections: number;
     fetchDuration: number;

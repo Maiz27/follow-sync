@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next';
 import { ThemeProvider } from '@/components/theme/themeProvider';
 import Navbar from '@/components/nav/navbar';
 import { Favicons } from '@/components/utils/Favicon';
-import ModalManager from '@/components/modals/modalManager';
 import { getPageMetadata } from '@/lib/utils';
 import './globals.css';
 
@@ -30,7 +29,6 @@ export default function RootLayout({
         >
           <Navbar />
           <main>{children}</main>
-          <ModalManager />
         </ThemeProvider>
       </body>
     </html>

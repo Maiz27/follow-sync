@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useCacheStore } from '@/lib/store/cache';
 import { usePaginationStore } from '@/lib/store/pagination';
-import { PAGE_COUNT } from '@/lib/constants';
+import { DEFAULT_PAGE_SIZE } from '@/lib/constants';
 
 export const useSelectionManager = (listId: string, itemIds: string[] = []) => {
   const [selectedIds, setSelectedIds] = useState(new Set<string>());
@@ -14,8 +14,8 @@ export const useSelectionManager = (listId: string, itemIds: string[] = []) => {
   }, [currentPage]);
 
   const pageItemIds = useMemo(() => {
-    const indexOfLastItem = currentPage * PAGE_COUNT;
-    const indexOfFirstItem = indexOfLastItem - PAGE_COUNT;
+    const indexOfLastItem = currentPage * DEFAULT_PAGE_SIZE;
+    const indexOfFirstItem = indexOfLastItem - DEFAULT_PAGE_SIZE;
     return itemIds.slice(indexOfFirstItem, indexOfLastItem);
   }, [itemIds, currentPage]);
 

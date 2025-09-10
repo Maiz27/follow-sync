@@ -8,14 +8,15 @@ import {
 } from '../ui/card';
 import TabManager from '../utils/tabsManager';
 import FollowersTab from './tabs/followersTab';
-import { formatNumber, timeAgo } from '@/lib/utils';
 import FollowingTab from './tabs/followingTab';
 import NonFollowersTab from './tabs/nonFollowersTab';
 import NonFollowingTab from './tabs/nonFollowingTab';
 import GhostsTab from './tabs/ghostsTab';
-import { IoSync } from 'react-icons/io5';
-import { useCacheStore } from '@/lib/store/cache';
 import { Button } from '../ui/button';
+import UserSettings from '../user/userSettings';
+import { useCacheStore } from '@/lib/store/cache';
+import { formatNumber, timeAgo } from '@/lib/utils';
+import { IoSync } from 'react-icons/io5';
 
 interface AnalyzerProps {
   refetch: () => void;
@@ -58,10 +59,16 @@ const Analyzer = ({ refetch, isFetching }: AnalyzerProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Your Network, Deep Dive</CardTitle>
-        <CardDescription>
-          Explore detailed lists for comprehensive network understanding.
-        </CardDescription>
+        <div className='mb-2 flex flex-col justify-between md:flex-row md:items-center'>
+          <div>
+            <CardTitle>Your Network, Deep Dive</CardTitle>
+            <CardDescription>
+              Explore detailed lists for comprehensive network understanding.
+            </CardDescription>
+          </div>
+
+          <UserSettings />
+        </div>
 
         <div className='mb-2 flex flex-col justify-between md:flex-row md:items-center'>
           <span className='flex items-center gap-2'>

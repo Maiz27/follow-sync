@@ -2,11 +2,11 @@
 
 import { useModalsStore } from '@/lib/store/modals';
 import StarRepoModal from './starRepoModal';
-// import SettingsModal from './settingsModal';
+import SettingsModal from './settingsModal';
 
 const modalRegistry = {
   star: StarRepoModal,
-  // settings: SettingsModal,
+  settings: SettingsModal,
 };
 
 const ModalManager = () => {
@@ -16,13 +16,12 @@ const ModalManager = () => {
     return null;
   }
 
-  const ModalComponent =
-    modalRegistry[modal.type as keyof typeof modalRegistry];
+  const ModalComponent = modalRegistry[modal.type];
 
   if (!ModalComponent) {
     return null;
   }
-
+  
   return <ModalComponent {...modal.props} />;
 };
 

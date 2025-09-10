@@ -13,6 +13,7 @@ import {
 } from '@/lib/constants';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { CachedData } from '@/lib/types';
+import { useSettingsStore } from './settings';
 
 // Define the structure for progress callbacks to decouple from the hook
 export interface ProgressCallbacks {
@@ -101,11 +102,25 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
   getState: () => get(),
 
   loadFromCache: (cachedData) => {
+    const {
+      setGhostDetectionBatchSize,
+      setPaginationPageSize,
+      setShowAvatars,
+      setCustomStaleTime,
+    } = useSettingsStore.getState();
+
     set({
       ...cachedData,
       nonMutuals: getNonMutuals(cachedData.network),
       ghostsSet: new Set(cachedData.ghosts.map((g) => g.login)),
     });
+
+    if (cachedData.settings) {
+      setShowAvatars(cachedData.settings.showAvatars);
+      setGhostDetectionBatchSize(cachedData.settings.ghostDetectionBatchSize);
+      setPaginationPageSize(cachedData.settings.paginationPageSize);
+      setCustomStaleTime(cachedData.settings.customStaleTime);
+    }
   },
 
   updateNetwork: (data) => {
@@ -141,9 +156,12 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
         if (cachedData) {
           get().setGistName(foundGist.name);
           const totalConnections = cachedData.metadata.totalConnections;
-          let staleTime = 0;
+          const { customStaleTime } = useSettingsStore.getState();
 
-          if (totalConnections < 2000) {
+          let staleTime = 0;
+          if (customStaleTime) {
+            staleTime = customStaleTime * 60 * 1000;
+          } else if (totalConnections < 2000) {
             staleTime = STALE_TIME_SMALL;
           } else if (totalConnections < 10000) {
             staleTime = STALE_TIME_MEDIUM;
@@ -216,10 +234,12 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
       const following = networkData.following.nodes as UserInfoFragment[];
       const network = { followers, following };
       const timestamp = Date.now();
+      const settings = useSettingsStore.getState();
 
       const dataToCache: CachedData = {
         network,
         ghosts: [],
+        settings,
         timestamp,
         metadata: {
           totalConnections: followers.length + following.length,
@@ -263,7 +283,7 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
   setGhosts: async (ghosts, accessToken) => {
     const allGhosts = [...get().ghosts, ...ghosts];
     const uniqueGhostsMap = new Map();
-    allGhosts.forEach(g => uniqueGhostsMap.set(g.login, g));
+    allGhosts.forEach((g) => uniqueGhostsMap.set(g.login, g));
     const uniqueGhosts = Array.from(uniqueGhostsMap.values());
 
     set({
@@ -279,6 +299,7 @@ export const useCacheStore = create<CacheStore>((set, get) => ({
     const dataToCache: CachedData = {
       network,
       ghosts: uniqueGhosts,
+      settings: useSettingsStore.getState(),
       timestamp,
       metadata,
     };

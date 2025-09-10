@@ -16,6 +16,7 @@ import { UserInfoFragment } from '@/lib/gql/types';
 import { formatNumber, cn } from '@/lib/utils';
 import { LuGhost } from 'react-icons/lu';
 import { Checkbox } from '../ui/checkbox';
+import { useSettingsStore } from '@/lib/store/settings';
 
 type ConnectionCardProps = {
   user: UserInfoFragment;
@@ -34,6 +35,7 @@ type ConnectionCardProps = {
 const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
   const { onClick, label, loading, isDisabled } = action || {};
   const isGhost = useCacheStore((state) => state.ghostsSet.has(user.login));
+  const { showAvatars } = useSettingsStore();
 
   return (
     <div className='relative'>
@@ -59,17 +61,23 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
           </div>
         )}
         <CardHeader className='flex items-center gap-2'>
-          <Avatar>
-            <AvatarImage
-              width={50}
-              height={50}
-              src={user.avatarUrl}
-              alt={user.name || user.login}
-              title={user.name || user.login}
-              loading='lazy'
-            />
-            <AvatarFallback>{user.name?.split(' ')[0][0]}</AvatarFallback>
-          </Avatar>
+          {showAvatars ? (
+            <Avatar>
+              <AvatarImage
+                width={50}
+                height={50}
+                src={user.avatarUrl}
+                alt={user.name || user.login}
+                title={user.name || user.login}
+                loading='lazy'
+              />
+              <AvatarFallback>{user.name?.split(' ')[0][0]}</AvatarFallback>
+            </Avatar>
+          ) : (
+            <div className='flex size-8 items-center justify-center rounded-full bg-muted'>
+              {user.name?.split(' ')[0][0]}
+            </div>
+          )}
 
           <Link
             href={`https://github.com/${user.login}`}

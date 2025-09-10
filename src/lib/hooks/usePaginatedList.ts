@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { usePaginationStore } from '../store/pagination';
+import { useSettingsStore } from '../store/settings';
 
 interface UsePaginatedListOptions<T> {
   listId: string;
@@ -22,10 +23,12 @@ interface UsePaginatedListReturn<T> {
 export const usePaginatedList = <T>({
   listId,
   data,
-  itemsPerPage = 10,
+  itemsPerPage: itemsPerPageProp,
   maxPagesToShow = 5,
 }: UsePaginatedListOptions<T>): UsePaginatedListReturn<T> => {
   const { pagination, setCurrentPage } = usePaginationStore();
+  const { paginationPageSize } = useSettingsStore();
+  const itemsPerPage = paginationPageSize ?? itemsPerPageProp;
   const currentPage = pagination[listId]?.currentPage ?? 1;
 
   const totalPages = Math.ceil(data.length / itemsPerPage);
@@ -104,7 +107,14 @@ export const usePaginatedList = <T>({
     } else if (totalPages === 0 && currentPage !== 1) {
       setCurrentPage(listId, 1);
     }
-  }, [data.length, itemsPerPage, totalPages, currentPage, listId, setCurrentPage]);
+  }, [
+    data.length,
+    itemsPerPage,
+    totalPages,
+    currentPage,
+    listId,
+    setCurrentPage,
+  ]);
 
   return {
     currentPageItems,

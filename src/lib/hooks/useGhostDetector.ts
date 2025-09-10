@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useCacheStore } from '@/lib/store/cache';
+import { useSettingsStore } from '@/lib/store/settings';
 
-const BATCH_SIZE = 10;
 const DELAY_BETWEEN_BATCHES = 1000; // 1 second
 
 export const useGhostDetector = () => {
@@ -14,6 +14,7 @@ export const useGhostDetector = () => {
     setGhosts,
     setIsCheckingGhosts,
   } = useCacheStore();
+  const { ghostDetectionBatchSize } = useSettingsStore();
 
   useEffect(() => {
     const detectGhosts = async () => {
@@ -48,8 +49,8 @@ export const useGhostDetector = () => {
 
       const confirmedGhosts = [];
 
-      for (let i = 0; i < newPotentialGhosts.length; i += BATCH_SIZE) {
-        const batch = newPotentialGhosts.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < newPotentialGhosts.length; i += ghostDetectionBatchSize) {
+        const batch = newPotentialGhosts.slice(i, i + ghostDetectionBatchSize);
         const usernames = batch.map((user) => user?.login);
 
         try {
@@ -72,7 +73,7 @@ export const useGhostDetector = () => {
           console.error('Error verifying ghost batch:', error);
         }
 
-        if (i + BATCH_SIZE < newPotentialGhosts.length) {
+        if (i + ghostDetectionBatchSize < newPotentialGhosts.length) {
           await new Promise((resolve) =>
             setTimeout(resolve, DELAY_BETWEEN_BATCHES)
           );
@@ -94,5 +95,6 @@ export const useGhostDetector = () => {
     setGhosts,
     ghosts,
     setIsCheckingGhosts,
+    ghostDetectionBatchSize,
   ]);
 };

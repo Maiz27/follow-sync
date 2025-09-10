@@ -8,6 +8,7 @@ import { SessionProvider } from 'next-auth/react';
 import { getQueryClient } from '@/app/get-query-client';
 import { GlobalProgressIndicator } from '@/components/utils/progress';
 import { ProgressProvider } from './progress';
+import ModalManager from '@/components/modals/modalManager';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const queryClient = getQueryClient();
@@ -19,6 +20,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
           {children}
           <GlobalProgressIndicator />
           <Toaster expand={true} />
+          <ModalManager />
         </ProgressProvider>
         <ReactQueryDevtools />
       </QueryClientProvider>
