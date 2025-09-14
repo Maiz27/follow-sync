@@ -76,28 +76,56 @@ export const writeCache = async (
   gistId?: string | null
 ) => {
   const content = JSON.stringify(data, null, 2);
-  const method = gistId ? 'PATCH' : 'POST';
-  const url = `https://api.github.com/gists${gistId ? `/${gistId}` : ''}`;
+  const body = {
+    description: GIST_DESCRIPTION,
+    files: { [GIST_FILENAME]: { content } },
+    public: false,
+  };
 
-  const response = await fetch(url, {
-    method,
+  // If a gistId is provided, try to update it first.
+  if (gistId) {
+    const url = `https://api.github.com/gists/${gistId}`;
+    const response = await fetch(url, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify(body),
+    });
+
+    // If successful, we're done.
+    if (response.ok) {
+      return response.json();
+    }
+
+    // If the Gist was not found, we'll fall through to create a new one.
+    // Any other error, however, should be thrown.
+    if (response.status !== 404) {
+      const errorBody = await response.json();
+      console.error('Failed to update Gist cache:', errorBody);
+      throw new Error('Failed to update Gist cache.');
+    }
+  }
+
+  // If no gistId was provided or the update failed with a 404, create a new Gist.
+  const createUrl = `https://api.github.com/gists`;
+  const createResponse = await fetch(createUrl, {
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       'X-GitHub-Api-Version': '2022-11-28',
     },
-    body: JSON.stringify({
-      description: GIST_DESCRIPTION,
-      files: { [GIST_FILENAME]: { content } },
-      public: false,
-    }),
+    body: JSON.stringify(body),
   });
 
-  if (!response.ok) {
-    const errorBody = await response.json();
-    console.error('Failed to write cache:', errorBody);
-    throw new Error('Failed to write to Gist cache.');
+  if (!createResponse.ok) {
+    const errorBody = await createResponse.json();
+    console.error('Failed to create Gist cache:', errorBody);
+    throw new Error('Failed to create Gist cache.');
   }
 
-  return response.json();
+  return createResponse.json();
 };

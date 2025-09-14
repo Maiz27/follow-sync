@@ -20,7 +20,9 @@ export const BASE_URL = `https://${DOMAIN}`;
 
 export const GITHUB_REPO_URL = 'https://github.com/maiz27/follow-sync';
 
-export const PAGE_COUNT = 100;
+export const DEFAULT_PAGE_SIZE = 100;
+
+export const PAGE_SIZE_LIST = [50, 100, 200, 500];
 
 export const METADATA = new Map([
   [

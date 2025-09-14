@@ -2,7 +2,7 @@ import React from 'react';
 import List from './list';
 import PaginationControls from './paginationControls';
 import { usePaginatedList } from '@/lib/hooks/usePaginatedList';
-import { PAGE_COUNT } from '@/lib/constants';
+import { DEFAULT_PAGE_SIZE } from '@/lib/constants';
 
 interface PaginatedListProps<T> {
   listId: string;
@@ -18,7 +18,7 @@ interface PaginatedListProps<T> {
 const PaginatedList = <T,>({
   listId,
   data,
-  itemsPerPage = PAGE_COUNT,
+  itemsPerPage = DEFAULT_PAGE_SIZE,
   maxPagesToShow = 5,
   renderItem,
   gridClassName,

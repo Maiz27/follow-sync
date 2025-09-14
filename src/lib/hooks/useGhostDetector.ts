@@ -1,33 +1,33 @@
 import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useCacheStore } from '@/lib/store/cache';
+import { useGhostStore } from '@/lib/store/ghost';
+import { useNetworkStore } from '@/lib/store/network';
+import { useSettingsStore } from '@/lib/store/settings';
+import { useCacheManager } from './useCacheManager';
 
-const BATCH_SIZE = 10;
 const DELAY_BETWEEN_BATCHES = 1000; // 1 second
 
-export const useGhostDetector = () => {
+interface GhostDetectorProps {
+  isNetworkReady: boolean;
+}
+
+export const useGhostDetector = ({ isNetworkReady }: GhostDetectorProps) => {
   const { data: session } = useSession();
   const accessToken = session?.accessToken;
-  const {
-    nonMutuals: { nonMutualsYouFollow, nonMutualsFollowingYou },
-    ghosts,
-    setGhosts,
-    setIsCheckingGhosts,
-  } = useCacheStore();
+  const { nonMutuals } = useNetworkStore();
+  const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
+  const { ghosts, setIsCheckingGhosts } = useGhostStore();
+  const { ghostDetectionBatchSize } = useSettingsStore();
+  const { updateGhosts } = useCacheManager();
 
   useEffect(() => {
-    setIsCheckingGhosts(true);
-
     const detectGhosts = async () => {
-      if (
-        ghosts.length > 0 ||
-        nonMutualsYouFollow.length === 0 ||
-        nonMutualsFollowingYou.length === 0 ||
-        !accessToken
-      ) {
+      if (!isNetworkReady || !accessToken) {
         setIsCheckingGhosts(false);
         return;
       }
+
+      setIsCheckingGhosts(true);
 
       const potentialGhosts = [
         ...nonMutualsYouFollow,
@@ -37,14 +37,26 @@ export const useGhostDetector = () => {
           user?.followers.totalCount === 0 && user?.following.totalCount === 0
       );
 
-      if (potentialGhosts.length === 0) {
+      const newPotentialGhosts = potentialGhosts.filter(
+        (potentialGhost) =>
+          !ghosts.some(
+            (existingGhost) => existingGhost.login === potentialGhost.login
+          )
+      );
+
+      if (newPotentialGhosts.length === 0) {
+        setIsCheckingGhosts(false);
         return;
       }
 
       const confirmedGhosts = [];
 
-      for (let i = 0; i < potentialGhosts.length; i += BATCH_SIZE) {
-        const batch = potentialGhosts.slice(i, i + BATCH_SIZE);
+      for (
+        let i = 0;
+        i < newPotentialGhosts.length;
+        i += ghostDetectionBatchSize
+      ) {
+        const batch = newPotentialGhosts.slice(i, i + ghostDetectionBatchSize);
         const usernames = batch.map((user) => user?.login);
 
         try {
@@ -67,24 +79,29 @@ export const useGhostDetector = () => {
           console.error('Error verifying ghost batch:', error);
         }
 
-        if (i + BATCH_SIZE < potentialGhosts.length) {
+        if (i + ghostDetectionBatchSize < newPotentialGhosts.length) {
           await new Promise((resolve) =>
             setTimeout(resolve, DELAY_BETWEEN_BATCHES)
           );
         }
       }
 
+      if (confirmedGhosts.length > 0) {
+        await updateGhosts(confirmedGhosts);
+      }
+
       setIsCheckingGhosts(false);
-      await setGhosts(confirmedGhosts, accessToken);
     };
 
     detectGhosts();
   }, [
+    isNetworkReady,
     nonMutualsFollowingYou,
     nonMutualsYouFollow,
     accessToken,
-    setGhosts,
-    ghosts.length,
+    ghosts,
     setIsCheckingGhosts,
+    ghostDetectionBatchSize,
+    updateGhosts,
   ]);
 };

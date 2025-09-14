@@ -12,12 +12,13 @@
 - **Adaptive Caching:** Utilizes your own GitHub Gists as a database, with an intelligent caching mechanism to respect GitHub's API rate limits while keeping your data fresh.
 - **Secure & Private:** All your network data is stored in a private Gist that you own. FollowSync never stores your data on its servers.
 - **Bulk Actions:** Select multiple users and perform follow/unfollow operations on them sequentially with progress tracking.
+- **Customizable Settings:** Tailor your experience with settings for pagination, avatar display, and more.
 
 ## Technology Stack
 
 - **Framework:** [Next.js](https://nextjs.org/) 15+ (App Router)
 - **Language:** [TypeScript](https://www.typescriptlang.org/)
-- **State Management:** [TanStack Query (React Query)](https://tanstack.com/query/latest)
+- **State Management:** [TanStack Query (React Query)](https://tanstack.com/query/latest) for server state and [Zustand](https://github.com/pmndrs/zustand) for client state.
 - **Authentication:** [NextAuth.js](https://next-auth.js.org/) with GitHub OAuth
 - **API:** [GitHub GraphQL API](https://docs.github.com/en/graphql)
 - **Styling:** [Tailwind CSS](https://tailwindcss.com/)
@@ -43,6 +44,7 @@ This project is currently in active development.
 - [x] **Phase 5:** Follow/Unfollow Operations
 - [x] **Phase 6:** UI/UX Polish & Onboarding
 - [x] **Phase 7:** Performance Improvements & Testing
+- [x] **Phase 8:** User Settings
 
 ## Getting Started for Local Development
 
@@ -94,3 +96,4 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+See the [LICENSE](LICENSE) file for details.

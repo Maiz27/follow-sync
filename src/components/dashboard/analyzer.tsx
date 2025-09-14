@@ -8,14 +8,17 @@ import {
 } from '../ui/card';
 import TabManager from '../utils/tabsManager';
 import FollowersTab from './tabs/followersTab';
-import { formatNumber, timeAgo } from '@/lib/utils';
 import FollowingTab from './tabs/followingTab';
 import NonFollowersTab from './tabs/nonFollowersTab';
 import NonFollowingTab from './tabs/nonFollowingTab';
 import GhostsTab from './tabs/ghostsTab';
-import { IoSync } from 'react-icons/io5';
-import { useCacheStore } from '@/lib/store/cache';
 import { Button } from '../ui/button';
+import UserSettings from '../user/userSettings';
+import { useNetworkStore } from '@/lib/store/network';
+import { useGistStore } from '@/lib/store/gist';
+import { useGhostStore } from '@/lib/store/ghost';
+import { formatNumber, timeAgo } from '@/lib/utils';
+import { IoSync } from 'react-icons/io5';
 
 interface AnalyzerProps {
   refetch: () => void;
@@ -23,7 +26,9 @@ interface AnalyzerProps {
 }
 
 const Analyzer = ({ refetch, isFetching }: AnalyzerProps) => {
-  const { network, nonMutuals, ghosts, timestamp } = useCacheStore();
+  const { network, nonMutuals } = useNetworkStore();
+  const { ghosts } = useGhostStore();
+  const { timestamp } = useGistStore();
   const { followers, following } = network;
   const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
 
@@ -58,10 +63,16 @@ const Analyzer = ({ refetch, isFetching }: AnalyzerProps) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Your Network, Deep Dive</CardTitle>
-        <CardDescription>
-          Explore detailed lists for comprehensive network understanding.
-        </CardDescription>
+        <div className='mb-2 flex flex-col justify-between md:flex-row md:items-center'>
+          <div>
+            <CardTitle>Your Network, Deep Dive</CardTitle>
+            <CardDescription>
+              Explore detailed lists for comprehensive network understanding.
+            </CardDescription>
+          </div>
+
+          <UserSettings />
+        </div>
 
         <div className='mb-2 flex flex-col justify-between md:flex-row md:items-center'>
           <span className='flex items-center gap-2'>
