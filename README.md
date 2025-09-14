@@ -18,7 +18,7 @@
 
 - **Framework:** [Next.js](https://nextjs.org/) 15+ (App Router)
 - **Language:** [TypeScript](https://www.typescriptlang.org/)
-- **State Management:** [TanStack Query (React Query)](https://tanstack.com/query/latest)
+- **State Management:** [TanStack Query (React Query)](https://tanstack.com/query/latest) for server state and [Zustand](https://github.com/pmndrs/zustand) for client state.
 - **Authentication:** [NextAuth.js](https://next-auth.js.org/) with GitHub OAuth
 - **API:** [GitHub GraphQL API](https://docs.github.com/en/graphql)
 - **Styling:** [Tailwind CSS](https://tailwindcss.com/)
