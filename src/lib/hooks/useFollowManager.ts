@@ -1,41 +1,19 @@
 import { useSession } from 'next-auth/react';
 import { useMutation } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { useCacheStore } from '@/lib/store/cache';
+import { useNetworkStore } from '@/lib/store/network';
 import { followUser, unfollowUser } from '@/lib/gql/fetchers';
 import { useClientAuthenticatedGraphQLClient } from '@/lib/gql/client';
-import { getNonMutuals } from '@/lib/utils';
 import { UserInfoFragment } from '@/lib/gql/types';
-import { CachedData } from '@/lib/types';
 import { useModalsStore } from '@/lib/store/modals';
+import { useCacheManager } from './useCacheManager';
 
 export const useFollowManager = () => {
   const { client } = useClientAuthenticatedGraphQLClient();
   const { data: session } = useSession();
-  const { getState, gistName, writeCache, updateNetwork } = useCacheStore();
+  const { network, setNetwork } = useNetworkStore();
+  const { persistChanges } = useCacheManager();
   const { incrementActionCount } = useModalsStore();
-
-  const persistChanges = async () => {
-    if (!session?.accessToken) return;
-
-    const currentState = getState();
-    const { network, ghosts, metadata } = currentState;
-
-    if (!network) return;
-
-    const dataToCache: CachedData = {
-      network,
-      ghosts,
-      timestamp: Date.now(),
-      metadata: {
-        totalConnections: network.followers.length + network.following.length,
-        fetchDuration: metadata?.fetchDuration || 0,
-        cacheVersion: metadata?.cacheVersion || '1.0',
-      },
-    };
-
-    await writeCache(session.accessToken, dataToCache, gistName);
-  };
 
   const followMutation = useMutation({
     mutationFn: (userToFollow: UserInfoFragment) => {
@@ -43,23 +21,22 @@ export const useFollowManager = () => {
       return followUser({ client, userId: userToFollow.id });
     },
     onMutate: async (userToFollow: UserInfoFragment) => {
-      const previousState = getState();
-      const newFollowing = [...previousState.network.following, userToFollow];
-      const newNetwork = { ...previousState.network, following: newFollowing };
-      const newNonMutuals = getNonMutuals(newNetwork);
-
-      updateNetwork({ network: newNetwork, nonMutuals: newNonMutuals });
-
-      return { previousState };
+      const previousNetwork = network;
+      const newFollowing = [...network.following, userToFollow];
+      const newNetwork = { ...network, following: newFollowing };
+      setNetwork(newNetwork);
+      return { previousNetwork };
     },
     onError: (err, userToFollow, context) => {
-      if (context?.previousState) {
-        updateNetwork({
-          network: context.previousState.network,
-          nonMutuals: context.previousState.nonMutuals,
-        });
+      if (context?.previousNetwork) {
+        setNetwork(context.previousNetwork);
       }
       toast.error(`Failed to follow @${userToFollow.login}: ${err.message}`);
+    },
+    onSettled: () => {
+      if (session?.accessToken) {
+        persistChanges(session.accessToken);
+      }
     },
   });
 
@@ -69,34 +46,32 @@ export const useFollowManager = () => {
       return unfollowUser({ client, userId: userToUnfollow.id });
     },
     onMutate: async (userToUnfollow: UserInfoFragment) => {
-      const previousState = getState();
-      const newFollowing = previousState.network.following.filter(
+      const previousNetwork = network;
+      const newFollowing = network.following.filter(
         (u) => u.id !== userToUnfollow.id
       );
-      const newNetwork = { ...previousState.network, following: newFollowing };
-      const newNonMutuals = getNonMutuals(newNetwork);
-
-      updateNetwork({ network: newNetwork, nonMutuals: newNonMutuals });
-
-      return { previousState };
+      const newNetwork = { ...network, following: newFollowing };
+      setNetwork(newNetwork);
+      return { previousNetwork };
     },
     onError: (err, userToUnfollow, context) => {
-      if (context?.previousState) {
-        updateNetwork({
-          network: context.previousState.network,
-          nonMutuals: context.previousState.nonMutuals,
-        });
+      if (context?.previousNetwork) {
+        setNetwork(context.previousNetwork);
       }
       toast.error(
         `Failed to unfollow @${userToUnfollow.login}: ${err.message}`
       );
+    },
+    onSettled: () => {
+      if (session?.accessToken) {
+        persistChanges(session.accessToken);
+      }
     },
   });
 
   return {
     followMutation,
     unfollowMutation,
-    persistChanges,
     incrementActionCount,
   };
 };

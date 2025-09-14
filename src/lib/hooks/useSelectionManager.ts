@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useCacheStore } from '@/lib/store/cache';
+import { useGhostStore } from '@/lib/store/ghost';
 import { usePaginationStore } from '@/lib/store/pagination';
 import { DEFAULT_PAGE_SIZE } from '@/lib/constants';
 
 export const useSelectionManager = (listId: string, itemIds: string[] = []) => {
   const [selectedIds, setSelectedIds] = useState(new Set<string>());
-  const ghosts = useCacheStore((state) => state.ghostsSet);
+  const ghosts = useGhostStore((state) => state.ghostsSet);
   const { pagination } = usePaginationStore();
   const currentPage = pagination[listId]?.currentPage ?? 1;
 

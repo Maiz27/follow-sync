@@ -1,20 +1,20 @@
 import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useCacheStore } from '@/lib/store/cache';
+import { useGhostStore } from '@/lib/store/ghost';
+import { useNetworkStore } from '@/lib/store/network';
 import { useSettingsStore } from '@/lib/store/settings';
+import { useCacheManager } from './useCacheManager';
 
 const DELAY_BETWEEN_BATCHES = 1000; // 1 second
 
 export const useGhostDetector = () => {
   const { data: session } = useSession();
   const accessToken = session?.accessToken;
-  const {
-    nonMutuals: { nonMutualsYouFollow, nonMutualsFollowingYou },
-    ghosts,
-    setGhosts,
-    setIsCheckingGhosts,
-  } = useCacheStore();
+  const { nonMutuals } = useNetworkStore();
+  const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
+  const { ghosts, setIsCheckingGhosts } = useGhostStore();
   const { ghostDetectionBatchSize } = useSettingsStore();
+  const { updateGhosts } = useCacheManager();
 
   useEffect(() => {
     const detectGhosts = async () => {
@@ -81,7 +81,7 @@ export const useGhostDetector = () => {
       }
 
       if (confirmedGhosts.length > 0) {
-        await setGhosts([...ghosts, ...confirmedGhosts], accessToken);
+        await updateGhosts(confirmedGhosts, accessToken);
       }
 
       setIsCheckingGhosts(false);
@@ -92,9 +92,9 @@ export const useGhostDetector = () => {
     nonMutualsFollowingYou,
     nonMutualsYouFollow,
     accessToken,
-    setGhosts,
     ghosts,
     setIsCheckingGhosts,
     ghostDetectionBatchSize,
+    updateGhosts,
   ]);
 };

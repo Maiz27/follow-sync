@@ -3,13 +3,15 @@ import { useSession } from 'next-auth/react';
 
 import { useClientAuthenticatedGraphQLClient } from '@/lib/gql/client';
 import { QUERY_KEY_USER_NETWORK } from '@/lib/constants';
-import { useCacheStore } from '@/lib/store/cache';
 import { useProgress } from '@/lib/context/progress';
+import { useCacheManager } from './useCacheManager';
+import { useGistStore } from '../store/gist';
 
 export const useNetworkData = (username?: string) => {
   const { client, status: authStatus } = useClientAuthenticatedGraphQLClient();
   const { data: session } = useSession();
-  const { initializeAndFetchNetwork, setForceNextRefresh } = useCacheStore();
+  const { initializeAndFetchNetwork } = useCacheManager();
+  const { setForceNextRefresh } = useGistStore();
   const progress = useProgress();
 
   const queryResult = useQuery({
