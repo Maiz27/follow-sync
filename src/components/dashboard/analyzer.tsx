@@ -14,7 +14,9 @@ import NonFollowingTab from './tabs/nonFollowingTab';
 import GhostsTab from './tabs/ghostsTab';
 import { Button } from '../ui/button';
 import UserSettings from '../user/userSettings';
-import { useCacheStore } from '@/lib/store/cache';
+import { useNetworkStore } from '@/lib/store/network';
+import { useGistStore } from '@/lib/store/gist';
+import { useGhostStore } from '@/lib/store/ghost';
 import { formatNumber, timeAgo } from '@/lib/utils';
 import { IoSync } from 'react-icons/io5';
 
@@ -24,7 +26,9 @@ interface AnalyzerProps {
 }
 
 const Analyzer = ({ refetch, isFetching }: AnalyzerProps) => {
-  const { network, nonMutuals, ghosts, timestamp } = useCacheStore();
+  const { network, nonMutuals } = useNetworkStore();
+  const { ghosts } = useGhostStore();
+  const { timestamp } = useGistStore();
   const { followers, following } = network;
   const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
 

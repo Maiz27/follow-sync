@@ -8,7 +8,7 @@ import DashboardSkeleton from '@/components/dashboard/dashboardSkeleton';
 import { Section } from '@/components/utils/section';
 import { useNetworkData } from '@/lib/hooks/useNetworkManager';
 import { useGhostDetector } from '@/lib/hooks/useGhostDetector';
-import { useCacheStore } from '@/lib/store/cache';
+import { useNetworkStore } from '@/lib/store/network';
 import { STATS_DATA } from '@/lib/constants';
 
 const ClientDashboard = () => {
@@ -18,7 +18,7 @@ const ClientDashboard = () => {
   const { isPending, isError, error, refetch, isFetching } =
     useNetworkData(username);
 
-  const { network, nonMutuals } = useCacheStore();
+  const { network, nonMutuals } = useNetworkStore();
   const { followers, following } = network;
   const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
 

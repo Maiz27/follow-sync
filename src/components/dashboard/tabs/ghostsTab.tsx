@@ -2,7 +2,7 @@ import React from 'react';
 import EmptyState from '@/components/ui/empty-state';
 import PaginatedList from '@/components/utils/paginatedList';
 import ConnectionCard from '../connectionCard';
-import { useCacheStore } from '@/lib/store/cache';
+import { useGhostStore } from '@/lib/store/ghost';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { LuGhost } from 'react-icons/lu';
 import { TabHeader } from './tabHeader';
@@ -15,7 +15,7 @@ type GhostsTabProps = {
 };
 
 const GhostsTab = ({ ghosts }: GhostsTabProps) => {
-  const { isCheckingGhosts } = useCacheStore();
+  const { isCheckingGhosts } = useGhostStore();
 
   if (isCheckingGhosts) {
     return <div>Loading...</div>;

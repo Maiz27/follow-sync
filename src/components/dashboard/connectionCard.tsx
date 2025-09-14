@@ -11,7 +11,7 @@ import {
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
-import { useCacheStore } from '@/lib/store/cache';
+import { useGhostStore } from '@/lib/store/ghost';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { formatNumber, cn } from '@/lib/utils';
 import { LuGhost } from 'react-icons/lu';
@@ -34,7 +34,7 @@ type ConnectionCardProps = {
 
 const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
   const { onClick, label, loading, isDisabled } = action || {};
-  const isGhost = useCacheStore((state) => state.ghostsSet.has(user.login));
+  const isGhost = useGhostStore((state) => state.isGhost(user.login));
   const { showAvatars } = useSettingsStore();
 
   return (
