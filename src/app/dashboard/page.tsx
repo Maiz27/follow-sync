@@ -6,7 +6,7 @@ import Stats from '@/components/dashboard/stats';
 import Analyzer from '@/components/dashboard/analyzer';
 import DashboardSkeleton from '@/components/dashboard/dashboardSkeleton';
 import { Section } from '@/components/utils/section';
-import { useNetworkData } from '@/lib/hooks/useNetworkManager';
+import { useNetworkManager } from '@/lib/hooks/useNetworkManager';
 import { useGhostDetector } from '@/lib/hooks/useGhostDetector';
 import { useNetworkStore } from '@/lib/store/network';
 import { STATS_DATA } from '@/lib/constants';
@@ -16,7 +16,7 @@ const ClientDashboard = () => {
   const username = session?.user?.login;
 
   const { isPending, isError, error, refetch, isFetching, isSuccess } =
-    useNetworkData(username);
+    useNetworkManager(username);
 
   const { network, nonMutuals } = useNetworkStore();
   const { followers, following } = network;

@@ -7,7 +7,7 @@ import { useProgress } from '@/lib/context/progress';
 import { useCacheManager } from './useCacheManager';
 import { useGistStore } from '../store/gist';
 
-export const useNetworkData = (username?: string) => {
+export const useNetworkManager = (username?: string) => {
   const { client, status: authStatus } = useClientAuthenticatedGraphQLClient();
   const { data: session } = useSession();
   const { initializeAndFetchNetwork } = useCacheManager();

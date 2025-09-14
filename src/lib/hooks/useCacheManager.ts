@@ -23,13 +23,7 @@ import { useSession } from 'next-auth/react';
 export const useCacheManager = () => {
   const setNetwork = useNetworkStore((state) => state.setNetwork);
   const { setGhosts, addGhosts } = useGhostStore();
-  const {
-    setGistName,
-    setForceNextRefresh,
-    forceNextRefresh,
-    gistName,
-    setGistData,
-  } = useGistStore();
+  const { setGistName, setGistData, setTimestamp } = useGistStore();
   const settings = useSettingsStore();
 
   const { data } = useSession();
@@ -67,12 +61,15 @@ export const useCacheManager = () => {
       const localGistName = window.localStorage.getItem(GIST_ID_STORAGE_KEY);
       setGistName(localGistName);
 
-      if (forceNextRefresh) {
-        setForceNextRefresh(false);
+      const isForced = useGistStore.getState().forceNextRefresh;
+      const currentGistName = useGistStore.getState().gistName;
+
+      if (isForced) {
+        useGistStore.getState().setForceNextRefresh(false);
       }
 
-      if (!forceNextRefresh) {
-        const foundGist = await findCacheGist(client, gistName);
+      if (!isForced) {
+        const foundGist = await findCacheGist(client, currentGistName);
         if (foundGist) {
           const cachedData = parseCache(foundGist);
           if (cachedData) {
@@ -83,11 +80,11 @@ export const useCacheManager = () => {
             let staleTime = 0;
             if (customStaleTime) {
               staleTime = customStaleTime * 60 * 1000;
-            } else if (totalConnections < 2000) {
+            } else if (totalConnections <= 2000) {
               staleTime = STALE_TIME_SMALL;
-            } else if (totalConnections < 10000) {
+            } else if (totalConnections <= 10000) {
               staleTime = STALE_TIME_MEDIUM;
-            } else if (totalConnections < 50000) {
+            } else if (totalConnections <= 50000) {
               staleTime = STALE_TIME_LARGE;
             } else {
               staleTime = STALE_TIME_MANUAL_ONLY;
@@ -160,7 +157,11 @@ export const useCacheManager = () => {
           },
         };
 
-        const newGist = await writeCache(accessToken, dataToCache, gistName);
+        const newGist = await writeCache(
+          accessToken,
+          dataToCache,
+          currentGistName
+        );
 
         setNetwork(network);
         setGistData({ timestamp, metadata: dataToCache.metadata });
@@ -174,16 +175,7 @@ export const useCacheManager = () => {
         throw err;
       }
     },
-    [
-      gistName,
-      forceNextRefresh,
-      settings,
-      loadFromCache,
-      setGistName,
-      setForceNextRefresh,
-      setNetwork,
-      setGistData,
-    ]
+    [settings, loadFromCache, setGistName, setNetwork, setGistData]
   );
 
   const persistChanges = useCallback(async () => {
@@ -191,21 +183,23 @@ export const useCacheManager = () => {
 
     const { network } = useNetworkStore.getState();
     const { ghosts } = useGhostStore.getState();
-    const { timestamp, metadata, gistName } = useGistStore.getState();
+    const { metadata, gistName } = useGistStore.getState();
     const currentSettings = useSettingsStore.getState();
 
-    if (!network || !timestamp || !metadata) return;
+    if (!network || !metadata) return;
+    const newTimestamp = Date.now();
+    setTimestamp(newTimestamp);
 
     const dataToCache: CachedData = {
       network,
       ghosts,
-      timestamp,
-      metadata,
       settings: currentSettings,
+      timestamp: newTimestamp,
+      metadata,
     };
 
     await writeCache(accessToken, dataToCache, gistName);
-  }, [accessToken]);
+  }, [accessToken, setTimestamp]);
 
   const updateGhosts = useCallback(
     async (newGhosts: UserInfoFragment[]) => {
