@@ -15,14 +15,14 @@ const ClientDashboard = () => {
   const { data: session } = useSession();
   const username = session?.user?.login;
 
-  const { isPending, isError, error, refetch, isFetching } =
+  const { isPending, isError, error, refetch, isFetching, isSuccess } =
     useNetworkData(username);
 
   const { network, nonMutuals } = useNetworkStore();
   const { followers, following } = network;
   const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
 
-  useGhostDetector();
+  useGhostDetector({ isNetworkReady: isSuccess });
 
   if (isPending) return <DashboardSkeleton />;
   if (isError) return <div>Error: {error?.message}</div>;

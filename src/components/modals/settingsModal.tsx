@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { useModalsStore } from '@/lib/store/modals';
 import { useSettingsStore } from '@/lib/store/settings';
+import { useCacheManager } from '@/lib/hooks/useCacheManager';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -36,11 +37,13 @@ const SettingsModal = () => {
     setCustomStaleTime,
     saveSettings,
   } = useSettingsStore();
+  const { persistChanges } = useCacheManager();
   const { data: session } = useSession();
   const accessToken = session?.accessToken;
 
   const handleSave = async () => {
-    await saveSettings(accessToken!);
+    if (!accessToken) return;
+    await saveSettings(accessToken, persistChanges);
     closeModal();
   };
 

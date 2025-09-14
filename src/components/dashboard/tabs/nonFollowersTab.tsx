@@ -9,6 +9,7 @@ import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { LuUserX } from 'react-icons/lu';
 import { TAB_DESCRIPTIONS } from '@/lib/constants';
+import { useCacheManager } from '@/lib/hooks/useCacheManager';
 
 const TAB_ID = 'nonFollowers';
 
@@ -17,9 +18,9 @@ type NonFollowersTabProps = {
 };
 
 const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
-  const { unfollowMutation, persistChanges, incrementActionCount } =
-    useFollowManager();
+  const { unfollowMutation, incrementActionCount } = useFollowManager();
   const { isPending, mutate, mutateAsync } = unfollowMutation;
+  const { persistChanges } = useCacheManager();
 
   const {
     selectedIds,

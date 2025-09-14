@@ -31,3 +31,16 @@ export type textSizes =
   | '5xl'
   | '6xl'
   | '7xl';
+
+// Define the structure for progress callbacks to decouple from the hook
+export interface ProgressCallbacks {
+  show: (config: {
+    title: string;
+    message: string;
+    items: { label: string; current: number; total: number }[];
+  }) => void;
+  update: (items: { label: string; current: number; total: number }[]) => void;
+  complete: () => void;
+  fail: (config: { message: string }) => void;
+}
+

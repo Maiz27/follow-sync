@@ -9,6 +9,7 @@ import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { LuHeart } from 'react-icons/lu';
 import { TAB_DESCRIPTIONS } from '@/lib/constants';
+import { useCacheManager } from '@/lib/hooks/useCacheManager';
 
 const TAB_ID = 'following';
 
@@ -17,9 +18,9 @@ type FollowingTabProps = {
 };
 
 const FollowingTab = ({ following }: FollowingTabProps) => {
-  const { unfollowMutation, persistChanges, incrementActionCount } =
-    useFollowManager();
+  const { unfollowMutation, incrementActionCount } = useFollowManager();
   const { isPending, mutate, mutateAsync } = unfollowMutation;
+  const { persistChanges } = useCacheManager();
 
   const {
     selectedIds,

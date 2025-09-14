@@ -7,7 +7,11 @@ import { useCacheManager } from './useCacheManager';
 
 const DELAY_BETWEEN_BATCHES = 1000; // 1 second
 
-export const useGhostDetector = () => {
+interface GhostDetectorProps {
+  isNetworkReady: boolean;
+}
+
+export const useGhostDetector = ({ isNetworkReady }: GhostDetectorProps) => {
   const { data: session } = useSession();
   const accessToken = session?.accessToken;
   const { nonMutuals } = useNetworkStore();
@@ -18,11 +22,7 @@ export const useGhostDetector = () => {
 
   useEffect(() => {
     const detectGhosts = async () => {
-      if (
-        nonMutualsYouFollow.length === 0 ||
-        nonMutualsFollowingYou.length === 0 ||
-        !accessToken
-      ) {
+      if (!isNetworkReady || !accessToken) {
         setIsCheckingGhosts(false);
         return;
       }
@@ -39,7 +39,9 @@ export const useGhostDetector = () => {
 
       const newPotentialGhosts = potentialGhosts.filter(
         (potentialGhost) =>
-          !ghosts.some((existingGhost) => existingGhost.login === potentialGhost.login)
+          !ghosts.some(
+            (existingGhost) => existingGhost.login === potentialGhost.login
+          )
       );
 
       if (newPotentialGhosts.length === 0) {
@@ -49,7 +51,11 @@ export const useGhostDetector = () => {
 
       const confirmedGhosts = [];
 
-      for (let i = 0; i < newPotentialGhosts.length; i += ghostDetectionBatchSize) {
+      for (
+        let i = 0;
+        i < newPotentialGhosts.length;
+        i += ghostDetectionBatchSize
+      ) {
         const batch = newPotentialGhosts.slice(i, i + ghostDetectionBatchSize);
         const usernames = batch.map((user) => user?.login);
 
@@ -81,7 +87,7 @@ export const useGhostDetector = () => {
       }
 
       if (confirmedGhosts.length > 0) {
-        await updateGhosts(confirmedGhosts, accessToken);
+        await updateGhosts(confirmedGhosts);
       }
 
       setIsCheckingGhosts(false);
@@ -89,6 +95,7 @@ export const useGhostDetector = () => {
 
     detectGhosts();
   }, [
+    isNetworkReady,
     nonMutualsFollowingYou,
     nonMutualsYouFollow,
     accessToken,

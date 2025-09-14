@@ -9,6 +9,7 @@ import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { LuUserPlus } from 'react-icons/lu';
 import { TAB_DESCRIPTIONS } from '@/lib/constants';
+import { useCacheManager } from '@/lib/hooks/useCacheManager';
 
 const TAB_ID = 'nonFollowing';
 
@@ -17,9 +18,9 @@ type NonFollowingTabProps = {
 };
 
 const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
-  const { followMutation, persistChanges, incrementActionCount } =
-    useFollowManager();
+  const { followMutation, incrementActionCount } = useFollowManager();
   const { isPending, mutate, mutateAsync } = followMutation;
+  const { persistChanges } = useCacheManager();
 
   const {
     selectedIds,

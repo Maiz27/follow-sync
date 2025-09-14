@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { useCacheStore } from './cache';
 import { PAGE_SIZE_LIST } from '../constants';
 
 export type SettingsState = {
@@ -16,12 +15,15 @@ export type SettingsActions = {
   setGhostDetectionBatchSize: (size: number) => void;
   setPaginationPageSize: (size: number) => void;
   setCustomStaleTime: (time: number | null) => void;
-  saveSettings: (accessToken: string) => Promise<void>;
+  saveSettings: (
+    accessToken: string,
+    persistChanges: (accessToken: string) => Promise<void>
+  ) => Promise<void>;
 };
 
 export type SettingsStore = SettingsState & SettingsActions;
 
-export const useSettingsStore = create<SettingsStore>((set, get) => ({
+export const useSettingsStore = create<SettingsStore>((set) => ({
   isSettingsModalOpen: false,
   showAvatars: true,
   ghostDetectionBatchSize: 10,
@@ -33,23 +35,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   setGhostDetectionBatchSize: (size) => set({ ghostDetectionBatchSize: size }),
   setPaginationPageSize: (size) => set({ paginationPageSize: size }),
   setCustomStaleTime: (time) => set({ customStaleTime: time }),
-  saveSettings: async (accessToken) => {
-    if (!accessToken) return;
-
-    const { network, ghosts, metadata, timestamp, gistName, writeCache } =
-      useCacheStore.getState();
-    const settings = get();
-
-    if (!metadata || !timestamp || !network) return;
-
-    const dataToCache = {
-      network,
-      ghosts,
-      settings,
-      timestamp,
-      metadata,
-    };
-
-    await writeCache(accessToken, dataToCache, gistName);
+  saveSettings: async (accessToken, persistChanges) => {
+    await persistChanges(accessToken);
   },
 }));

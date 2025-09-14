@@ -35,7 +35,7 @@ export const useFollowManager = () => {
     },
     onSettled: () => {
       if (session?.accessToken) {
-        persistChanges(session.accessToken);
+        persistChanges();
       }
     },
   });
@@ -64,7 +64,7 @@ export const useFollowManager = () => {
     },
     onSettled: () => {
       if (session?.accessToken) {
-        persistChanges(session.accessToken);
+        persistChanges();
       }
     },
   });
