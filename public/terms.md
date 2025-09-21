@@ -1,6 +1,6 @@
 # Terms of Service
 
-Effective Date: September 21, 2025
+Effective Date: **September 21, 2025**
 
 By using Follow Sync, you agree to the following terms.
 

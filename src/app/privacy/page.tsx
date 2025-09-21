@@ -1,7 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
 import ReactMarkdown from 'react-markdown';
-import { Heading } from '@/components/utils/heading';
 import { getPageMetadata } from '@/lib/utils';
 
 export const metadata = getPageMetadata('privacy');
@@ -12,10 +11,7 @@ const PrivacyPage = async () => {
 
   return (
     <div className='container mx-auto max-w-4xl px-4 py-12'>
-      <Heading Tag='h1' className='mb-8 text-center'>
-        Privacy Policy
-      </Heading>
-      <div className='prose prose-invert mx-auto max-w-none'>
+      <div className='mx-auto prose max-w-none prose-invert'>
         <ReactMarkdown>{content}</ReactMarkdown>
       </div>
     </div>

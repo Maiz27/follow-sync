@@ -44,6 +44,7 @@
     "@graphql-codegen/cli": "5.0.7",
     "@graphql-codegen/client-preset": "4.8.3",
     "@tailwindcss/postcss": "^4",
+    "@tailwindcss/typography": "^0.5.18",
     "@tanstack/eslint-plugin-query": "^5.81.2",
     "@types/node": "^20",
     "@types/react": "^19",

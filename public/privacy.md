@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Effective Date: September 21, 2025
+Effective Date: **September 21, 2025**
 
 Follow Sync respects your privacy. This policy explains what data we access, how it is used, and your rights.
 
