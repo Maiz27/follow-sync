@@ -1,8 +1,12 @@
 import { auth } from '@/app/auth';
 
 export default auth((req) => {
-  // Allow access to the home page without authentication
-  if (req.nextUrl.pathname === '/') return;
+  const { pathname } = req.nextUrl;
+
+  // Allow access to public pages without authentication
+  if (pathname === '/' || pathname === '/privacy' || pathname === '/terms') {
+    return;
+  }
 
   // Redirect unauthenticated users to the home page
   if (!req.auth) {
