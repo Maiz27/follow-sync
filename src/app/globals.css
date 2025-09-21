@@ -140,6 +140,10 @@
   }
 }
 
+main {
+  @apply min-h-[calc(100dvh_-_3.5rem_-_3.5rem)];
+}
+
 div[data-slot='dropdown-menu-item'] > *:first-child {
   /* styles for the first direct child only */
   @apply px-2 py-1.5;
