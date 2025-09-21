@@ -49,6 +49,30 @@ export const METADATA = new Map([
       type: 'website',
     },
   ],
+  [
+    'terms',
+    {
+      title: 'Terms of Service | Follow Sync',
+      description:
+        'Review the terms and conditions for using Follow Sync, outlining your rights and responsibilities, acceptable use, and the service agreement for managing your GitHub network with our tool.',
+      url: `${BASE_URL}/terms`,
+      icon: '/imgs/logo/favicon.ico',
+      image: `${BASE_URL}/imgs/logo/og.png`,
+      type: 'website',
+    },
+  ],
+  [
+    'privacy',
+    {
+      title: 'Privacy Policy | Follow Sync',
+      description:
+        'Understand how Follow Sync handles your data, how it is used to analyze your GitHub network, and our commitment to protecting your privacy.',
+      url: `${BASE_URL}/privacy`,
+      icon: '/imgs/logo/favicon.ico',
+      image: `${BASE_URL}/imgs/logo/og.png`,
+      type: 'website',
+    },
+  ],
 ]);
 
 export const TAB_DESCRIPTIONS = {
