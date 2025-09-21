@@ -1,16 +1,16 @@
-# FollowSync: Your GitHub Network Manager
+# Follow Sync: Your GitHub Network Manager
 
-![FollowSync Preview](/public/imgs/preview.jpg)
+![Follow Sync Preview](/public/imgs/preview.jpg)
 
-**FollowSync** is a modern GitHub network manager designed for power users. It helps you discover non-mutual connections, identify "ghost" accounts, and analyze your network efficiently.
+**Follow Sync** is a modern GitHub network manager designed for power users. It helps you discover non-mutual connections, identify "ghost" accounts, and analyze your network efficiently.
 
 ## Features
 
 - **Comprehensive Network Analysis:** Get a clear picture of who you follow that doesn't follow you back, and vice-versa.
 - **Ghost Account Detection:** Identify "ghost" connections—accounts that have been deleted or suspended but still appear in your network lists. This provides a more accurate understanding of your active network, as these connections cannot be removed through the API.
-- **Single-Click Follow/Unfollow:** Manage your network directly from the FollowSync interface with optimistic UI updates for a seamless experience.
+- **Single-Click Follow/Unfollow:** Manage your network directly from the Follow Sync interface with optimistic UI updates for a seamless experience.
 - **Adaptive Caching:** Utilizes your own GitHub Gists as a database, with an intelligent caching mechanism to respect GitHub's API rate limits while keeping your data fresh.
-- **Secure & Private:** All your network data is stored in a private Gist that you own. FollowSync never stores your data on its servers.
+- **Secure & Private:** All your network data is stored in a private Gist that you own. Follow Sync never stores your data on its servers.
 - **Bulk Actions:** Select multiple users and perform follow/unfollow operations on them sequentially with progress tracking.
 - **Customizable Settings:** Tailor your experience with settings for pagination, avatar display, and more.
 
@@ -26,9 +26,9 @@
 
 ## Architecture Overview
 
-FollowSync employs a **client-heavy, GitHub-as-Infrastructure** architecture. It leverages GitHub's own systems for authentication, data fetching, and even data persistence.
+Follow Sync employs a **client-heavy, GitHub-as-Infrastructure** architecture. It leverages GitHub's own systems for authentication, data fetching, and even data persistence.
 
-1. **Authentication:** You authorize the FollowSync GitHub OAuth App, granting it limited, user-scoped permissions.
+1. **Authentication:** You authorize the Follow Sync GitHub OAuth App, granting it limited, user-scoped permissions.
 2. **Data Fetching:** The app calls the GitHub GraphQL API to fetch your follower and following lists.
 3. **Analysis & Caching:** The data is analyzed in the client to find non-mutuals. The results are then stored in a private GitHub Gist owned by you. This Gist acts as a cache for all subsequent loads.
 4. **UI:** The interface is built with React Server Components and loads instantly from the Gist cache, triggering background refreshes based on the age and size of your network data.
@@ -54,7 +54,7 @@ To run this project locally, you first need to create and configure a GitHub OAu
 
 1. Go to **Settings** > **Developer settings** > **OAuth Apps** and click **New OAuth App**.
 2. Fill in the required application details:
-   - **Application name:** `FollowSync (local)`
+   - **Application name:** `Follow Sync (local)`
    - **Homepage URL:** `http://localhost:3000`
    - **Authorization callback URL:** `http://localhost:3000/api/auth/callback/github`
 3. Click **Register application**.

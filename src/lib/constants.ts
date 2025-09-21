@@ -4,9 +4,9 @@ import { LuEye, LuHeart, LuUserX, LuUserPlus } from 'react-icons/lu';
 export const QUERY_KEY_USER_NETWORK = 'user-network';
 
 // GitHub Gist
-export const GIST_DESCRIPTION = 'FollowSync Cache v1';
+export const GIST_DESCRIPTION = 'Follow Sync Cache v1';
 export const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
-export const GIST_ID_STORAGE_KEY = 'followSync_gist_id';
+export const GIST_ID_STORAGE_KEY = 'Follow Sync_gist_id';
 
 // Adaptive Stale Times (in milliseconds)
 export const STALE_TIME_SMALL = 1000 * 60 * 15; // 15 minutes
