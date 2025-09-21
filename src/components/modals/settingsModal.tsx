@@ -62,7 +62,7 @@ const SettingsModal = () => {
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
-            Customize your FollowSync experience.
+            Customize your Follow Sync experience.
           </DialogDescription>
         </DialogHeader>
         <div className='grid gap-4 py-4'>

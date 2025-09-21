@@ -4,9 +4,9 @@ import { LuEye, LuHeart, LuUserX, LuUserPlus } from 'react-icons/lu';
 export const QUERY_KEY_USER_NETWORK = 'user-network';
 
 // GitHub Gist
-export const GIST_DESCRIPTION = 'FollowSync Cache v1';
+export const GIST_DESCRIPTION = 'Follow Sync Cache v1';
 export const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
-export const GIST_ID_STORAGE_KEY = 'followSync_gist_id';
+export const GIST_ID_STORAGE_KEY = 'Follow Sync_gist_id';
 
 // Adaptive Stale Times (in milliseconds)
 export const STALE_TIME_SMALL = 1000 * 60 * 15; // 15 minutes
@@ -44,6 +44,30 @@ export const METADATA = new Map([
       description:
         'Analyze your GitHub network. View your followers, following, non-followers, fans, and ghosts.',
       url: `${BASE_URL}/dashboard`,
+      icon: '/imgs/logo/favicon.ico',
+      image: `${BASE_URL}/imgs/logo/og.png`,
+      type: 'website',
+    },
+  ],
+  [
+    'terms',
+    {
+      title: 'Terms of Service | Follow Sync',
+      description:
+        'Review the terms and conditions for using Follow Sync, outlining your rights and responsibilities, acceptable use, and the service agreement for managing your GitHub network with our tool.',
+      url: `${BASE_URL}/terms`,
+      icon: '/imgs/logo/favicon.ico',
+      image: `${BASE_URL}/imgs/logo/og.png`,
+      type: 'website',
+    },
+  ],
+  [
+    'privacy',
+    {
+      title: 'Privacy Policy | Follow Sync',
+      description:
+        'Understand how Follow Sync handles your data, how it is used to analyze your GitHub network, and our commitment to protecting your privacy.',
+      url: `${BASE_URL}/privacy`,
       icon: '/imgs/logo/favicon.ico',
       image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',

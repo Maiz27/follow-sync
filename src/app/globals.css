@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap');
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -137,6 +138,10 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+}
+
+main {
+  @apply min-h-[calc(100dvh_-_3.5rem_-_3.5rem)];
 }
 
 div[data-slot='dropdown-menu-item'] > *:first-child {
