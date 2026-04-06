@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -14,51 +14,78 @@ import NonFollowingTab from './tabs/nonFollowingTab';
 import GhostsTab from './tabs/ghostsTab';
 import { Button } from '../ui/button';
 import UserSettings from '../user/userSettings';
-import { useNetworkStore } from '@/lib/store/network';
 import { useGistStore } from '@/lib/store/gist';
 import { useGhostStore } from '@/lib/store/ghost';
+import { UserInfoFragment } from '@/lib/gql/types';
 import { formatNumber, timeAgo } from '@/lib/utils';
 import { IoSync } from 'react-icons/io5';
+import { LuLoaderCircle } from 'react-icons/lu';
 
 interface AnalyzerProps {
   refetch: () => void;
   isFetching: boolean;
+  followers: UserInfoFragment[];
+  following: UserInfoFragment[];
+  visibleNonMutualsYouFollow: UserInfoFragment[];
+  visibleNonMutualsFollowingYou: UserInfoFragment[];
 }
 
-const Analyzer = ({ refetch, isFetching }: AnalyzerProps) => {
-  const { network, nonMutuals } = useNetworkStore();
-  const { ghosts } = useGhostStore();
-  const { timestamp } = useGistStore();
-  const { followers, following } = network;
-  const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
+const Analyzer = ({
+  refetch,
+  isFetching,
+  followers,
+  following,
+  visibleNonMutualsYouFollow,
+  visibleNonMutualsFollowingYou,
+}: AnalyzerProps) => {
+  const ghosts = useGhostStore((state) => state.ghosts);
+  const isCheckingGhosts = useGhostStore((state) => state.isCheckingGhosts);
+  const timestamp = useGistStore((state) => state.timestamp);
 
-  const networkTabsData = [
-    {
-      id: 'followers',
-      label: `Audience (${formatNumber(followers.length)})`,
-      component: <FollowersTab followers={followers} />,
-    },
-    {
-      id: 'following',
-      label: `Network (${formatNumber(following.length)})`,
-      component: <FollowingTab following={following} />,
-    },
-    {
-      id: 'one-way-out',
-      label: `One-Way Out (${formatNumber(nonMutualsYouFollow.length)})`,
-      component: <NonFollowersTab oneWayOut={nonMutualsYouFollow} />,
-    },
-    {
-      id: 'one-way-in',
-      label: `One-Way In (${formatNumber(nonMutualsFollowingYou.length)})`,
-      component: <NonFollowingTab oneWayIn={nonMutualsFollowingYou} />,
-    },
-    {
-      id: 'ghosts',
-      label: `Ghosts (${formatNumber(ghosts.length)})`,
-      component: <GhostsTab ghosts={ghosts} />,
-    },
-  ];
+  const networkTabsData = useMemo(
+    () => [
+      {
+        id: 'followers',
+        label: `Audience (${formatNumber(followers.length)})`,
+        component: <FollowersTab followers={followers} />,
+      },
+      {
+        id: 'following',
+        label: `Network (${formatNumber(following.length)})`,
+        component: <FollowingTab following={following} />,
+      },
+      {
+        id: 'one-way-out',
+        label: `One-Way Out (${formatNumber(visibleNonMutualsYouFollow.length)})`,
+        component: <NonFollowersTab oneWayOut={visibleNonMutualsYouFollow} />,
+      },
+      {
+        id: 'one-way-in',
+        label: `One-Way In (${formatNumber(visibleNonMutualsFollowingYou.length)})`,
+        component: <NonFollowingTab oneWayIn={visibleNonMutualsFollowingYou} />,
+      },
+      {
+        id: 'ghosts',
+        label: isCheckingGhosts ? (
+          <span className='inline-flex items-center gap-2'>
+            Ghosts
+            <LuLoaderCircle className='size-4 animate-spin' />
+          </span>
+        ) : (
+          `Ghosts (${formatNumber(ghosts.length)})`
+        ),
+        component: <GhostsTab ghosts={ghosts} />,
+      },
+    ],
+    [
+      followers,
+      following,
+      visibleNonMutualsYouFollow,
+      visibleNonMutualsFollowingYou,
+      ghosts,
+      isCheckingGhosts,
+    ]
+  );
 
   return (
     <Card>

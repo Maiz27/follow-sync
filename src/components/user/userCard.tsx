@@ -22,7 +22,6 @@ export const UserCard = () => {
 
   const user = session.user;
 
-  console.log(user);
 
   const properties = [
     { icon: LuBuilding2, value: user.company },
@@ -111,3 +110,4 @@ export const UserCard = () => {
     </Card>
   );
 };
+

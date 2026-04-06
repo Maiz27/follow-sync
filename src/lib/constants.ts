@@ -4,7 +4,8 @@ import { LuEye, LuHeart, LuUserX, LuUserPlus } from 'react-icons/lu';
 export const QUERY_KEY_USER_NETWORK = 'user-network';
 
 // GitHub Gist
-export const GIST_DESCRIPTION = 'Follow Sync Cache v1';
+export const GIST_DESCRIPTION_PREFIX = 'Follow Sync Cache';
+export const GIST_CACHE_VERSION = '2.0';
 export const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
 export const GIST_ID_STORAGE_KEY = 'Follow Sync_gist_id';
 
@@ -80,7 +81,7 @@ export const TAB_DESCRIPTIONS = {
   following: 'Users you are currently following on GitHub.',
   nonFollowers: 'Users you follow who have not followed you back.',
   nonFollowing: 'Users who follow you, but you have not followed them back.',
-  ghosts: 'Users who have deleted their GitHub profile.',
+  ghosts: 'Users who have deleted or made their GitHub profile private.',
 };
 
 export const STATS_DATA = [
@@ -105,3 +106,4 @@ export const STATS_DATA = [
     description: 'Users who follow you, but you have not followed them back.',
   },
 ];
+

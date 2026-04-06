@@ -49,14 +49,18 @@ const ProgressToastContent = ({
       <CardContent>
         <div className='space-y-3'>
           {items.map((item) => {
+            const cappedCurrent = item.isApproximateTotal
+              ? Math.min(item.current, item.total)
+              : item.current;
             const percentage =
-              item.total > 0 ? (item.current / item.total) * 100 : 0;
+              item.total > 0 ? (cappedCurrent / item.total) * 100 : 0;
             return (
               <div key={item.label}>
                 <div className='mb-1 flex items-baseline justify-between text-xs'>
                   <span className='font-medium'>{item.label}</span>
                   <span className='text-primary'>
-                    {item.current.toLocaleString()} /{' '}
+                    {item.current.toLocaleString()}
+                    {item.isApproximateTotal ? '+' : ''} /{' '}
                     {item.total.toLocaleString()}
                   </span>
                 </div>

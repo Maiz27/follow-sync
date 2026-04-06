@@ -35,7 +35,7 @@ type ConnectionCardProps = {
 const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
   const { onClick, label, loading, isDisabled } = action || {};
   const isGhost = useGhostStore((state) => state.isGhost(user.login));
-  const { showAvatars } = useSettingsStore();
+  const showAvatars = useSettingsStore((state) => state.showAvatars);
 
   return (
     <div className='relative'>
@@ -71,11 +71,11 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
                 title={user.name || user.login}
                 loading='lazy'
               />
-              <AvatarFallback>{user.name?.split(' ')[0][0]}</AvatarFallback>
+              <AvatarFallback>{(user.name || user.login)[0]}</AvatarFallback>
             </Avatar>
           ) : (
             <div className='flex size-8 items-center justify-center rounded-full bg-muted'>
-              {user.name?.split(' ')[0][0]}
+              {(user.name || user.login)[0]}
             </div>
           )}
 
@@ -85,7 +85,7 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
             rel='noreferrer'
             className='hover:underline'
           >
-            <CardTitle className='text-sm'>{user.name}</CardTitle>
+            <CardTitle className='text-sm'>{user.name || user.login}</CardTitle>
 
             <CardDescription className='text-xs'>@{user.login}</CardDescription>
           </Link>

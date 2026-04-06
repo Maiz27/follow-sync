@@ -6,6 +6,7 @@ export interface ProgressItem {
   label: string;
   current: number;
   total: number;
+  isApproximateTotal?: boolean;
 }
 
 // Define the possible states of a progress operation

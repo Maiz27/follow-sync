@@ -35,7 +35,7 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
   );
 
   const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
-    useBulkOperation(mutateAsync, 'Unfollowing', () => {
+    useBulkOperation((user) => mutateAsync({ user, persist: false }), 'Unfollowing', () => {
       persistChanges();
       clearSelection();
     });
@@ -75,6 +75,7 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
       <PaginatedList
         listId={TAB_ID}
         data={oneWayOut}
+        getItemKey={(item) => item!.id || item!.login}
         renderItem={(item) => (
           <ConnectionCard
             user={item!}
@@ -84,15 +85,17 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
             }}
             action={{
               onClick: () =>
-                mutate(item!, {
-                  onSuccess: () => {
-                    if (selectedIds.has(item!.login)) {
-                      handleDeselect(item!.login);
-                    }
-                    persistChanges();
-                    incrementActionCount();
-                  },
-                }),
+                mutate(
+                  { user: item!, persist: true },
+                  {
+                    onSuccess: () => {
+                      if (selectedIds.has(item!.login)) {
+                        handleDeselect(item!.login);
+                      }
+                      incrementActionCount();
+                    },
+                  }
+                ),
               label: 'Unfollow',
               loading: isPending,
             }}

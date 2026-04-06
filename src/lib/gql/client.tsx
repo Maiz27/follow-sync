@@ -110,7 +110,6 @@ export const graphqlRequest = async <TData, TVariables extends Variables>({
   query: DocumentNode | string;
   variables: TVariables;
 }): Promise<TData> => {
-  console.log(query, variables);
   try {
     const data = await client.request<TData>(query, { ...variables });
     return data;
@@ -120,3 +119,4 @@ export const graphqlRequest = async <TData, TVariables extends Variables>({
     throw new Error(error.message || 'GraphQL request failed.');
   }
 };
+

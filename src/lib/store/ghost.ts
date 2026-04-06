@@ -19,7 +19,7 @@ export type GhostStore = GhostState & GhostActions;
 const initialState: GhostState = {
   ghosts: [],
   ghostsSet: new Set(),
-  isCheckingGhosts: true,
+  isCheckingGhosts: false,
 };
 
 export const useGhostStore = create<GhostStore>((set, get) => ({

@@ -35,7 +35,7 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
   );
 
   const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
-    useBulkOperation(mutateAsync, 'Unfollowing', () => {
+    useBulkOperation((user) => mutateAsync({ user, persist: false }), 'Unfollowing', () => {
       persistChanges();
       clearSelection();
     });
@@ -75,6 +75,7 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
       <PaginatedList
         listId={TAB_ID}
         data={following}
+        getItemKey={(item) => item!.id || item!.login}
         renderItem={(item) => (
           <ConnectionCard
             user={item!}
@@ -84,15 +85,17 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
             }}
             action={{
               onClick: () =>
-                mutate(item!, {
-                  onSuccess: () => {
-                    if (selectedIds.has(item!.login)) {
-                      handleDeselect(item!.login);
-                    }
-                    persistChanges();
-                    incrementActionCount();
-                  },
-                }),
+                mutate(
+                  { user: item!, persist: true },
+                  {
+                    onSuccess: () => {
+                      if (selectedIds.has(item!.login)) {
+                        handleDeselect(item!.login);
+                      }
+                      incrementActionCount();
+                    },
+                  }
+                ),
               label: 'Unfollow',
               loading: isPending,
             }}

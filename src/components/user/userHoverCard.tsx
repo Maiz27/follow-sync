@@ -1,5 +1,7 @@
+'use client';
+
 import Link from 'next/link';
-import { auth } from '@/app/auth';
+import { useSession } from 'next-auth/react';
 import {
   HoverCard,
   HoverCardTrigger,
@@ -10,19 +12,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LuBuilding2, LuMapPin, LuLink } from 'react-icons/lu';
 import { SiX } from 'react-icons/si';
 
-export const UserHoverCard = async () => {
-  const session = await auth();
+export const UserHoverCard = () => {
+  const { data: session } = useSession();
 
-  if (!session) {
-    return <></>;
-  }
-
-  if (!session.user) {
-    return <></>;
+  if (!session?.user) {
+    return null;
   }
 
   const user = session.user;
-
   const properties = [
     { icon: LuBuilding2, value: user.company },
     { icon: LuMapPin, value: user.location },
@@ -45,15 +42,13 @@ export const UserHoverCard = async () => {
         <div className='flex h-full w-full justify-between gap-4'>
           <Avatar className='h-fit w-24 overflow-hidden rounded-full'>
             <AvatarImage src={user.image!} />
-            <AvatarFallback>{user.name?.split(' ')[0][0]}</AvatarFallback>
+            <AvatarFallback>{(user.name || user.login)?.[0]}</AvatarFallback>
           </Avatar>
 
           <div className='space-y-2'>
             <div className='grid'>
               <span className='text-lg font-semibold'>{user.name}</span>
-              <span className='text-xs text-muted-foreground'>
-                @{user.login}
-              </span>
+              <span className='text-xs text-muted-foreground'>@{user.login}</span>
             </div>
 
             <p className='py-1 text-sm'>{user.bio}</p>

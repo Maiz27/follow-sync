@@ -1,11 +1,17 @@
+'use client';
+
 import React from 'react';
-import { auth } from '@/app/auth';
+import { useSession } from 'next-auth/react';
 import { UserHoverCard } from '../user/userHoverCard';
 import { SignInButton } from './buttons';
 import { LuGithub } from 'react-icons/lu';
 
-const GetStarted = async () => {
-  const session = await auth();
+const GetStarted = () => {
+  const { data: session, status } = useSession();
+
+  if (status === 'loading') {
+    return null;
+  }
 
   if (session) {
     return (
