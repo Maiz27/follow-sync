@@ -1,6 +1,8 @@
+'use client';
+
 import React from 'react';
 import Link from 'next/link';
-import { auth } from '@/app/auth';
+import { useSession } from 'next-auth/react';
 import { AvatarFallback, Avatar, AvatarImage } from '../ui/avatar';
 import { SignOutButton } from '../auth/buttons';
 import {
@@ -12,10 +14,10 @@ import {
 } from '../ui/dropdown-menu';
 import { LuLayoutDashboard } from 'react-icons/lu';
 
-const UserDropDown = async () => {
-  const session = await auth();
+const UserDropDown = () => {
+  const { data: session } = useSession();
 
-  if (!session) {
+  if (!session?.user) {
     return null;
   }
 
@@ -33,7 +35,7 @@ const UserDropDown = async () => {
             alt={user.name!}
             title={user.name!}
           />
-          <AvatarFallback>{user.name?.split(' ')[0]![0]}</AvatarFallback>
+          <AvatarFallback>{(user.name || user.login)?.[0]}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
       <DropdownMenuContent className='mr-4' align='start'>

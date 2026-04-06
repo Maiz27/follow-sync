@@ -1,6 +1,8 @@
+'use client';
+
 import React from 'react';
 import Link from 'next/link';
-import { auth } from '@/app/auth';
+import { useSession } from 'next-auth/react';
 import Logo from './logo';
 import UserDropDown from '../user/userDropDown';
 import { SignInButton } from '../auth/buttons';
@@ -11,6 +13,8 @@ import { LuGithub } from 'react-icons/lu';
 import { SiGithub } from 'react-icons/si';
 
 const Navbar = () => {
+  const { data: session, status } = useSession();
+
   return (
     <header className='z-50 w-full bg-background'>
       <div className='flex h-[calc(.25rem*14)] w-full items-center justify-between px-4 md:px-6'>
@@ -21,7 +25,14 @@ const Navbar = () => {
           </span>
         </Link>
         <div className='flex h-4 items-center space-x-2'>
-          <GetStarted />
+          {status === 'loading' ? null : session ? (
+            <UserDropDown />
+          ) : (
+            <SignInButton>
+              <LuGithub />
+              Get Started
+            </SignInButton>
+          )}
 
           <Separator orientation='vertical' className='ml-2' />
 
@@ -44,17 +55,3 @@ const Navbar = () => {
 };
 
 export default Navbar;
-
-const GetStarted = async () => {
-  const session = await auth();
-  if (!session) {
-    return (
-      <SignInButton>
-        <LuGithub />
-        Get Started
-      </SignInButton>
-    );
-  }
-
-  return <UserDropDown />;
-};

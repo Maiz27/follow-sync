@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { ThemeProvider } from '@/components/theme/themeProvider';
+import { AuthSessionProvider } from '@/components/auth/sessionProvider';
 import Navbar from '@/components/nav/navbar';
 import Footer from '@/components/nav/footer';
 import { Favicons } from '@/components/utils/Favicon';
@@ -28,9 +29,11 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <Navbar />
-          <main>{children}</main>
-          <Footer />
+          <AuthSessionProvider>
+            <Navbar />
+            <main>{children}</main>
+            <Footer />
+          </AuthSessionProvider>
         </ThemeProvider>
       </body>
     </html>

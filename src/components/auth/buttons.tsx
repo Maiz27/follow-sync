@@ -1,5 +1,7 @@
-import { ReactNode } from 'react';
-import { signOut, signIn } from '@/app/auth';
+'use client';
+
+import type { ReactNode } from 'react';
+import { signIn, signOut } from 'next-auth/react';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
 
@@ -11,16 +13,13 @@ export const SignInButton = ({
   btnClassName?: string;
 }) => {
   return (
-    <form
-      action={async () => {
-        'use server';
-        await signIn('github', { redirectTo: '/dashboard' });
-      }}
+    <Button
+      type='button'
+      className={btnClassName}
+      onClick={() => signIn('github', { redirectTo: '/dashboard' })}
     >
-      <Button type='submit' className={btnClassName}>
-        {children}
-      </Button>
-    </form>
+      {children}
+    </Button>
   );
 };
 
@@ -32,20 +31,13 @@ export const SignOutButton = ({
   btnClassName?: string;
 }) => {
   return (
-    <form
-      className='w-full'
-      action={async () => {
-        'use server';
-        await signOut();
-      }}
+    <Button
+      type='button'
+      variant='destructive'
+      className={cn('w-full', btnClassName)}
+      onClick={() => signOut()}
     >
-      <Button
-        type='submit'
-        variant='destructive'
-        className={cn('w-full', btnClassName)}
-      >
-        {children}
-      </Button>
-    </form>
+      {children}
+    </Button>
   );
 };
