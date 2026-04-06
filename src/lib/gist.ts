@@ -27,6 +27,10 @@ export type CacheDiscoveryResult = {
   duplicateGists: CacheGist[];
 };
 
+type WriteCacheOptions = {
+  discoverCanonicalFallback?: boolean;
+};
+
 const normalizeOwnerLogin = (ownerLogin: string) => ownerLogin.toLowerCase();
 
 export const buildCacheKey = (ownerLogin: string) =>
@@ -450,7 +454,8 @@ export const cleanupDuplicateCacheGists = async ({
 export const writeCache = async (
   token: string,
   data: CachedData,
-  gistId?: string | null
+  gistId?: string | null,
+  options: WriteCacheOptions = {}
 ) => {
   const ownerLogin = data.metadata.ownerLogin;
   if (!ownerLogin) {
@@ -479,20 +484,26 @@ export const writeCache = async (
     updateTargets.add(gistId);
   }
 
-  const discoveryResult = await findCanonicalCacheGist({
-    token,
-    ownerLogin: normalizedOwnerLogin,
-    preferredGistId: gistId,
-  });
-
-  if (discoveryResult.canonicalGist?.id) {
-    updateTargets.add(discoveryResult.canonicalGist.id);
-  }
-
   for (const targetId of updateTargets) {
     const updatedGist = await updateCacheGist(token, targetId, body);
     if (updatedGist) {
       return updatedGist;
+    }
+  }
+
+  if (options.discoverCanonicalFallback) {
+    const discoveryResult = await findCanonicalCacheGist({
+      token,
+      ownerLogin: normalizedOwnerLogin,
+      preferredGistId: gistId,
+    });
+
+    const canonicalGistId = discoveryResult.canonicalGist?.id;
+    if (canonicalGistId && !updateTargets.has(canonicalGistId)) {
+      const updatedGist = await updateCacheGist(token, canonicalGistId, body);
+      if (updatedGist) {
+        return updatedGist;
+      }
     }
   }
 

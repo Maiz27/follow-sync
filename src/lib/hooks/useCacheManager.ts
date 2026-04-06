@@ -103,6 +103,8 @@ export const useCacheManager = () => {
 
       const isForced = useGistStore.getState().forceNextRefresh;
       const currentGistName = useGistStore.getState().gistName;
+      let activeGistName = currentGistName;
+      let duplicateCacheCount = useGistStore.getState().duplicateGistCount;
 
       if (isForced) {
         useGistStore.getState().setForceNextRefresh(false);
@@ -115,7 +117,8 @@ export const useCacheManager = () => {
           preferredGistId: currentGistName,
         });
 
-        setDuplicateGistCount(duplicateGists.length);
+        duplicateCacheCount = duplicateGists.length;
+        setDuplicateGistCount(duplicateCacheCount);
 
         if (canonicalGist) {
           const cachedData = parseCache(canonicalGist);
@@ -124,7 +127,8 @@ export const useCacheManager = () => {
               cachedData,
               username
             );
-            setGistName(getGistIdentifier(canonicalGist));
+            activeGistName = getGistIdentifier(canonicalGist);
+            setGistName(activeGistName);
 
             if (duplicateGists.length > 0) {
               toast.info(
@@ -144,7 +148,8 @@ export const useCacheManager = () => {
                 normalizedCachedData,
                 canonicalGist.id
               );
-              setGistName(migratedGist.id);
+              activeGistName = migratedGist.id;
+              setGistName(activeGistName);
             }
 
             const totalConnections =
@@ -171,8 +176,6 @@ export const useCacheManager = () => {
           }
         }
       }
-
-      setDuplicateGistCount(0);
 
       const fetchStart = performance.now();
       show({
@@ -227,12 +230,15 @@ export const useCacheManager = () => {
           },
         };
 
-        const newGist = await writeCache(token, dataToCache, currentGistName);
+        const newGist = await writeCache(token, dataToCache, activeGistName, {
+          discoverCanonicalFallback: isForced || !activeGistName,
+        });
 
         setNetwork(network);
+        setGhosts([]);
         setGistData({ timestamp, metadata: dataToCache.metadata });
         setGistName(newGist.id);
-        setDuplicateGistCount(0);
+        setDuplicateGistCount(duplicateCacheCount);
         complete();
 
         return network;
@@ -246,6 +252,7 @@ export const useCacheManager = () => {
     [
       settings,
       loadFromCache,
+      setGhosts,
       setDuplicateGistCount,
       setGistName,
       setNetwork,
