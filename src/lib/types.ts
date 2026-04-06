@@ -1,5 +1,18 @@
-import { GetGistByNameQuery, UserInfoFragment } from './gql/types';
+import { UserInfoFragment } from './gql/types';
 import { SettingsState } from './store/settings';
+
+export interface CacheGistFile {
+  name: string;
+  text?: string | null;
+}
+
+export interface CacheGist {
+  id: string;
+  name?: string | null;
+  description?: string | null;
+  updatedAt?: string | null;
+  files: CacheGistFile[];
+}
 
 export interface CachedData {
   network: {
@@ -13,11 +26,10 @@ export interface CachedData {
     totalConnections: number;
     fetchDuration: number;
     cacheVersion: string;
+    ownerLogin?: string;
+    cacheKey?: string;
   };
 }
-
-// Type guard for our Gist object from GraphQL.
-export type CacheGist = GetGistByNameQuery['viewer']['gist'];
 
 export type textSizes =
   | 'xs'
@@ -32,15 +44,21 @@ export type textSizes =
   | '6xl'
   | '7xl';
 
+export interface ProgressCallbackItem {
+  label: string;
+  current: number;
+  total: number;
+  isApproximateTotal?: boolean;
+}
+
 // Define the structure for progress callbacks to decouple from the hook
 export interface ProgressCallbacks {
   show: (config: {
     title: string;
     message: string;
-    items: { label: string; current: number; total: number }[];
+    items: ProgressCallbackItem[];
   }) => void;
-  update: (items: { label: string; current: number; total: number }[]) => void;
+  update: (items: ProgressCallbackItem[]) => void;
   complete: () => void;
   fail: (config: { message: string }) => void;
 }
-

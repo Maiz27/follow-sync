@@ -22,8 +22,56 @@ export interface FetchProgress {
   totalFollowers: number;
   fetchedFollowing: number;
   totalFollowing: number;
+  hasFollowerTotalMismatch: boolean;
+  hasFollowingTotalMismatch: boolean;
   // We can add more details here later, like the current user being fetched.
 }
+
+type GraphQLErrorLike = {
+  response?: {
+    errors?: Array<{
+      message?: string;
+    }>;
+  };
+};
+
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (typeof error === 'object' && error !== null) {
+    const graphQLError = error as GraphQLErrorLike;
+    const responseMessage = graphQLError.response?.errors?.[0]?.message;
+
+    if (responseMessage) {
+      return responseMessage;
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallbackMessage;
+};
+
+const getAccountKey = (user: Pick<User, 'id' | 'login'>) =>
+  user.id || user.login.toLowerCase();
+
+const mergeUniqueUsers = (
+  target: User[],
+  incoming: User[] | null | undefined,
+  seen: Set<string>
+) => {
+  if (!incoming?.length) return;
+
+  for (const user of incoming) {
+    if (!user?.login) continue;
+
+    const accountKey = getAccountKey(user);
+    if (seen.has(accountKey)) continue;
+
+    seen.add(accountKey);
+    target.push(user);
+  }
+};
 
 /**
  * Fetches all followers and following for a given GitHub user, with progress reporting.
@@ -34,7 +82,7 @@ export interface FetchProgress {
 export const fetchAllUserFollowersAndFollowing = async ({
   client,
   username,
-  onProgress, // The new callback parameter
+  onProgress,
 }: {
   client: GraphQLClient;
   username: string;
@@ -48,6 +96,8 @@ export const fetchAllUserFollowersAndFollowing = async ({
     nodes: [],
     totalCount: 0,
   };
+  const seenFollowerAccounts = new Set<string>();
+  const seenFollowingAccounts = new Set<string>();
 
   let hasNextPageFollowers = true;
   let hasNextPageFollowing = true;
@@ -72,10 +122,13 @@ export const fetchAllUserFollowersAndFollowing = async ({
         GetUserFollowersAndFollowingQueryVariables
       >(GET_USER_FOLLOWERS_AND_FOLLOWING, variables);
 
-      // Process Followers data
       if (hasNextPageFollowers && data.user?.followers) {
         const { nodes, totalCount, pageInfo } = data.user.followers;
-        allFollowers.nodes?.push(...(nodes as User[]));
+        mergeUniqueUsers(
+          allFollowers.nodes as User[],
+          nodes as User[],
+          seenFollowerAccounts
+        );
         if (allFollowers.totalCount === 0) {
           allFollowers.totalCount = totalCount;
         }
@@ -83,10 +136,13 @@ export const fetchAllUserFollowersAndFollowing = async ({
         currentCursorFollowers = pageInfo?.endCursor || null;
       }
 
-      // Process Following data
       if (hasNextPageFollowing && data.user?.following) {
         const { nodes, totalCount, pageInfo } = data.user.following;
-        allFollowing.nodes?.push(...(nodes as User[]));
+        mergeUniqueUsers(
+          allFollowing.nodes as User[],
+          nodes as User[],
+          seenFollowingAccounts
+        );
         if (allFollowing.totalCount === 0) {
           allFollowing.totalCount = totalCount;
         }
@@ -94,26 +150,24 @@ export const fetchAllUserFollowersAndFollowing = async ({
         currentCursorFollowing = pageInfo?.endCursor || null;
       }
 
-      // *** Report Progress ***
-      // Invoke the callback with the latest numbers after each API call.
       onProgress?.({
         fetchedFollowers: allFollowers.nodes?.length || 0,
         totalFollowers: allFollowers.totalCount,
         fetchedFollowing: allFollowing.nodes?.length || 0,
         totalFollowing: allFollowing.totalCount,
+        hasFollowerTotalMismatch:
+          (allFollowers.nodes?.length || 0) > allFollowers.totalCount,
+        hasFollowingTotalMismatch:
+          (allFollowing.nodes?.length || 0) > allFollowing.totalCount,
       });
 
-      // Small delay to be polite to the GitHub API
       if (hasNextPageFollowers || hasNextPageFollowing) {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error fetching paginated follow data:', error);
-      // Re-throw the error to be caught by React Query
       throw new Error(
-        error.response?.errors?.[0]?.message ||
-          'Failed to fetch paginated follow data.'
+        getErrorMessage(error, 'Failed to fetch paginated follow data.')
       );
     }
   }
@@ -121,11 +175,6 @@ export const fetchAllUserFollowersAndFollowing = async ({
   return { followers: allFollowers, following: allFollowing };
 };
 
-/**
- * Follows a user on GitHub.
- * @param client - The authenticated GraphQL client.
- * @param userId - The ID of the user to follow.
- */
 export const followUser = async ({
   client,
   userId,
@@ -139,20 +188,12 @@ export const followUser = async ({
       FollowUserMutationVariables
     >(FOLLOW_USER, { userId });
     return response;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error following user:', error);
-    throw new Error(
-      error.response?.errors?.[0]?.message || 'Failed to follow user.'
-    );
+    throw new Error(getErrorMessage(error, 'Failed to follow user.'));
   }
 };
 
-/**
- * Unfollows a user on GitHub.
- * @param client - The authenticated GraphQL client.
- * @param userId - The ID of the user to unfollow.
- */
 export const unfollowUser = async ({
   client,
   userId,
@@ -166,11 +207,8 @@ export const unfollowUser = async ({
       UnfollowUserMutationVariables
     >(UNFOLLOW_USER, { userId });
     return response;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error unfollowing user:', error);
-    throw new Error(
-      error.response?.errors?.[0]?.message || 'Failed to unfollow user.'
-    );
+    throw new Error(getErrorMessage(error, 'Failed to unfollow user.'));
   }
 };

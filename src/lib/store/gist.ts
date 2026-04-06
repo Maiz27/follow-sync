@@ -6,11 +6,13 @@ export type GistState = {
   timestamp: number | null;
   gistName: string | null;
   metadata: CachedData['metadata'] | null;
+  duplicateGistCount: number;
   forceNextRefresh: boolean;
 };
 
 export type GistActions = {
   setGistName: (gistName: string | null) => void;
+  setDuplicateGistCount: (count: number) => void;
   setForceNextRefresh: (force: boolean) => void;
   setGistData: (data: {
     timestamp: number;
@@ -25,6 +27,7 @@ const initialState: GistState = {
   timestamp: null,
   gistName: null,
   metadata: null,
+  duplicateGistCount: 0,
   forceNextRefresh: false,
 };
 
@@ -37,6 +40,9 @@ export const useGistStore = create<GistStore>((set) => ({
       window.localStorage.removeItem(GIST_ID_STORAGE_KEY);
     }
     set({ gistName });
+  },
+  setDuplicateGistCount: (duplicateGistCount) => {
+    set({ duplicateGistCount });
   },
   setForceNextRefresh: (force) => {
     set({ forceNextRefresh: force });

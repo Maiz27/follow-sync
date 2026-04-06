@@ -7,9 +7,19 @@ import { useGistStore } from '@/lib/store/gist';
 import { useGhostStore } from '@/lib/store/ghost';
 import { useSettingsStore } from '@/lib/store/settings';
 
-import { findCacheGist, parseCache, writeCache } from '@/lib/gist';
+import {
+  buildCacheKey,
+  cleanupDuplicateCacheGists,
+  findCanonicalCacheGist,
+  getGistIdentifier,
+  normalizeCachedData,
+  parseCache,
+  shouldMigrateCanonicalCache,
+  writeCache,
+} from '@/lib/gist';
 import { fetchAllUserFollowersAndFollowing } from '@/lib/gql/fetchers';
 import {
+  GIST_CACHE_VERSION,
   GIST_ID_STORAGE_KEY,
   STALE_TIME_LARGE,
   STALE_TIME_MANUAL_ONLY,
@@ -20,14 +30,44 @@ import { CachedData, ProgressCallbacks } from '@/lib/types';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { useSession } from 'next-auth/react';
 
+const getStaleTime = (
+  totalConnections: number,
+  customStaleTime: number | null
+) => {
+  if (customStaleTime) {
+    return customStaleTime * 60 * 1000;
+  }
+
+  if (totalConnections <= 2000) {
+    return STALE_TIME_SMALL;
+  }
+
+  if (totalConnections <= 10000) {
+    return STALE_TIME_MEDIUM;
+  }
+
+  if (totalConnections <= 50000) {
+    return STALE_TIME_LARGE;
+  }
+
+  return STALE_TIME_MANUAL_ONLY;
+};
+
 export const useCacheManager = () => {
   const setNetwork = useNetworkStore((state) => state.setNetwork);
-  const { setGhosts, addGhosts } = useGhostStore();
-  const { setGistName, setGistData, setTimestamp } = useGistStore();
+  const setGhosts = useGhostStore((state) => state.setGhosts);
+  const addGhosts = useGhostStore((state) => state.addGhosts);
+  const setGistName = useGistStore((state) => state.setGistName);
+  const setDuplicateGistCount = useGistStore(
+    (state) => state.setDuplicateGistCount
+  );
+  const setGistData = useGistStore((state) => state.setGistData);
+  const setTimestamp = useGistStore((state) => state.setTimestamp);
   const settings = useSettingsStore();
 
   const { data } = useSession();
   const accessToken = data?.accessToken;
+  const sessionOwnerLogin = data?.user?.login;
 
   const loadFromCache = useCallback(
     (cachedData: CachedData) => {
@@ -54,7 +94,7 @@ export const useCacheManager = () => {
     async (
       client: GraphQLClient,
       username: string,
-      accessToken: string,
+      token: string,
       progress: ProgressCallbacks
     ) => {
       const { show, update, complete, fail } = progress;
@@ -69,44 +109,62 @@ export const useCacheManager = () => {
       }
 
       if (!isForced) {
-        const foundGist = await findCacheGist(client, currentGistName);
-        if (foundGist) {
-          const cachedData = parseCache(foundGist);
-          if (cachedData) {
-            setGistName(foundGist.name);
-            const totalConnections = cachedData.metadata.totalConnections;
-            const { customStaleTime } = settings;
+        const { canonicalGist, duplicateGists } = await findCanonicalCacheGist({
+          token,
+          ownerLogin: username,
+          preferredGistId: currentGistName,
+        });
 
-            let staleTime = 0;
-            if (customStaleTime) {
-              staleTime = customStaleTime * 60 * 1000;
-            } else if (totalConnections <= 2000) {
-              staleTime = STALE_TIME_SMALL;
-            } else if (totalConnections <= 10000) {
-              staleTime = STALE_TIME_MEDIUM;
-            } else if (totalConnections <= 50000) {
-              staleTime = STALE_TIME_LARGE;
-            } else {
-              staleTime = STALE_TIME_MANUAL_ONLY;
+        setDuplicateGistCount(duplicateGists.length);
+
+        if (canonicalGist) {
+          const cachedData = parseCache(canonicalGist);
+          if (cachedData) {
+            const normalizedCachedData = normalizeCachedData(cachedData, username);
+            setGistName(getGistIdentifier(canonicalGist));
+
+            if (duplicateGists.length > 0) {
+              toast.info(
+                `Found ${duplicateGists.length + 1} cache gists. Using the newest canonical cache.`
+              );
             }
 
-            const isStale = Date.now() - cachedData.timestamp > staleTime;
-            loadFromCache(cachedData);
+            if (
+              shouldMigrateCanonicalCache(
+                canonicalGist,
+                normalizedCachedData,
+                username
+              )
+            ) {
+              const migratedGist = await writeCache(
+                token,
+                normalizedCachedData,
+                canonicalGist.id
+              );
+              setGistName(migratedGist.id);
+            }
+
+            const totalConnections = normalizedCachedData.metadata.totalConnections;
+            const staleTime = getStaleTime(totalConnections, settings.customStaleTime);
+            const isStale = Date.now() - normalizedCachedData.timestamp > staleTime;
+            loadFromCache(normalizedCachedData);
 
             if (!isStale) {
               toast.info('Loaded fresh data from cache.');
-              return cachedData.network;
+              return normalizedCachedData.network;
             }
 
             if (staleTime === STALE_TIME_MANUAL_ONLY) {
               toast.info(
                 'Data loaded from cache. Refresh manually for the latest update.'
               );
-              return cachedData.network;
+              return normalizedCachedData.network;
             }
           }
         }
       }
+
+      setDuplicateGistCount(0);
 
       const fetchStart = performance.now();
       show({
@@ -128,11 +186,13 @@ export const useCacheManager = () => {
                 label: 'Followers',
                 current: p.fetchedFollowers,
                 total: p.totalFollowers,
+                isApproximateTotal: p.hasFollowerTotalMismatch,
               },
               {
                 label: 'Following',
                 current: p.fetchedFollowing,
                 total: p.totalFollowing,
+                isApproximateTotal: p.hasFollowingTotalMismatch,
               },
             ]);
           },
@@ -153,29 +213,36 @@ export const useCacheManager = () => {
           metadata: {
             totalConnections: followers.length + following.length,
             fetchDuration,
-            cacheVersion: '1.0',
+            cacheVersion: GIST_CACHE_VERSION,
+            ownerLogin: username.toLowerCase(),
+            cacheKey: buildCacheKey(username),
           },
         };
 
-        const newGist = await writeCache(
-          accessToken,
-          dataToCache,
-          currentGistName
-        );
+        const newGist = await writeCache(token, dataToCache, currentGistName);
 
         setNetwork(network);
         setGistData({ timestamp, metadata: dataToCache.metadata });
         setGistName(newGist.id);
+        setDuplicateGistCount(0);
         complete();
 
         return network;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } catch (err: any) {
-        fail({ message: err.message || 'Failed to sync network.' });
-        throw err;
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : 'Failed to sync network.';
+        fail({ message });
+        throw error;
       }
     },
-    [settings, loadFromCache, setGistName, setNetwork, setGistData]
+    [
+      settings,
+      loadFromCache,
+      setDuplicateGistCount,
+      setGistName,
+      setNetwork,
+      setGistData,
+    ]
   );
 
   const persistChanges = useCallback(async () => {
@@ -187,19 +254,76 @@ export const useCacheManager = () => {
     const currentSettings = useSettingsStore.getState();
 
     if (!network || !metadata) return;
+
+    const ownerLogin = metadata.ownerLogin ?? sessionOwnerLogin;
+    if (!ownerLogin) {
+      throw new Error('Cannot persist cache without a known owner login.');
+    }
+
     const newTimestamp = Date.now();
     setTimestamp(newTimestamp);
+
+    const normalizedMetadata = {
+      ...metadata,
+      cacheVersion: GIST_CACHE_VERSION,
+      ownerLogin: ownerLogin.toLowerCase(),
+      cacheKey: metadata.cacheKey ?? buildCacheKey(ownerLogin),
+    };
 
     const dataToCache: CachedData = {
       network,
       ghosts,
       settings: currentSettings,
       timestamp: newTimestamp,
-      metadata,
+      metadata: normalizedMetadata,
     };
 
-    await writeCache(accessToken, dataToCache, gistName);
-  }, [accessToken, setTimestamp]);
+    const updatedGist = await writeCache(accessToken, dataToCache, gistName);
+    setGistName(updatedGist.id);
+    setGistData({ timestamp: newTimestamp, metadata: normalizedMetadata });
+  }, [accessToken, sessionOwnerLogin, setTimestamp, setGistData, setGistName]);
+
+  const cleanupDuplicateCaches = useCallback(async () => {
+    if (!accessToken) {
+      throw new Error('Authentication is required to clean up duplicate caches.');
+    }
+
+    const { metadata, gistName } = useGistStore.getState();
+    const ownerLogin = metadata?.ownerLogin ?? sessionOwnerLogin;
+
+    if (!ownerLogin) {
+      throw new Error('Could not determine which cache gists belong to this account.');
+    }
+
+    const result = await cleanupDuplicateCacheGists({
+      token: accessToken,
+      ownerLogin,
+      preferredGistId: gistName,
+    });
+
+    if (result.canonicalGist) {
+      setGistName(result.canonicalGist.id);
+    }
+
+    setDuplicateGistCount(result.remainingDuplicateCount);
+
+    if (result.deletedCount === 0 && result.remainingDuplicateCount === 0) {
+      toast.info('No duplicate cache gists found.');
+      return result;
+    }
+
+    if (result.remainingDuplicateCount > 0) {
+      toast.error(
+        `Deleted ${result.deletedCount} duplicate cache gist(s), but ${result.remainingDuplicateCount} still remain.`
+      );
+      return result;
+    }
+
+    toast.success(
+      `Deleted ${result.deletedCount} duplicate cache gist(s).`
+    );
+    return result;
+  }, [accessToken, sessionOwnerLogin, setDuplicateGistCount, setGistName]);
 
   const updateGhosts = useCallback(
     async (newGhosts: UserInfoFragment[]) => {
@@ -213,6 +337,7 @@ export const useCacheManager = () => {
     initializeAndFetchNetwork,
     loadFromCache,
     persistChanges,
+    cleanupDuplicateCaches,
     updateGhosts,
   };
 };
