@@ -85,7 +85,9 @@ const fetchGitHubJson = async <T>(
     } catch {
       errorBody = await response.text().catch(() => null);
     }
-    throw new Error(`GitHub Gist request failed (${response.status}): ${JSON.stringify(errorBody)}`);
+    throw new Error(
+      `GitHub Gist request failed (${response.status}): ${JSON.stringify(errorBody)}`
+    );
   }
 
   return (await response.json()) as T;
@@ -128,8 +130,12 @@ const isPotentialCacheGistSummary = (gist: GitHubGistSummary) => {
     return false;
   }
 
-  const filenames = Object.values(gist.files ?? {}).map((file) => file.filename);
-  return isCacheDescription(gist.description) || filenames.includes(GIST_FILENAME);
+  const filenames = Object.values(gist.files ?? {}).map(
+    (file) => file.filename
+  );
+  return (
+    isCacheDescription(gist.description) || filenames.includes(GIST_FILENAME)
+  );
 };
 
 const mapWithConcurrency = async <TInput, TOutput>(
@@ -180,7 +186,8 @@ const sortByRecencyDesc = (left?: string | null, right?: string | null) => {
 
 const selectCanonicalCacheGist = (gists: CacheGist[], ownerLogin: string) => {
   return [...gists].sort((left, right) => {
-    const scoreDelta = scoreCacheGist(right, ownerLogin) - scoreCacheGist(left, ownerLogin);
+    const scoreDelta =
+      scoreCacheGist(right, ownerLogin) - scoreCacheGist(left, ownerLogin);
     if (scoreDelta !== 0) {
       return scoreDelta;
     }
@@ -201,7 +208,9 @@ const needsMetadataMigration = (cachedData: CachedData, ownerLogin: string) => {
 const needsDescriptionMigration = (gist: CacheGist, ownerLogin: string) =>
   gist.description !== buildCacheDescription(ownerLogin);
 
-export const getGistIdentifier = (gist: Partial<CacheGist> | null | undefined) => {
+export const getGistIdentifier = (
+  gist: Partial<CacheGist> | null | undefined
+) => {
   if (!gist) return null;
 
   return gist.id ?? gist.name ?? null;
@@ -212,7 +221,9 @@ export const getGistIdentifier = (gist: Partial<CacheGist> | null | undefined) =
  */
 export const parseCache = (gist: CacheGist): CachedData | null => {
   try {
-    const file = gist.files.find((candidate) => candidate.name === GIST_FILENAME);
+    const file = gist.files.find(
+      (candidate) => candidate.name === GIST_FILENAME
+    );
     const content = file?.text;
     if (!content) return null;
     return JSON.parse(content) as CachedData;
@@ -226,9 +237,7 @@ export const normalizeCachedData = (
   cachedData: CachedData,
   ownerLogin: string
 ): CachedData => {
-  const normalizedOwnerLogin = normalizeOwnerLogin(
-    cachedData.metadata.ownerLogin ?? ownerLogin
-  );
+  const normalizedOwnerLogin = normalizeOwnerLogin(ownerLogin);
 
   return {
     ...cachedData,
@@ -236,7 +245,7 @@ export const normalizeCachedData = (
       ...cachedData.metadata,
       cacheVersion: GIST_CACHE_VERSION,
       ownerLogin: normalizedOwnerLogin,
-      cacheKey: cachedData.metadata.cacheKey ?? getExpectedCacheKey(normalizedOwnerLogin),
+      cacheKey: getExpectedCacheKey(normalizedOwnerLogin),
     },
   };
 };
@@ -255,7 +264,11 @@ export const findCanonicalCacheGist = async ({
   if (preferredGistId) {
     try {
       const preferredGist = await fetchGistById(token, preferredGistId);
-      if (preferredGist && (isCacheDescription(preferredGist.description) || hasCacheFilename(preferredGist))) {
+      if (
+        preferredGist &&
+        (isCacheDescription(preferredGist.description) ||
+          hasCacheFilename(preferredGist))
+      ) {
         candidateMap.set(preferredGist.id, preferredGist);
       }
     } catch (error) {
@@ -297,7 +310,10 @@ export const findCanonicalCacheGist = async ({
     return { canonicalGist: null, duplicateGists: [] };
   }
 
-  const sortedCandidates = selectCanonicalCacheGist(validCandidates, ownerLogin);
+  const sortedCandidates = selectCanonicalCacheGist(
+    validCandidates,
+    ownerLogin
+  );
   const [canonicalGist, ...duplicateGists] = sortedCandidates;
 
   return {
@@ -317,7 +333,7 @@ const updateCacheGist = async (
     body: JSON.stringify(body),
   });
 
-  if (response.status === 404 || response.status === 422) {
+  if (response.status === 404) {
     return null;
   }
 
@@ -328,7 +344,9 @@ const updateCacheGist = async (
     } catch {
       errorBody = await response.text().catch(() => null);
     }
-    throw new Error(`Failed to update Gist cache: ${JSON.stringify(errorBody)}`);
+    throw new Error(
+      `Failed to update Gist cache: ${JSON.stringify(errorBody)}`
+    );
   }
 
   return toCacheGist((await response.json()) as GitHubGistDetail);
@@ -368,7 +386,9 @@ export const deleteGist = async (token: string, gistId: string) => {
     } catch {
       errorBody = await response.text().catch(() => null);
     }
-    throw new Error(`Failed to delete Gist cache: ${JSON.stringify(errorBody)}`);
+    throw new Error(
+      `Failed to delete Gist cache: ${JSON.stringify(errorBody)}`
+    );
   }
 
   return true;
@@ -438,8 +458,14 @@ export const writeCache = async (
   }
 
   const normalizedData = normalizeCachedData(data, ownerLogin);
+  const normalizedOwnerLogin = normalizedData.metadata.ownerLogin;
+
+  if (!normalizedOwnerLogin) {
+    throw new Error('Cannot write cache without a normalized owner login.');
+  }
+
   const body = {
-    description: buildCacheDescription(ownerLogin),
+    description: buildCacheDescription(normalizedOwnerLogin),
     files: {
       [GIST_FILENAME]: {
         content: JSON.stringify(normalizedData, null, 2),
@@ -455,7 +481,7 @@ export const writeCache = async (
 
   const discoveryResult = await findCanonicalCacheGist({
     token,
-    ownerLogin,
+    ownerLogin: normalizedOwnerLogin,
     preferredGistId: gistId,
   });
 
@@ -483,6 +509,3 @@ export const shouldMigrateCanonicalCache = (
     needsDescriptionMigration(gist, ownerLogin)
   );
 };
-
-
-

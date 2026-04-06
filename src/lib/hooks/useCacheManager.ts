@@ -120,7 +120,10 @@ export const useCacheManager = () => {
         if (canonicalGist) {
           const cachedData = parseCache(canonicalGist);
           if (cachedData) {
-            const normalizedCachedData = normalizeCachedData(cachedData, username);
+            const normalizedCachedData = normalizeCachedData(
+              cachedData,
+              username
+            );
             setGistName(getGistIdentifier(canonicalGist));
 
             if (duplicateGists.length > 0) {
@@ -144,9 +147,14 @@ export const useCacheManager = () => {
               setGistName(migratedGist.id);
             }
 
-            const totalConnections = normalizedCachedData.metadata.totalConnections;
-            const staleTime = getStaleTime(totalConnections, settings.customStaleTime);
-            const isStale = Date.now() - normalizedCachedData.timestamp > staleTime;
+            const totalConnections =
+              normalizedCachedData.metadata.totalConnections;
+            const staleTime = getStaleTime(
+              totalConnections,
+              settings.customStaleTime
+            );
+            const isStale =
+              Date.now() - normalizedCachedData.timestamp > staleTime;
             loadFromCache(normalizedCachedData);
 
             if (!isStale) {
@@ -255,7 +263,7 @@ export const useCacheManager = () => {
 
     if (!network || !metadata) return;
 
-    const ownerLogin = metadata.ownerLogin ?? sessionOwnerLogin;
+    const ownerLogin = sessionOwnerLogin ?? metadata.ownerLogin;
     if (!ownerLogin) {
       throw new Error('Cannot persist cache without a known owner login.');
     }
@@ -267,7 +275,7 @@ export const useCacheManager = () => {
       ...metadata,
       cacheVersion: GIST_CACHE_VERSION,
       ownerLogin: ownerLogin.toLowerCase(),
-      cacheKey: metadata.cacheKey ?? buildCacheKey(ownerLogin),
+      cacheKey: buildCacheKey(ownerLogin),
     };
 
     const dataToCache: CachedData = {
@@ -285,14 +293,18 @@ export const useCacheManager = () => {
 
   const cleanupDuplicateCaches = useCallback(async () => {
     if (!accessToken) {
-      throw new Error('Authentication is required to clean up duplicate caches.');
+      throw new Error(
+        'Authentication is required to clean up duplicate caches.'
+      );
     }
 
     const { metadata, gistName } = useGistStore.getState();
-    const ownerLogin = metadata?.ownerLogin ?? sessionOwnerLogin;
+    const ownerLogin = sessionOwnerLogin ?? metadata?.ownerLogin;
 
     if (!ownerLogin) {
-      throw new Error('Could not determine which cache gists belong to this account.');
+      throw new Error(
+        'Could not determine which cache gists belong to this account.'
+      );
     }
 
     const result = await cleanupDuplicateCacheGists({
@@ -319,9 +331,7 @@ export const useCacheManager = () => {
       return result;
     }
 
-    toast.success(
-      `Deleted ${result.deletedCount} duplicate cache gist(s).`
-    );
+    toast.success(`Deleted ${result.deletedCount} duplicate cache gist(s).`);
     return result;
   }, [accessToken, sessionOwnerLogin, setDuplicateGistCount, setGistName]);
 
