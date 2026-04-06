@@ -35,6 +35,7 @@ const FollowersTab = ({ followers }: FollowersTabProps) => {
       <PaginatedList
         listId={TAB_ID}
         data={followers}
+        getItemKey={(item) => item!.id || item!.login}
         renderItem={(item) => <ConnectionCard user={item!} />}
       />
     </>
@@ -42,3 +43,4 @@ const FollowersTab = ({ followers }: FollowersTabProps) => {
 };
 
 export default FollowersTab;
+

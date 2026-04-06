@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 export type Tab = {
   id: string;
-  label: string;
+  label: React.ReactNode;
   component: React.ReactNode;
 };
 

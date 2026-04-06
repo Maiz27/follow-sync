@@ -8,6 +8,7 @@ interface PaginatedListProps<T> {
   listId: string;
   data: T[];
   renderItem: (item: T) => React.ReactNode;
+  getItemKey?: (item: T, index: number) => React.Key;
   itemsPerPage?: number;
   maxPagesToShow?: number;
   gridClassName?: string;
@@ -18,9 +19,10 @@ interface PaginatedListProps<T> {
 const PaginatedList = <T,>({
   listId,
   data,
+  renderItem,
+  getItemKey,
   itemsPerPage = DEFAULT_PAGE_SIZE,
   maxPagesToShow = 5,
-  renderItem,
   gridClassName,
   emptyMessage,
   paginationControlsClassName,
@@ -40,6 +42,7 @@ const PaginatedList = <T,>({
       <List
         data={currentPageItems}
         renderItem={renderItem}
+        getItemKey={getItemKey}
         gridClassName={gridClassName}
         emptyMessage={emptyMessage}
       />

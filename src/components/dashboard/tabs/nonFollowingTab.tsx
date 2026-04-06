@@ -33,8 +33,9 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
     TAB_ID,
     oneWayIn.map((u) => u!.login)
   );
+
   const { execute: bulkFollow, isPending: isBulkFollowing } = useBulkOperation(
-    mutateAsync,
+    (user) => mutateAsync({ user, persist: false }),
     'Following',
     () => {
       persistChanges();
@@ -76,6 +77,7 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
       <PaginatedList
         listId={TAB_ID}
         data={oneWayIn}
+        getItemKey={(item) => item!.id || item!.login}
         renderItem={(item) => (
           <ConnectionCard
             user={item!}
@@ -85,15 +87,17 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
             }}
             action={{
               onClick: () =>
-                mutate(item!, {
-                  onSuccess: () => {
-                    if (selectedIds.has(item!.login)) {
-                      handleDeselect(item!.login);
-                    }
-                    persistChanges();
-                    incrementActionCount();
-                  },
-                }),
+                mutate(
+                  { user: item!, persist: true },
+                  {
+                    onSuccess: () => {
+                      if (selectedIds.has(item!.login)) {
+                        handleDeselect(item!.login);
+                      }
+                      incrementActionCount();
+                    },
+                  }
+                ),
               label: 'Follow',
               loading: isPending,
             }}

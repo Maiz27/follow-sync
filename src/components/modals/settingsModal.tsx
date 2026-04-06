@@ -11,6 +11,7 @@ import {
 import { useModalsStore } from '@/lib/store/modals';
 import { useSettingsStore } from '@/lib/store/settings';
 import { useCacheManager } from '@/lib/hooks/useCacheManager';
+import { useGistStore } from '@/lib/store/gist';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -23,7 +24,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '../ui/button';
 import { PAGE_SIZE_LIST } from '@/lib/constants';
-import { LuInfo } from 'react-icons/lu';
+import { LuInfo, LuTrash2 } from 'react-icons/lu';
 import {
   HoverCard,
   HoverCardContent,
@@ -32,7 +33,9 @@ import {
 
 const SettingsModal = () => {
   const [isSaving, setIsSaving] = useState(false);
+  const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
   const { modal, closeModal } = useModalsStore();
+  const duplicateGistCount = useGistStore((state) => state.duplicateGistCount);
   const {
     showAvatars,
     ghostDetectionBatchSize,
@@ -44,7 +47,7 @@ const SettingsModal = () => {
     setCustomStaleTime,
     saveSettings,
   } = useSettingsStore();
-  const { persistChanges } = useCacheManager();
+  const { persistChanges, cleanupDuplicateCaches } = useCacheManager();
   const { data: session } = useSession();
   const accessToken = session?.accessToken;
 
@@ -54,6 +57,15 @@ const SettingsModal = () => {
     await saveSettings(accessToken, persistChanges);
     setIsSaving(false);
     closeModal();
+  };
+
+  const handleCleanupDuplicates = async () => {
+    setIsCleaningDuplicates(true);
+    try {
+      await cleanupDuplicateCaches();
+    } finally {
+      setIsCleaningDuplicates(false);
+    }
   };
 
   return (
@@ -80,6 +92,20 @@ const SettingsModal = () => {
           <div className='grid grid-cols-4 items-center gap-4'>
             <Label htmlFor='ghost-batch-size' className='col-span-2 text-right'>
               Ghost Batch Size
+              <HoverCard>
+                <HoverCardTrigger>
+                  <Button variant='link'>
+                    <LuInfo />
+                  </Button>
+                </HoverCardTrigger>
+                <HoverCardContent>
+                  <p className='col-span-4 text-xs text-muted-foreground'>
+                    Controls how many suspected ghost accounts are checked per
+                    request. Larger batches finish faster, but may increase API
+                    load or make retries more expensive if a request fails.
+                  </p>
+                </HoverCardContent>
+              </HoverCard>
             </Label>
             <Input
               id='ghost-batch-size'
@@ -148,6 +174,28 @@ const SettingsModal = () => {
               placeholder='Disabled'
             />
           </div>
+          <div className='grid gap-2 rounded-md border p-4'>
+            <div className='flex items-center justify-between gap-4'>
+              <div>
+                <p className='text-sm font-medium'>Duplicate cache gists</p>
+                <p className='text-xs text-muted-foreground'>
+                  {duplicateGistCount > 0
+                    ? `${duplicateGistCount} duplicate cache gist(s) detected. Cleanup deletes only non-canonical cache gists.`
+                    : 'No duplicate cache gists detected.'}
+                </p>
+              </div>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={handleCleanupDuplicates}
+                disabled={duplicateGistCount === 0 || isCleaningDuplicates}
+                className={isCleaningDuplicates ? 'animate-pulse' : ''}
+              >
+                <LuTrash2 />
+                {isCleaningDuplicates ? 'Cleaning...' : 'Clean Up'}
+              </Button>
+            </div>
+          </div>
         </div>
         <DialogFooter>
           <Button
@@ -164,3 +212,4 @@ const SettingsModal = () => {
 };
 
 export default SettingsModal;
+

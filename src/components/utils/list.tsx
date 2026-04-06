@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 type ListProps<T> = {
   data: T[];
   renderItem: (item: T) => React.ReactNode;
+  getItemKey?: (item: T, index: number) => React.Key;
   gridClassName?: string;
   emptyMessage?: string;
 };
@@ -11,6 +12,7 @@ type ListProps<T> = {
 const List = <T,>({
   data,
   renderItem,
+  getItemKey,
   gridClassName,
   emptyMessage = 'No items to display.',
 }: ListProps<T>) => {
@@ -26,10 +28,13 @@ const List = <T,>({
       )}
     >
       {data.map((item, index) => (
-        <Fragment key={index}>{renderItem(item)}</Fragment>
+        <Fragment key={getItemKey ? getItemKey(item, index) : index}>
+          {renderItem(item)}
+        </Fragment>
       ))}
     </div>
   );
 };
 
 export default List;
+

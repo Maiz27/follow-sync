@@ -1,11 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { useGhostStore } from '@/lib/store/ghost';
 import { useNetworkStore } from '@/lib/store/network';
 import { useSettingsStore } from '@/lib/store/settings';
 import { useCacheManager } from './useCacheManager';
+import { UserInfoFragment } from '@/lib/gql/types';
 
-const DELAY_BETWEEN_BATCHES = 1000; // 1 second
+const DELAY_BETWEEN_BATCHES = 250;
 
 interface GhostDetectorProps {
   isNetworkReady: boolean;
@@ -14,34 +15,48 @@ interface GhostDetectorProps {
 export const useGhostDetector = ({ isNetworkReady }: GhostDetectorProps) => {
   const { data: session } = useSession();
   const accessToken = session?.accessToken;
-  const { nonMutuals } = useNetworkStore();
-  const { nonMutualsFollowingYou, nonMutualsYouFollow } = nonMutuals;
-  const { ghosts, setIsCheckingGhosts } = useGhostStore();
-  const { ghostDetectionBatchSize } = useSettingsStore();
+  const nonMutualsFollowingYou = useNetworkStore(
+    (state) => state.nonMutuals.nonMutualsFollowingYou
+  );
+  const nonMutualsYouFollow = useNetworkStore(
+    (state) => state.nonMutuals.nonMutualsYouFollow
+  );
+  const setIsCheckingGhosts = useGhostStore((state) => state.setIsCheckingGhosts);
+  const ghostDetectionBatchSize = useSettingsStore(
+    (state) => state.ghostDetectionBatchSize
+  );
   const { updateGhosts } = useCacheManager();
 
+  const potentialGhosts = useMemo(() => {
+    const candidates = new Map<string, UserInfoFragment>();
+
+    for (const user of [...nonMutualsYouFollow, ...nonMutualsFollowingYou]) {
+      if (
+        !user?.login ||
+        user.followers.totalCount !== 0 ||
+        user.following.totalCount !== 0
+      ) {
+        continue;
+      }
+
+      candidates.set(user.login, user);
+    }
+
+    return Array.from(candidates.values());
+  }, [nonMutualsFollowingYou, nonMutualsYouFollow]);
+
   useEffect(() => {
+    let isCancelled = false;
+
     const detectGhosts = async () => {
       if (!isNetworkReady || !accessToken) {
         setIsCheckingGhosts(false);
         return;
       }
 
-      setIsCheckingGhosts(true);
-
-      const potentialGhosts = [
-        ...nonMutualsYouFollow,
-        ...nonMutualsFollowingYou,
-      ].filter(
-        (user) =>
-          user?.followers.totalCount === 0 && user?.following.totalCount === 0
-      );
-
+      const existingGhosts = useGhostStore.getState().ghostsSet;
       const newPotentialGhosts = potentialGhosts.filter(
-        (potentialGhost) =>
-          !ghosts.some(
-            (existingGhost) => existingGhost.login === potentialGhost.login
-          )
+        (potentialGhost) => !existingGhosts.has(potentialGhost.login)
       );
 
       if (newPotentialGhosts.length === 0) {
@@ -49,15 +64,16 @@ export const useGhostDetector = ({ isNetworkReady }: GhostDetectorProps) => {
         return;
       }
 
-      const confirmedGhosts = [];
+      setIsCheckingGhosts(true);
+      const confirmedGhosts: UserInfoFragment[] = [];
 
       for (
         let i = 0;
-        i < newPotentialGhosts.length;
+        i < newPotentialGhosts.length && !isCancelled;
         i += ghostDetectionBatchSize
       ) {
         const batch = newPotentialGhosts.slice(i, i + ghostDetectionBatchSize);
-        const usernames = batch.map((user) => user?.login);
+        const usernames = batch.map((user) => user.login);
 
         try {
           const response = await fetch('/api/verify-ghosts', {
@@ -69,37 +85,44 @@ export const useGhostDetector = ({ isNetworkReady }: GhostDetectorProps) => {
           });
 
           if (response.ok) {
-            const { ghosts: ghostUsernames } = await response.json();
-            const batchGhosts = batch.filter((user) =>
-              ghostUsernames.includes(user?.login)
+            const { ghosts } = (await response.json()) as { ghosts: string[] };
+            const ghostUsernames = new Set(ghosts);
+            confirmedGhosts.push(
+              ...batch.filter((user) => ghostUsernames.has(user.login))
             );
-            confirmedGhosts.push(...batchGhosts);
           }
         } catch (error) {
           console.error('Error verifying ghost batch:', error);
         }
 
-        if (i + ghostDetectionBatchSize < newPotentialGhosts.length) {
+        if (
+          !isCancelled &&
+          i + ghostDetectionBatchSize < newPotentialGhosts.length
+        ) {
           await new Promise((resolve) =>
             setTimeout(resolve, DELAY_BETWEEN_BATCHES)
           );
         }
       }
 
-      if (confirmedGhosts.length > 0) {
+      if (!isCancelled && confirmedGhosts.length > 0) {
         await updateGhosts(confirmedGhosts);
       }
 
-      setIsCheckingGhosts(false);
+      if (!isCancelled) {
+        setIsCheckingGhosts(false);
+      }
     };
 
-    detectGhosts();
+    void detectGhosts();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [
     isNetworkReady,
-    nonMutualsFollowingYou,
-    nonMutualsYouFollow,
     accessToken,
-    ghosts,
+    potentialGhosts,
     setIsCheckingGhosts,
     ghostDetectionBatchSize,
     updateGhosts,
