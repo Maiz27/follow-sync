@@ -25,8 +25,8 @@ interface AnalyzerProps {
   isFetching: boolean;
   followers: UserInfoFragment[];
   following: UserInfoFragment[];
-  visibleNonMutualsYouFollow: UserInfoFragment[];
-  visibleNonMutualsFollowingYou: UserInfoFragment[];
+  nonMutualsYouFollow: UserInfoFragment[];
+  nonMutualsFollowingYou: UserInfoFragment[];
 }
 
 const Analyzer = ({
@@ -34,8 +34,8 @@ const Analyzer = ({
   isFetching,
   followers,
   following,
-  visibleNonMutualsYouFollow,
-  visibleNonMutualsFollowingYou,
+  nonMutualsYouFollow,
+  nonMutualsFollowingYou,
 }: AnalyzerProps) => {
   const ghosts = useGhostStore((state) => state.ghosts);
   const timestamp = useGistStore((state) => state.timestamp);
@@ -54,13 +54,13 @@ const Analyzer = ({
       },
       {
         id: 'one-way-out',
-        label: `One-Way Out (${formatNumber(visibleNonMutualsYouFollow.length)})`,
-        component: <NonFollowersTab oneWayOut={visibleNonMutualsYouFollow} />,
+        label: `One-Way Out (${formatNumber(nonMutualsYouFollow.length)})`,
+        component: <NonFollowersTab oneWayOut={nonMutualsYouFollow} />,
       },
       {
         id: 'one-way-in',
-        label: `One-Way In (${formatNumber(visibleNonMutualsFollowingYou.length)})`,
-        component: <NonFollowingTab oneWayIn={visibleNonMutualsFollowingYou} />,
+        label: `One-Way In (${formatNumber(nonMutualsFollowingYou.length)})`,
+        component: <NonFollowingTab oneWayIn={nonMutualsFollowingYou} />,
       },
       {
         id: 'ghosts',
@@ -71,8 +71,8 @@ const Analyzer = ({
     [
       followers,
       following,
-      visibleNonMutualsYouFollow,
-      visibleNonMutualsFollowingYou,
+      nonMutualsYouFollow,
+      nonMutualsFollowingYou,
       ghosts,
     ]
   );
