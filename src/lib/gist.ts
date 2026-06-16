@@ -37,6 +37,20 @@ type WriteCacheOptions = {
 
 const normalizeOwnerLogin = (ownerLogin: string) => ownerLogin.toLowerCase();
 
+/**
+ * Serializes the cache as pure-ASCII JSON. GitHub account names can contain
+ * bidirectional or invisible Unicode (RTL marks, zero-width chars), which makes
+ * GitHub flag the gist with a "hidden or bidirectional Unicode text" banner.
+ * Escaping every non-ASCII code point to its `\uXXXX` form keeps the stored
+ * file ASCII-only (so the banner never appears) while round-tripping losslessly
+ * through `JSON.parse` on read. Stays compact — only the rare non-ASCII
+ * character in a display name grows, not the ASCII-only logins/ids/urls.
+ */
+export const serializeCache = (data: CachedData): string =>
+  JSON.stringify(data).replace(/[\u007F-\uFFFF]/g, (char) => {
+    return `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
+  });
+
 export const buildCacheKey = (ownerLogin: string) =>
   `follow-sync:${normalizeOwnerLogin(ownerLogin)}:network-cache`;
 
@@ -451,7 +465,9 @@ export const writeCache = async (
       [GIST_FILENAME]: {
         // Compact (not pretty-printed) — pretty-printing inflates the payload
         // ~35%, and large networks can approach GitHub's per-file gist limit.
-        content: JSON.stringify(normalizedData),
+        // ASCII-escaped so GitHub never flags the gist for bidirectional or
+        // hidden Unicode coming from account display names. See serializeCache.
+        content: serializeCache(normalizedData),
       },
     },
     public: false,
