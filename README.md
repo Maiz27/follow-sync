@@ -7,7 +7,8 @@
 ## Features
 
 - **Comprehensive Network Analysis:** Get a clear picture of who you follow that doesn't follow you back, and vice-versa.
-- **Ghost Account Detection:** Identify "ghost" connections—accounts that have been deleted or suspended but still appear in your network lists. This provides a more accurate understanding of your active network, as these connections cannot be removed through the API.
+- **Ghost Account Detection & Removal:** Identify "ghost" connections—deleted or suspended accounts that still linger in your following list. Ghosts are detected for free by diffing GitHub's GraphQL following list (which still lists them) against the REST list (which drops them), and can be removed in one click via the REST unfollow endpoint—even though they no longer resolve on GitHub.
+- **Organization Awareness:** Organizations you follow are surfaced with a badge and excluded from non-mutual analysis (they can't follow you back). GitHub's GraphQL API omits organizations entirely, so they are recovered from the REST API.
 - **Single-Click Follow/Unfollow:** Manage your network directly from the Follow Sync interface with optimistic UI updates for a seamless experience.
 - **Adaptive Caching:** Utilizes your own GitHub Gists as a database, with an intelligent caching mechanism to respect GitHub's API rate limits while keeping your data fresh.
 - **Secure & Private:** All your network data is stored in a private Gist that you own. Follow Sync never stores your data on its servers.
@@ -87,8 +88,8 @@ NEXT_PUBLIC_DOMAIN="follow-sync.vercel.app"
 Once your `.env.local` file is configured, you can install the dependencies and start the development server.
 
 ```bash
-yarn install
-yarn dev
+pnpm install
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
@@ -96,4 +97,3 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-See the [LICENSE](LICENSE) file for details.
