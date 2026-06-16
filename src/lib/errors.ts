@@ -14,11 +14,13 @@ export const toUserMessage = (error: unknown, fallback: string): string => {
   if (lower.includes('scope')) {
     return 'Missing GitHub permission. Please sign out and sign in again to grant access.';
   }
+  // Note: a bare 403 is NOT treated as rate limiting — it commonly means a
+  // permission/policy failure. Genuine rate limits carry one of the phrases
+  // above (GitHub's 403/429 rate-limit bodies include "rate limit").
   if (
     lower.includes('rate limit') ||
     lower.includes('rate-limit') ||
     lower.includes('secondary rate') ||
-    lower.includes('(403)') ||
     lower.includes('(429)')
   ) {
     return 'GitHub is rate-limiting requests right now. Please try again in a little while.';

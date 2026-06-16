@@ -15,7 +15,9 @@ export const getStaleTime = (
   totalConnections: number,
   customStaleTime: number | null
 ): number => {
-  if (customStaleTime) {
+  // `null` means "no override"; an explicit 0 is a valid choice (always stale)
+  // and must not be treated as absent.
+  if (customStaleTime !== null) {
     return customStaleTime * 60 * 1000;
   }
 

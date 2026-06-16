@@ -45,12 +45,24 @@ export const useGhostManager = () => {
     if (removingLogins.has(user.login)) return;
 
     setRemovingLogins((prev) => new Set(prev).add(user.login));
+    let removed = false;
     try {
       await removeFromGitHub(user);
+      removed = true;
       await persistChanges();
       toast.success(`Removed ghost @${user.login}.`);
     } catch (error) {
-      toast.error(toUserMessage(error, `Failed to remove @${user.login}.`));
+      // Distinguish a removal failure (ghost still there, rolled back) from a
+      // persistence failure (ghost removed on GitHub, only the cache didn't
+      // save) so the toast isn't misleading.
+      toast.error(
+        removed
+          ? toUserMessage(
+              error,
+              `Removed @${user.login}, but updating the cache failed.`
+            )
+          : toUserMessage(error, `Failed to remove @${user.login}.`)
+      );
     } finally {
       setRemovingLogins((prev) => {
         const next = new Set(prev);

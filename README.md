@@ -27,12 +27,12 @@
 
 ## Architecture Overview
 
-Follow Sync employs a **client-heavy, GitHub-as-Infrastructure** architecture. It leverages GitHub's own systems for authentication, data fetching, and even data persistence.
+Follow Sync employs a **GitHub-as-Infrastructure** architecture, leveraging GitHub's own systems for authentication, data, and persistence — while keeping your access token server-side.
 
-1. **Authentication:** You authorize the Follow Sync GitHub OAuth App, granting it limited, user-scoped permissions.
-2. **Data Fetching:** The app calls the GitHub GraphQL API to fetch your follower and following lists.
-3. **Analysis & Caching:** The data is analyzed in the client to find non-mutuals. The results are then stored in a private GitHub Gist owned by you. This Gist acts as a cache for all subsequent loads.
-4. **UI:** The interface is built with React Server Components and loads instantly from the Gist cache, triggering background refreshes based on the age and size of your network data.
+1. **Authentication:** You authorize the Follow Sync GitHub OAuth App, granting it limited, user-scoped permissions (`read:user user:follow gist`).
+2. **Data Fetching (server-proxied):** The browser never holds your GitHub token. It calls same-origin proxy routes (`/api/gh/graphql` and `/api/gh/rest/*`) that inject the access token server-side and forward to GitHub's GraphQL and REST APIs. The REST following/followers lists are diffed against GraphQL to recover organizations and detect ghosts.
+3. **Analysis & Caching:** The data is analyzed client-side to find non-mutuals. The results are stored in a private GitHub Gist owned by you, which acts as a cache for subsequent loads.
+4. **UI:** The interface loads from the Gist cache and triggers background refreshes based on the age and size of your network data.
 
 ## Project Status & Roadmap
 

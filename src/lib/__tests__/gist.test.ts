@@ -14,31 +14,40 @@ const BIDI_NAME =
   ' ' +
   String.fromCodePoint(0x1f600);
 
-const baseCache = (name: string): CachedData =>
-  ({
-    network: {
-      followers: [
-        {
-          id: 'U_1',
-          login: 'octocat',
-          name,
-          avatarUrl: 'https://example.com/a.png',
-          url: 'https://github.com/octocat',
-        },
-      ],
-      following: [],
-    },
-    ghosts: [],
-    removedGhosts: [],
-    timestamp: 0,
-    metadata: {
-      totalConnections: 1,
-      fetchDuration: 0,
-      cacheVersion: 1,
-      ownerLogin: 'octocat',
-      cacheKey: 'follow-sync:octocat:network-cache',
-    },
-  }) as unknown as CachedData;
+const baseCache = (name: string): CachedData => ({
+  network: {
+    followers: [
+      {
+        __typename: 'User',
+        id: 'U_1',
+        login: 'octocat',
+        name,
+        avatarUrl: 'https://example.com/a.png',
+        url: 'https://github.com/octocat',
+        followers: { totalCount: 0 },
+        following: { totalCount: 0 },
+        accountType: 'user',
+      },
+    ],
+    following: [],
+  },
+  ghosts: [],
+  removedGhosts: [],
+  settings: {
+    isSettingsModalOpen: false,
+    showAvatars: true,
+    paginationPageSize: 100,
+    customStaleTime: null,
+  },
+  timestamp: 0,
+  metadata: {
+    totalConnections: 1,
+    fetchDuration: 0,
+    cacheVersion: '3.0',
+    ownerLogin: 'octocat',
+    cacheKey: 'follow-sync:octocat:network-cache',
+  },
+});
 
 describe('serializeCache', () => {
   it('produces ASCII-only output even for non-ASCII display names', () => {

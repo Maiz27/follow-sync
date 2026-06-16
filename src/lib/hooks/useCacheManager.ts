@@ -253,16 +253,29 @@ export const useCacheManager = () => {
           },
         };
 
-        const newGist = await writeCache(dataToCache, activeGistName, {
-          discoverCanonicalFallback: isForced || !activeGistName,
-        });
-
+        // Hydrate the store with the freshly fetched network first, so a gist
+        // write failure can't throw away an expensive successful sync.
         setNetwork(network);
         setGhosts(ghosts);
         setRemovedGhostLogins(prunedRemovedGhosts);
         setGistData({ timestamp, metadata: dataToCache.metadata });
-        setGistName(newGist.id);
         setDuplicateGistCount(duplicateCacheCount);
+
+        try {
+          const newGist = await writeCache(dataToCache, activeGistName, {
+            discoverCanonicalFallback: isForced || !activeGistName,
+          });
+          setGistName(newGist.id);
+        } catch (error) {
+          // The sync itself succeeded; only persisting it to the gist cache
+          // failed. Keep the data and surface a non-fatal warning rather than
+          // erroring the whole sync.
+          console.error('Failed to persist network cache to gist:', error);
+          toast.error(
+            'Synced your network, but saving the cache to a gist failed.'
+          );
+        }
+
         complete();
 
         return network;

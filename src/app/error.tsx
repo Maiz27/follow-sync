@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { toUserMessage } from '@/lib/errors';
 
 export default function Error({
   error,
@@ -18,7 +19,7 @@ export default function Error({
     <div className='flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center'>
       <h1 className='text-2xl font-bold'>Something went wrong</h1>
       <p className='max-w-md text-sm text-muted-foreground'>
-        {error.message || 'An unexpected error occurred. Please try again.'}
+        {toUserMessage(error, 'An unexpected error occurred. Please try again.')}
       </p>
       <Button onClick={reset}>Try again</Button>
     </div>

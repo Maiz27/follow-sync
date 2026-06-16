@@ -33,6 +33,22 @@ export const useSelectionManager = (
     clearSelection();
   }, [currentPage]);
 
+  // Drop selected ids that fall out of the list when it's searched/sorted, so
+  // the selected count and bulk actions stay in sync with what's actually
+  // shown. (next ⊆ prev, so equal sizes means nothing changed — return prev to
+  // avoid a needless re-render.)
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      if (prev.size === 0) return prev;
+      const present = new Set(itemIds);
+      const next = new Set<string>();
+      prev.forEach((id) => {
+        if (present.has(id)) next.add(id);
+      });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [itemIds]);
+
   const pageItemIds = useMemo(() => {
     const indexOfLastItem = currentPage * pageSize;
     const indexOfFirstItem = indexOfLastItem - pageSize;

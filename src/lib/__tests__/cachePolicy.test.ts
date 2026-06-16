@@ -27,6 +27,10 @@ describe('getStaleTime', () => {
     expect(getStaleTime(9_999_999, 30)).toBe(30 * 60 * 1000);
   });
 
+  it('honors an explicit 0-minute override instead of falling back to tiers', () => {
+    expect(getStaleTime(100, 0)).toBe(0);
+  });
+
   it.each([
     [0, STALE_TIME_SMALL],
     [2000, STALE_TIME_SMALL],

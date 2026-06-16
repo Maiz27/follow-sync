@@ -181,7 +181,7 @@ const SettingsModal = () => {
         <DialogFooter>
           <Button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || !isAuthenticated}
             className={isSaving ? 'animate-pulse' : ''}
           >
             Save

@@ -3,6 +3,7 @@ import { getGitHubToken } from '@/lib/server/githubToken';
 
 const GITHUB_REST_URL = 'https://api.github.com';
 const GITHUB_API_VERSION = '2022-11-28';
+const UPSTREAM_TIMEOUT_MS = 30_000;
 
 /**
  * Only the REST endpoints this app actually needs are proxied — this is NOT an
@@ -48,13 +49,33 @@ const proxy = async (
     init.body = await req.text();
   }
 
-  const response = await fetch(url, init);
-  const data = await response.text();
+  // Bound the upstream call so a stalled GitHub connection can't hang the
+  // request indefinitely.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 
-  return new NextResponse(data || null, {
-    status: response.status,
-    headers: { 'Content-Type': 'application/json' },
-  });
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const data = await response.text();
+
+    return new NextResponse(data || null, {
+      status: response.status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return NextResponse.json(
+        { error: 'Upstream request to GitHub timed out.' },
+        { status: 504 }
+      );
+    }
+    return NextResponse.json(
+      { error: 'Failed to reach GitHub.' },
+      { status: 502 }
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 type RouteContext = { params: Promise<{ path: string[] }> };
