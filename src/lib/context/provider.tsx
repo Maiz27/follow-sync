@@ -2,7 +2,6 @@
 
 import type * as React from 'react';
 import dynamic from 'next/dynamic';
-import { Toaster } from 'sonner';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { getQueryClient } from '@/app/get-query-client';
 import { GlobalProgressIndicator } from '@/components/utils/progress';
@@ -26,7 +25,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       <ProgressProvider>
         {children}
         <GlobalProgressIndicator />
-        <Toaster expand={true} />
         <ModalManager />
       </ProgressProvider>
       {isDevelopment ? <ReactQueryDevtools /> : null}
