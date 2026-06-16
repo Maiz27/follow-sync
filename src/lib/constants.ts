@@ -3,9 +3,14 @@ import { LuEye, LuHeart, LuUserX, LuUserPlus } from 'react-icons/lu';
 // Query Keys
 export const QUERY_KEY_USER_NETWORK = 'user-network';
 
+// Same-origin proxy endpoints. The browser talks only to these; the GitHub
+// access token is injected server-side so it never reaches client code.
+export const GH_GRAPHQL_PROXY = '/api/gh/graphql';
+export const GH_REST_PROXY = '/api/gh/rest';
+
 // GitHub Gist
 export const GIST_DESCRIPTION_PREFIX = 'Follow Sync Cache';
-export const GIST_CACHE_VERSION = '2.0';
+export const GIST_CACHE_VERSION = '3.0';
 export const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
 export const GIST_ID_STORAGE_KEY = 'Follow Sync_gist_id';
 

@@ -17,7 +17,12 @@ import {
   shouldMigrateCanonicalCache,
   writeCache,
 } from '@/lib/gist';
-import { fetchAllUserFollowersAndFollowing } from '@/lib/gql/fetchers';
+import {
+  fetchAllUserFollowersAndFollowing,
+  fetchRestFollowing,
+  fetchRestFollowers,
+} from '@/lib/gql/fetchers';
+import { classifyFollowing, classifyFollowers, mergeGhosts } from '@/lib/utils';
 import {
   GIST_CACHE_VERSION,
   GIST_ID_STORAGE_KEY,
@@ -26,9 +31,26 @@ import {
   STALE_TIME_MEDIUM,
   STALE_TIME_SMALL,
 } from '@/lib/constants';
-import { CachedData, ProgressCallbacks } from '@/lib/types';
-import { UserInfoFragment } from '@/lib/gql/types';
+import { CachedData, NetworkUser, ProgressCallbacks } from '@/lib/types';
 import { useSession } from 'next-auth/react';
+
+/**
+ * Serializes gist writes across the whole app. Follow/unfollow, bulk actions,
+ * ghost removal and settings saves can all fire `persistChanges` concurrently;
+ * without serialization their read-modify-write cycles race and clobber each
+ * other (and can spawn duplicate gists). Chaining every write guarantees each
+ * one observes the previous write's resulting gist id.
+ */
+let writeChain: Promise<unknown> = Promise.resolve();
+
+const enqueueWrite = <T>(task: () => Promise<T>): Promise<T> => {
+  const run = writeChain.then(task, task);
+  writeChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+};
 
 const getStaleTime = (
   totalConnections: number,
@@ -56,23 +78,25 @@ const getStaleTime = (
 export const useCacheManager = () => {
   const setNetwork = useNetworkStore((state) => state.setNetwork);
   const setGhosts = useGhostStore((state) => state.setGhosts);
-  const addGhosts = useGhostStore((state) => state.addGhosts);
+  const setRemovedGhostLogins = useGhostStore(
+    (state) => state.setRemovedGhostLogins
+  );
   const setGistName = useGistStore((state) => state.setGistName);
   const setDuplicateGistCount = useGistStore(
     (state) => state.setDuplicateGistCount
   );
   const setGistData = useGistStore((state) => state.setGistData);
-  const setTimestamp = useGistStore((state) => state.setTimestamp);
   const settings = useSettingsStore();
 
-  const { data } = useSession();
-  const accessToken = data?.accessToken;
+  const { data, status } = useSession();
+  const isAuthenticated = status === 'authenticated';
   const sessionOwnerLogin = data?.user?.login;
 
   const loadFromCache = useCallback(
     (cachedData: CachedData) => {
       setNetwork(cachedData.network);
       setGhosts(cachedData.ghosts);
+      setRemovedGhostLogins(cachedData.removedGhosts ?? []);
       setGistData({
         timestamp: cachedData.timestamp,
         metadata: cachedData.metadata,
@@ -80,21 +104,17 @@ export const useCacheManager = () => {
 
       if (cachedData.settings) {
         settings.setShowAvatars(cachedData.settings.showAvatars);
-        settings.setGhostDetectionBatchSize(
-          cachedData.settings.ghostDetectionBatchSize
-        );
         settings.setPaginationPageSize(cachedData.settings.paginationPageSize);
         settings.setCustomStaleTime(cachedData.settings.customStaleTime);
       }
     },
-    [setNetwork, setGhosts, setGistData, settings]
+    [setNetwork, setGhosts, setRemovedGhostLogins, setGistData, settings]
   );
 
   const initializeAndFetchNetwork = useCallback(
     async (
       client: GraphQLClient,
       username: string,
-      token: string,
       progress: ProgressCallbacks
     ) => {
       const { show, update, complete, fail } = progress;
@@ -112,7 +132,6 @@ export const useCacheManager = () => {
 
       if (!isForced) {
         const { canonicalGist, duplicateGists } = await findCanonicalCacheGist({
-          token,
           ownerLogin: username,
           preferredGistId: currentGistName,
         });
@@ -123,6 +142,12 @@ export const useCacheManager = () => {
         if (canonicalGist) {
           const cachedData = parseCache(canonicalGist);
           if (cachedData) {
+            // Caches written by an older schema version (e.g. before
+            // organizations and the REST-diff ghost model existed) are forced
+            // to re-fetch so the user gets the corrected data.
+            const isOutdatedVersion =
+              cachedData.metadata.cacheVersion !== GIST_CACHE_VERSION;
+
             const normalizedCachedData = normalizeCachedData(
               cachedData,
               username
@@ -137,6 +162,7 @@ export const useCacheManager = () => {
             }
 
             if (
+              !isOutdatedVersion &&
               shouldMigrateCanonicalCache(
                 canonicalGist,
                 normalizedCachedData,
@@ -144,7 +170,6 @@ export const useCacheManager = () => {
               )
             ) {
               const migratedGist = await writeCache(
-                token,
                 normalizedCachedData,
                 canonicalGist.id
               );
@@ -160,18 +185,22 @@ export const useCacheManager = () => {
             );
             const isStale =
               Date.now() - normalizedCachedData.timestamp > staleTime;
-            loadFromCache(normalizedCachedData);
 
-            if (!isStale) {
-              toast.info('Loaded fresh data from cache.');
-              return normalizedCachedData.network;
-            }
+            // Only serve the cache when it matches the current schema.
+            if (!isOutdatedVersion) {
+              loadFromCache(normalizedCachedData);
 
-            if (staleTime === STALE_TIME_MANUAL_ONLY) {
-              toast.info(
-                'Data loaded from cache. Refresh manually for the latest update.'
-              );
-              return normalizedCachedData.network;
+              if (!isStale) {
+                toast.info('Loaded fresh data from cache.');
+                return normalizedCachedData.network;
+              }
+
+              if (staleTime === STALE_TIME_MANUAL_ONLY) {
+                toast.info(
+                  'Data loaded from cache. Refresh manually for the latest update.'
+                );
+                return normalizedCachedData.network;
+              }
             }
           }
         }
@@ -209,16 +238,59 @@ export const useCacheManager = () => {
           },
         });
 
+        // The REST lists are the counterpart to the GraphQL ones: the REST
+        // following list surfaces organizations (GraphQL hides them) and the
+        // REST lists exclude ghosts (which GraphQL still returns). Diffing each
+        // side classifies users, orgs and ghosts.
+        const [restFollowing, restFollowers] = await Promise.all([
+          fetchRestFollowing(),
+          fetchRestFollowers(),
+        ]);
+
         const fetchEnd = performance.now();
         const fetchDuration = Math.round((fetchEnd - fetchStart) / 1000);
-        const followers = networkData.followers.nodes as UserInfoFragment[];
-        const following = networkData.following.nodes as UserInfoFragment[];
+
+        const graphqlFollowers = (
+          (networkData.followers.nodes ?? []) as NetworkUser[]
+        ).filter((u): u is NetworkUser => Boolean(u?.login));
+
+        const graphqlFollowing = (
+          (networkData.following.nodes ?? []) as NetworkUser[]
+        ).filter((u): u is NetworkUser => Boolean(u?.login));
+
+        const { followers, ghosts: followerGhosts } = classifyFollowers({
+          graphqlFollowers,
+          restFollowers,
+        });
+
+        const { following, ghosts: followingGhosts } = classifyFollowing({
+          graphqlFollowing,
+          restFollowing,
+        });
+
+        const allGhosts = mergeGhosts(followingGhosts, followerGhosts);
+
+        // Suppress just-removed ghosts that GitHub's eventually-consistent
+        // GraphQL still returns. Self-clean the tombstone to only logins still
+        // present in the GraphQL following list.
+        const graphqlFollowingLogins = new Set(
+          graphqlFollowing.map((u) => u.login.toLowerCase())
+        );
+        const prunedRemovedGhosts = [
+          ...useGhostStore.getState().removedGhostLogins,
+        ].filter((login) => graphqlFollowingLogins.has(login));
+        const removedGhostSet = new Set(prunedRemovedGhosts);
+        const ghosts = allGhosts.filter(
+          (g) => !removedGhostSet.has(g.login.toLowerCase())
+        );
+
         const network = { followers, following };
         const timestamp = Date.now();
 
         const dataToCache: CachedData = {
           network,
-          ghosts: [],
+          ghosts,
+          removedGhosts: prunedRemovedGhosts,
           settings,
           timestamp,
           metadata: {
@@ -230,12 +302,13 @@ export const useCacheManager = () => {
           },
         };
 
-        const newGist = await writeCache(token, dataToCache, activeGistName, {
+        const newGist = await writeCache(dataToCache, activeGistName, {
           discoverCanonicalFallback: isForced || !activeGistName,
         });
 
         setNetwork(network);
-        setGhosts([]);
+        setGhosts(ghosts);
+        setRemovedGhostLogins(prunedRemovedGhosts);
         setGistData({ timestamp, metadata: dataToCache.metadata });
         setGistName(newGist.id);
         setDuplicateGistCount(duplicateCacheCount);
@@ -253,6 +326,7 @@ export const useCacheManager = () => {
       settings,
       loadFromCache,
       setGhosts,
+      setRemovedGhostLogins,
       setDuplicateGistCount,
       setGistName,
       setNetwork,
@@ -261,45 +335,51 @@ export const useCacheManager = () => {
   );
 
   const persistChanges = useCallback(async () => {
-    if (!accessToken) return;
+    if (!isAuthenticated) return;
 
-    const { network } = useNetworkStore.getState();
-    const { ghosts } = useGhostStore.getState();
-    const { metadata, gistName } = useGistStore.getState();
-    const currentSettings = useSettingsStore.getState();
+    await enqueueWrite(async () => {
+      // Read state inside the serialized section so each write sees the latest
+      // network/ghosts/gist id produced by any preceding write.
+      const { network } = useNetworkStore.getState();
+      const { ghosts, removedGhostLogins } = useGhostStore.getState();
+      const { metadata, gistName } = useGistStore.getState();
+      const currentSettings = useSettingsStore.getState();
 
-    if (!network || !metadata) return;
+      if (!network || !metadata) return;
 
-    const ownerLogin = sessionOwnerLogin ?? metadata.ownerLogin;
-    if (!ownerLogin) {
-      throw new Error('Cannot persist cache without a known owner login.');
-    }
+      const ownerLogin = sessionOwnerLogin ?? metadata.ownerLogin;
+      if (!ownerLogin) {
+        throw new Error('Cannot persist cache without a known owner login.');
+      }
 
-    const newTimestamp = Date.now();
-    setTimestamp(newTimestamp);
+      const newTimestamp = Date.now();
 
-    const normalizedMetadata = {
-      ...metadata,
-      cacheVersion: GIST_CACHE_VERSION,
-      ownerLogin: ownerLogin.toLowerCase(),
-      cacheKey: buildCacheKey(ownerLogin),
-    };
+      const normalizedMetadata = {
+        ...metadata,
+        cacheVersion: GIST_CACHE_VERSION,
+        ownerLogin: ownerLogin.toLowerCase(),
+        cacheKey: buildCacheKey(ownerLogin),
+      };
 
-    const dataToCache: CachedData = {
-      network,
-      ghosts,
-      settings: currentSettings,
-      timestamp: newTimestamp,
-      metadata: normalizedMetadata,
-    };
+      const dataToCache: CachedData = {
+        network,
+        ghosts,
+        removedGhosts: [...removedGhostLogins],
+        settings: currentSettings,
+        timestamp: newTimestamp,
+        metadata: normalizedMetadata,
+      };
 
-    const updatedGist = await writeCache(accessToken, dataToCache, gistName);
-    setGistName(updatedGist.id);
-    setGistData({ timestamp: newTimestamp, metadata: normalizedMetadata });
-  }, [accessToken, sessionOwnerLogin, setTimestamp, setGistData, setGistName]);
+      // Only commit the timestamp/metadata to the store after the write
+      // succeeds, so a failed write doesn't show a misleading "last synced".
+      const updatedGist = await writeCache(dataToCache, gistName);
+      setGistName(updatedGist.id);
+      setGistData({ timestamp: newTimestamp, metadata: normalizedMetadata });
+    });
+  }, [isAuthenticated, sessionOwnerLogin, setGistData, setGistName]);
 
   const cleanupDuplicateCaches = useCallback(async () => {
-    if (!accessToken) {
+    if (!isAuthenticated) {
       throw new Error(
         'Authentication is required to clean up duplicate caches.'
       );
@@ -315,7 +395,6 @@ export const useCacheManager = () => {
     }
 
     const result = await cleanupDuplicateCacheGists({
-      token: accessToken,
       ownerLogin,
       preferredGistId: gistName,
     });
@@ -340,21 +419,12 @@ export const useCacheManager = () => {
 
     toast.success(`Deleted ${result.deletedCount} duplicate cache gist(s).`);
     return result;
-  }, [accessToken, sessionOwnerLogin, setDuplicateGistCount, setGistName]);
-
-  const updateGhosts = useCallback(
-    async (newGhosts: UserInfoFragment[]) => {
-      addGhosts(newGhosts);
-      await persistChanges();
-    },
-    [addGhosts, persistChanges]
-  );
+  }, [isAuthenticated, sessionOwnerLogin, setDuplicateGistCount, setGistName]);
 
   return {
     initializeAndFetchNetwork,
     loadFromCache,
     persistChanges,
     cleanupDuplicateCaches,
-    updateGhosts,
   };
 };

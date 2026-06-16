@@ -17,15 +17,10 @@ export const useNetworkManager = (username?: string) => {
   const queryResult = useQuery({
     queryKey: [QUERY_KEY_USER_NETWORK, username],
     queryFn: async () => {
-      if (!client || !username || !session?.accessToken) {
+      if (!client || !username || !session) {
         throw new Error('Client, username, or session not available.');
       }
-      const data = await initializeAndFetchNetwork(
-        client,
-        username,
-        session.accessToken,
-        progress
-      );
+      const data = await initializeAndFetchNetwork(client, username, progress);
       return data;
     },
     enabled: !!client && authStatus === 'authenticated' && !!session,

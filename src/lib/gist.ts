@@ -1,14 +1,18 @@
 import { CacheGist, CachedData } from './types';
 import {
+  GH_REST_PROXY,
   GIST_CACHE_VERSION,
   GIST_DESCRIPTION_PREFIX,
   GIST_FILENAME,
 } from './constants';
 
-const GITHUB_GISTS_API_URL = 'https://api.github.com/gists';
-const GITHUB_API_VERSION = '2022-11-28';
+// Requests go through the same-origin proxy, which injects the GitHub token
+// and the standard Accept / API-version headers server-side.
+const GISTS_API_URL = `${GH_REST_PROXY}/gists`;
 const GISTS_PER_PAGE = 100;
 const GIST_FETCH_CONCURRENCY = 5;
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 type GitHubGistSummary = {
   id: string;
@@ -58,25 +62,11 @@ const toCacheGist = (gist: GitHubGistDetail): CacheGist => ({
   })),
 });
 
-const getHeaders = (token: string) => ({
-  Authorization: `Bearer ${token}`,
-  'Content-Type': 'application/json',
-  Accept: 'application/vnd.github+json',
-  'X-GitHub-Api-Version': GITHUB_API_VERSION,
-});
-
 const fetchGitHubJson = async <T>(
   url: string,
-  token: string,
   init?: RequestInit
 ): Promise<T | null> => {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      ...getHeaders(token),
-      ...(init?.headers ?? {}),
-    },
-  });
+  const response = await fetch(url, init);
 
   if (response.status === 404) {
     return null;
@@ -97,22 +87,20 @@ const fetchGitHubJson = async <T>(
   return (await response.json()) as T;
 };
 
-const fetchGistById = async (token: string, gistId: string) => {
+const fetchGistById = async (gistId: string) => {
   const gist = await fetchGitHubJson<GitHubGistDetail>(
-    `${GITHUB_GISTS_API_URL}/${gistId}`,
-    token
+    `${GISTS_API_URL}/${gistId}`
   );
 
   return gist ? toCacheGist(gist) : null;
 };
 
-const listAllGists = async (token: string) => {
+const listAllGists = async () => {
   const gists: GitHubGistSummary[] = [];
 
   for (let page = 1; ; page++) {
     const pageItems = await fetchGitHubJson<GitHubGistSummary[]>(
-      `${GITHUB_GISTS_API_URL}?per_page=${GISTS_PER_PAGE}&page=${page}`,
-      token
+      `${GISTS_API_URL}?per_page=${GISTS_PER_PAGE}&page=${page}`
     );
 
     if (!pageItems?.length) {
@@ -255,11 +243,9 @@ export const normalizeCachedData = (
 };
 
 export const findCanonicalCacheGist = async ({
-  token,
   ownerLogin,
   preferredGistId,
 }: {
-  token: string;
   ownerLogin: string;
   preferredGistId?: string | null;
 }): Promise<CacheDiscoveryResult> => {
@@ -267,7 +253,7 @@ export const findCanonicalCacheGist = async ({
 
   if (preferredGistId) {
     try {
-      const preferredGist = await fetchGistById(token, preferredGistId);
+      const preferredGist = await fetchGistById(preferredGistId);
       if (
         preferredGist &&
         (isCacheDescription(preferredGist.description) ||
@@ -280,7 +266,7 @@ export const findCanonicalCacheGist = async ({
     }
   }
 
-  const summaries = await listAllGists(token);
+  const summaries = await listAllGists();
   const candidateSummaries = summaries.filter(isPotentialCacheGistSummary);
 
   const unfetchedSummaries = candidateSummaries.filter(
@@ -292,7 +278,7 @@ export const findCanonicalCacheGist = async ({
     GIST_FETCH_CONCURRENCY,
     async (gist) => {
       try {
-        return await fetchGistById(token, gist.id);
+        return await fetchGistById(gist.id);
       } catch (error) {
         console.warn('Failed to fetch candidate cache gist by id.', error);
         return null;
@@ -327,13 +313,12 @@ export const findCanonicalCacheGist = async ({
 };
 
 const updateCacheGist = async (
-  token: string,
   gistId: string,
   body: object
 ): Promise<CacheGist | null> => {
-  const response = await fetch(`${GITHUB_GISTS_API_URL}/${gistId}`, {
+  const response = await fetch(`${GISTS_API_URL}/${gistId}`, {
     method: 'PATCH',
-    headers: getHeaders(token),
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
 
@@ -356,15 +341,12 @@ const updateCacheGist = async (
   return toCacheGist((await response.json()) as GitHubGistDetail);
 };
 
-const createCacheGist = async (token: string, body: object) => {
-  const createdGist = await fetchGitHubJson<GitHubGistDetail>(
-    GITHUB_GISTS_API_URL,
-    token,
-    {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }
-  );
+const createCacheGist = async (body: object) => {
+  const createdGist = await fetchGitHubJson<GitHubGistDetail>(GISTS_API_URL, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
 
   if (!createdGist) {
     throw new Error('Failed to create Gist cache.');
@@ -373,10 +355,9 @@ const createCacheGist = async (token: string, body: object) => {
   return toCacheGist(createdGist);
 };
 
-export const deleteGist = async (token: string, gistId: string) => {
-  const response = await fetch(`${GITHUB_GISTS_API_URL}/${gistId}`, {
+export const deleteGist = async (gistId: string) => {
+  const response = await fetch(`${GISTS_API_URL}/${gistId}`, {
     method: 'DELETE',
-    headers: getHeaders(token),
   });
 
   if (response.status === 404) {
@@ -399,16 +380,13 @@ export const deleteGist = async (token: string, gistId: string) => {
 };
 
 export const cleanupDuplicateCacheGists = async ({
-  token,
   ownerLogin,
   preferredGistId,
 }: {
-  token: string;
   ownerLogin: string;
   preferredGistId?: string | null;
 }) => {
   const discoveryResult = await findCanonicalCacheGist({
-    token,
     ownerLogin,
     preferredGistId,
   });
@@ -426,7 +404,7 @@ export const cleanupDuplicateCacheGists = async ({
     GIST_FETCH_CONCURRENCY,
     async (gist) => {
       try {
-        const deleted = await deleteGist(token, gist.id);
+        const deleted = await deleteGist(gist.id);
         return deleted ? 1 : 0;
       } catch (error) {
         console.warn('Failed to delete duplicate cache gist.', error);
@@ -438,7 +416,6 @@ export const cleanupDuplicateCacheGists = async ({
   const deletedCount = deletionResults.filter((count) => count === 1).length;
 
   const refreshedResult = await findCanonicalCacheGist({
-    token,
     ownerLogin,
     preferredGistId: discoveryResult.canonicalGist.id,
   });
@@ -452,7 +429,6 @@ export const cleanupDuplicateCacheGists = async ({
 };
 
 export const writeCache = async (
-  token: string,
   data: CachedData,
   gistId?: string | null,
   options: WriteCacheOptions = {}
@@ -473,7 +449,9 @@ export const writeCache = async (
     description: buildCacheDescription(normalizedOwnerLogin),
     files: {
       [GIST_FILENAME]: {
-        content: JSON.stringify(normalizedData, null, 2),
+        // Compact (not pretty-printed) — pretty-printing inflates the payload
+        // ~35%, and large networks can approach GitHub's per-file gist limit.
+        content: JSON.stringify(normalizedData),
       },
     },
     public: false,
@@ -485,7 +463,7 @@ export const writeCache = async (
   }
 
   for (const targetId of updateTargets) {
-    const updatedGist = await updateCacheGist(token, targetId, body);
+    const updatedGist = await updateCacheGist(targetId, body);
     if (updatedGist) {
       return updatedGist;
     }
@@ -493,21 +471,20 @@ export const writeCache = async (
 
   if (options.discoverCanonicalFallback) {
     const discoveryResult = await findCanonicalCacheGist({
-      token,
       ownerLogin: normalizedOwnerLogin,
       preferredGistId: gistId,
     });
 
     const canonicalGistId = discoveryResult.canonicalGist?.id;
     if (canonicalGistId && !updateTargets.has(canonicalGistId)) {
-      const updatedGist = await updateCacheGist(token, canonicalGistId, body);
+      const updatedGist = await updateCacheGist(canonicalGistId, body);
       if (updatedGist) {
         return updatedGist;
       }
     }
   }
 
-  return createCacheGist(token, body);
+  return createCacheGist(body);
 };
 
 export const shouldMigrateCanonicalCache = (

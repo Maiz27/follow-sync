@@ -1,15 +1,15 @@
 import { create } from 'zustand';
-import { UserInfoFragment } from '@/lib/gql/types';
+import { NetworkUser } from '@/lib/types';
 import { getNonMutuals } from '@/lib/utils';
 
 export type NetworkState = {
   network: {
-    followers: UserInfoFragment[];
-    following: UserInfoFragment[];
+    followers: NetworkUser[];
+    following: NetworkUser[];
   };
   nonMutuals: {
-    nonMutualsFollowingYou: UserInfoFragment[];
-    nonMutualsYouFollow: UserInfoFragment[];
+    nonMutualsFollowingYou: NetworkUser[];
+    nonMutualsYouFollow: NetworkUser[];
   };
 };
 

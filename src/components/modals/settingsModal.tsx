@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useSession } from 'next-auth/react';
+import { toast } from 'sonner';
+import { toUserMessage } from '@/lib/errors';
 import {
   Dialog,
   DialogContent,
@@ -38,25 +40,32 @@ const SettingsModal = () => {
   const duplicateGistCount = useGistStore((state) => state.duplicateGistCount);
   const {
     showAvatars,
-    ghostDetectionBatchSize,
     paginationPageSize,
     customStaleTime,
     setShowAvatars,
-    setGhostDetectionBatchSize,
     setPaginationPageSize,
     setCustomStaleTime,
     saveSettings,
   } = useSettingsStore();
   const { persistChanges, cleanupDuplicateCaches } = useCacheManager();
-  const { data: session } = useSession();
-  const accessToken = session?.accessToken;
+  const { status } = useSession();
+  const isAuthenticated = status === 'authenticated';
 
   const handleSave = async () => {
-    if (!accessToken) return;
+    if (!isAuthenticated) {
+      toast.error('You must be signed in to save settings.');
+      return;
+    }
     setIsSaving(true);
-    await saveSettings(accessToken, persistChanges);
-    setIsSaving(false);
-    closeModal();
+    try {
+      await saveSettings(persistChanges);
+      toast.success('Settings saved.');
+      closeModal();
+    } catch (error) {
+      toast.error(toUserMessage(error, 'Failed to save settings.'));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCleanupDuplicates = async () => {
@@ -86,34 +95,6 @@ const SettingsModal = () => {
               id='show-avatars'
               checked={showAvatars}
               onCheckedChange={setShowAvatars}
-              className='col-span-2'
-            />
-          </div>
-          <div className='grid grid-cols-4 items-center gap-4'>
-            <Label htmlFor='ghost-batch-size' className='col-span-2 text-right'>
-              Ghost Batch Size
-              <HoverCard>
-                <HoverCardTrigger>
-                  <Button variant='link'>
-                    <LuInfo />
-                  </Button>
-                </HoverCardTrigger>
-                <HoverCardContent>
-                  <p className='col-span-4 text-xs text-muted-foreground'>
-                    Controls how many suspected ghost accounts are checked per
-                    request. Larger batches finish faster, but may increase API
-                    load or make retries more expensive if a request fails.
-                  </p>
-                </HoverCardContent>
-              </HoverCard>
-            </Label>
-            <Input
-              id='ghost-batch-size'
-              type='number'
-              value={ghostDetectionBatchSize}
-              onChange={(e) =>
-                setGhostDetectionBatchSize(Number(e.target.value))
-              }
               className='col-span-2'
             />
           </div>
