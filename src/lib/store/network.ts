@@ -18,7 +18,6 @@ export type Rollback = () => void;
 
 export type NetworkActions = {
   setNetwork: (network: NetworkState['network']) => void;
-  updateNetwork: (network: NetworkState['network']) => void;
   /**
    * Optimistically add a followed user, recomputing non-mutuals. Returns a
    * rollback that restores the exact prior state if the API call fails.
@@ -46,9 +45,6 @@ const setNetworkState = (network: NetworkState['network']) => ({
 export const useNetworkStore = create<NetworkStore>((set, get) => ({
   ...initialState,
   setNetwork: (network) => {
-    set(setNetworkState(network));
-  },
-  updateNetwork: (network) => {
     set(setNetworkState(network));
   },
   optimisticFollow: (user) => {

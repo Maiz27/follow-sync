@@ -21,7 +21,7 @@
 - **Language:** [TypeScript](https://www.typescriptlang.org/)
 - **State Management:** [TanStack Query (React Query)](https://tanstack.com/query/latest) for server state and [Zustand](https://github.com/pmndrs/zustand) for client state.
 - **Authentication:** [NextAuth.js](https://next-auth.js.org/) with GitHub OAuth
-- **API:** [GitHub GraphQL API](https://docs.github.com/en/graphql)
+- **API:** [GitHub GraphQL](https://docs.github.com/en/graphql) + [REST](https://docs.github.com/en/rest) APIs, proxied server-side
 - **Styling:** [Tailwind CSS](https://tailwindcss.com/)
 - **Hosting:** [Vercel](https://vercel.com/)
 

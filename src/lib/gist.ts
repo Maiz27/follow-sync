@@ -328,7 +328,7 @@ const createCacheGist = async (body: object) => {
   return toCacheGist(createdGist);
 };
 
-export const deleteGist = (gistId: string) =>
+const deleteGist = (gistId: string) =>
   ghRestOk(`/gists/${gistId}`, { method: 'DELETE' });
 
 export const cleanupDuplicateCacheGists = async ({
