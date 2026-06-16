@@ -2,76 +2,63 @@ import React from 'react';
 import EmptyState from '@/components/ui/empty-state';
 import PaginatedList from '@/components/utils/paginatedList';
 import ConnectionCard from '../connectionCard';
-import { useGhostStore } from '@/lib/store/ghost';
-import { UserInfoFragment } from '@/lib/gql/types';
+import { NetworkUser } from '@/lib/types';
 import { LuGhost } from 'react-icons/lu';
 import { TabHeader } from './tabHeader';
 import { TAB_DESCRIPTIONS } from '@/lib/constants';
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import ListControls from '@/components/utils/listControls';
+import { useGhostManager } from '@/lib/hooks/useGhostManager';
+import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
+import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
+import { useListControls } from '@/lib/hooks/useListControls';
 
 const TAB_ID = 'ghosts';
-const SKELETON_CARD_COUNT = 8;
 
 type GhostsTabProps = {
-  ghosts: UserInfoFragment[];
-};
-
-const GhostCardSkeleton = () => {
-  return (
-    <Card className='h-full w-full'>
-      <CardHeader className='flex items-center gap-2'>
-        <Skeleton className='size-10 rounded-full' />
-        <div className='flex-1 space-y-2'>
-          <Skeleton className='h-4 w-2/3' />
-          <Skeleton className='h-3 w-1/2' />
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className='flex gap-4 text-xs'>
-          <Skeleton className='h-3 w-20' />
-          <Skeleton className='h-3 w-20' />
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Skeleton className='h-9 w-24' />
-      </CardFooter>
-    </Card>
-  );
+  ghosts: NetworkUser[];
 };
 
 const GhostsTab = ({ ghosts }: GhostsTabProps) => {
-  const { isCheckingGhosts } = useGhostStore();
+  const { removeGhost, removeGhostSilently, removingLogins, persistChanges } =
+    useGhostManager();
+  const { search, setSearch, sort, setSort, processed } =
+    useListControls(ghosts);
 
-  if (isCheckingGhosts && ghosts.length === 0) {
-    return (
-      <>
-        <TabHeader
-          description={TAB_DESCRIPTIONS[TAB_ID]}
-          selectedCount={undefined}
-          action={undefined}
-          selection={undefined}
-        />
-        <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'>
-          {Array.from({ length: SKELETON_CARD_COUNT }, (_, index) => (
-            <GhostCardSkeleton key={index} />
-          ))}
-        </div>
-      </>
-    );
-  }
+  const {
+    selectedIds,
+    handleSelect,
+    handleDeselect,
+    handleSelectPage,
+    clearSelection,
+    isAllSelected,
+  } = useSelectionManager(
+    TAB_ID,
+    // Only removable ghosts (ones you actually follow) are selectable; ghosts
+    // that merely follow you can't be unfollowed.
+    processed.filter((g) => g.removable).map((g) => g.login),
+    { includeGhosts: true }
+  );
+
+  const { execute: bulkRemove, isPending: isBulkRemoving } = useBulkOperation(
+    (user) => removeGhostSilently(user),
+    'Removing Ghosts',
+    async () => {
+      await persistChanges();
+      clearSelection();
+    }
+  );
+
+  const handleBulkRemove = async () => {
+    const ghostsToRemove = processed.filter((g) => selectedIds.has(g.login));
+    await bulkRemove(ghostsToRemove);
+  };
 
   if (ghosts.length === 0) {
     return (
       <EmptyState
         icon={LuGhost}
         title='No Ghosts Found'
-        description="We couldn't find any ghost users in your network. Good job!"
+        description="We couldn't find any deleted or suspended accounts in your network. Good job!"
       />
     );
   }
@@ -80,20 +67,57 @@ const GhostsTab = ({ ghosts }: GhostsTabProps) => {
     <>
       <TabHeader
         description={TAB_DESCRIPTIONS[TAB_ID]}
-        selectedCount={undefined}
-        action={undefined}
-        selection={undefined}
+        selectedCount={selectedIds.size}
+        selection={{
+          onSelectAll: handleSelectPage,
+          isAllSelected,
+        }}
+        action={{
+          label: 'Remove Selected',
+          onBulkAction: handleBulkRemove,
+          isBulkActionLoading: isBulkRemoving,
+        }}
+      />
+      <ListControls
+        search={search}
+        setSearch={setSearch}
+        sort={sort}
+        setSort={setSort}
+        data={processed}
+        exportName='follow-sync-ghosts'
       />
       <PaginatedList
         listId={TAB_ID}
-        data={ghosts}
+        data={processed}
         getItemKey={(item) => item!.id || item!.login}
-        renderItem={(item) => <ConnectionCard user={item!} />}
+        renderItem={(item) =>
+          item!.removable ? (
+            <ConnectionCard
+              user={item!}
+              selection={{
+                isSelected: selectedIds.has(item!.login),
+                onSelect: handleSelect,
+              }}
+              action={{
+                label: 'Remove',
+                loading: removingLogins.has(item!.login),
+                onClick: async () => {
+                  await removeGhost(item!);
+                  if (selectedIds.has(item!.login)) {
+                    handleDeselect(item!.login);
+                  }
+                },
+              }}
+            />
+          ) : (
+            // A ghost that only follows you — shown for awareness but can't be
+            // removed (you don't follow it).
+            <ConnectionCard user={item!} />
+          )
+        }
       />
     </>
   );
 };
 
 export default GhostsTab;
-
-
