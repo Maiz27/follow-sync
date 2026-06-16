@@ -13,7 +13,7 @@ import type {
   User,
 } from '@/lib/gql/types';
 import { GraphQLClient } from 'graphql-request';
-import { GH_REST_PROXY } from '@/lib/constants';
+import { ghRest, ghRestOk } from '@/lib/ghRest';
 
 /**
  * Defines the shape of the progress update object.
@@ -205,8 +205,8 @@ export const fetchAllUserFollowersAndFollowing = async ({
   return { followers: allFollowers, following: allFollowing };
 };
 
-const REST_FOLLOWING_URL = `${GH_REST_PROXY}/user/following`;
-const REST_FOLLOWERS_URL = `${GH_REST_PROXY}/user/followers`;
+const REST_FOLLOWING_PATH = '/user/following';
+const REST_FOLLOWERS_PATH = '/user/followers';
 const REST_PER_PAGE = 100;
 
 /**
@@ -232,22 +232,16 @@ type RawRestUser = {
 };
 
 const fetchRestUserList = async (
-  baseUrl: string,
-  label: string
+  path: string
 ): Promise<RestFollowingEntry[]> => {
   const all: RestFollowingEntry[] = [];
 
   for (let page = 1; ; page++) {
     const pageItems = await withRetry(async () => {
-      const response = await fetch(
-        `${baseUrl}?per_page=${REST_PER_PAGE}&page=${page}`
+      const data = await ghRest<RawRestUser[]>(
+        `${path}?per_page=${REST_PER_PAGE}&page=${page}`
       );
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch ${label} list from GitHub (${response.status}).`
-        );
-      }
-      return (await response.json()) as RawRestUser[];
+      return data ?? [];
     });
     if (!pageItems.length) break;
 
@@ -274,7 +268,7 @@ const fetchRestUserList = async (
  * GraphQL but absent here).
  */
 export const fetchRestFollowing = () =>
-  fetchRestUserList(REST_FOLLOWING_URL, 'following');
+  fetchRestUserList(REST_FOLLOWING_PATH);
 
 /**
  * Fetches the authenticated user's full followers list via the REST API. Used
@@ -282,7 +276,7 @@ export const fetchRestFollowing = () =>
  * as followers but REST drops).
  */
 export const fetchRestFollowers = () =>
-  fetchRestUserList(REST_FOLLOWERS_URL, 'followers');
+  fetchRestUserList(REST_FOLLOWERS_PATH);
 
 /**
  * Unfollows an account by login via the REST API. This works for ghost
@@ -290,23 +284,14 @@ export const fetchRestFollowers = () =>
  * cannot remove because it requires a live node id. Returns `true` when the
  * follow was removed (HTTP 204).
  */
-export const removeFollowingByLogin = async ({
+export const removeFollowingByLogin = ({
   login,
 }: {
   login: string;
-}): Promise<boolean> => {
-  const response = await fetch(
-    `${REST_FOLLOWING_URL}/${encodeURIComponent(login)}`,
-    { method: 'DELETE' }
-  );
-
-  if (response.status === 204) return true;
-  if (response.status === 404) return false;
-
-  throw new Error(
-    `Failed to remove @${login} from your following list (${response.status}).`
-  );
-};
+}): Promise<boolean> =>
+  ghRestOk(`${REST_FOLLOWING_PATH}/${encodeURIComponent(login)}`, {
+    method: 'DELETE',
+  });
 
 export const followUser = async ({
   client,

@@ -1,14 +1,14 @@
 import { CacheGist, CachedData } from './types';
 import {
-  GH_REST_PROXY,
   GIST_CACHE_VERSION,
   GIST_DESCRIPTION_PREFIX,
   GIST_FILENAME,
 } from './constants';
+import { ghRest, ghRestOk } from './ghRest';
 
-// Requests go through the same-origin proxy, which injects the GitHub token
-// and the standard Accept / API-version headers server-side.
-const GISTS_API_URL = `${GH_REST_PROXY}/gists`;
+// Requests go through the same-origin proxy (via the ghRest gateway), which
+// injects the GitHub token and the standard Accept / API-version headers
+// server-side.
 const GISTS_PER_PAGE = 100;
 const GIST_FETCH_CONCURRENCY = 5;
 
@@ -76,35 +76,8 @@ const toCacheGist = (gist: GitHubGistDetail): CacheGist => ({
   })),
 });
 
-const fetchGitHubJson = async <T>(
-  url: string,
-  init?: RequestInit
-): Promise<T | null> => {
-  const response = await fetch(url, init);
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    let errorBody: unknown = null;
-    try {
-      errorBody = await response.json();
-    } catch {
-      errorBody = await response.text().catch(() => null);
-    }
-    throw new Error(
-      `GitHub Gist request failed (${response.status}): ${JSON.stringify(errorBody)}`
-    );
-  }
-
-  return (await response.json()) as T;
-};
-
 const fetchGistById = async (gistId: string) => {
-  const gist = await fetchGitHubJson<GitHubGistDetail>(
-    `${GISTS_API_URL}/${gistId}`
-  );
+  const gist = await ghRest<GitHubGistDetail>(`/gists/${gistId}`);
 
   return gist ? toCacheGist(gist) : null;
 };
@@ -113,8 +86,8 @@ const listAllGists = async () => {
   const gists: GitHubGistSummary[] = [];
 
   for (let page = 1; ; page++) {
-    const pageItems = await fetchGitHubJson<GitHubGistSummary[]>(
-      `${GISTS_API_URL}?per_page=${GISTS_PER_PAGE}&page=${page}`
+    const pageItems = await ghRest<GitHubGistSummary[]>(
+      `/gists?per_page=${GISTS_PER_PAGE}&page=${page}`
     );
 
     if (!pageItems?.length) {
@@ -163,7 +136,7 @@ const mapWithConcurrency = async <TInput, TOutput>(
 const getExpectedCacheKey = (ownerLogin: string) =>
   buildCacheKey(normalizeOwnerLogin(ownerLogin));
 
-const scoreCacheGist = (gist: CacheGist, ownerLogin: string) => {
+export const scoreCacheGist = (gist: CacheGist, ownerLogin: string) => {
   const parsed = parseCache(gist);
   const normalizedOwnerLogin = normalizeOwnerLogin(ownerLogin);
   const expectedCacheKey = getExpectedCacheKey(normalizedOwnerLogin);
@@ -330,33 +303,19 @@ const updateCacheGist = async (
   gistId: string,
   body: object
 ): Promise<CacheGist | null> => {
-  const response = await fetch(`${GISTS_API_URL}/${gistId}`, {
+  // 404 -> null: the gist was deleted out from under us, so the caller falls
+  // back to discovery/create.
+  const updatedGist = await ghRest<GitHubGistDetail>(`/gists/${gistId}`, {
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify(body),
   });
 
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    let errorBody: unknown = null;
-    try {
-      errorBody = await response.json();
-    } catch {
-      errorBody = await response.text().catch(() => null);
-    }
-    throw new Error(
-      `Failed to update Gist cache: ${JSON.stringify(errorBody)}`
-    );
-  }
-
-  return toCacheGist((await response.json()) as GitHubGistDetail);
+  return updatedGist ? toCacheGist(updatedGist) : null;
 };
 
 const createCacheGist = async (body: object) => {
-  const createdGist = await fetchGitHubJson<GitHubGistDetail>(GISTS_API_URL, {
+  const createdGist = await ghRest<GitHubGistDetail>('/gists', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(body),
@@ -369,29 +328,8 @@ const createCacheGist = async (body: object) => {
   return toCacheGist(createdGist);
 };
 
-export const deleteGist = async (gistId: string) => {
-  const response = await fetch(`${GISTS_API_URL}/${gistId}`, {
-    method: 'DELETE',
-  });
-
-  if (response.status === 404) {
-    return false;
-  }
-
-  if (!response.ok) {
-    let errorBody: unknown = null;
-    try {
-      errorBody = await response.json();
-    } catch {
-      errorBody = await response.text().catch(() => null);
-    }
-    throw new Error(
-      `Failed to delete Gist cache: ${JSON.stringify(errorBody)}`
-    );
-  }
-
-  return true;
-};
+export const deleteGist = (gistId: string) =>
+  ghRestOk(`/gists/${gistId}`, { method: 'DELETE' });
 
 export const cleanupDuplicateCacheGists = async ({
   ownerLogin,
