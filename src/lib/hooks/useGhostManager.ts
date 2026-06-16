@@ -19,7 +19,9 @@ import { useCacheManager } from './useCacheManager';
 export const useGhostManager = () => {
   const { status } = useSession();
   const isAuthenticated = status === 'authenticated';
-  const removeGhostsFromStore = useGhostStore((state) => state.removeGhosts);
+  const optimisticRemoveGhost = useGhostStore(
+    (state) => state.optimisticRemoveGhost
+  );
   const { persistChanges } = useCacheManager();
   const [removingLogins, setRemovingLogins] = useState<Set<string>>(new Set());
 
@@ -27,8 +29,15 @@ export const useGhostManager = () => {
     if (!isAuthenticated) {
       throw new Error('Authentication is required to remove ghosts.');
     }
-    await removeFollowingByLogin({ login: user.login });
-    removeGhostsFromStore([user.login]);
+    // Optimistically drop the ghost, then roll back if the REST removal fails —
+    // uniform with the follow/unfollow mutations.
+    const rollback = optimisticRemoveGhost(user.login);
+    try {
+      await removeFollowingByLogin({ login: user.login });
+    } catch (error) {
+      rollback();
+      throw error;
+    }
   };
 
   /** Removes a single ghost and persists the change to the cache. */

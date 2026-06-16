@@ -20,8 +20,9 @@ type FollowingTabProps = {
 };
 
 const FollowingTab = ({ following }: FollowingTabProps) => {
-  const { unfollowMutation, incrementActionCount } = useFollowManager();
-  const { isPending, mutate, mutateAsync } = unfollowMutation;
+  const { unfollowMutation, unfollowNoPersist, incrementActionCount } =
+    useFollowManager();
+  const { isPending, mutate } = unfollowMutation;
   const { persistChanges } = useCacheManager();
   const { search, setSearch, sort, setSort, processed } =
     useListControls(following);
@@ -40,7 +41,7 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
 
   const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
     useBulkOperation(
-      (user) => mutateAsync({ user, persist: false }),
+      (user) => unfollowNoPersist(user),
       'Unfollowing',
       async () => {
         await persistChanges();
@@ -100,7 +101,7 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
             action={{
               onClick: () =>
                 mutate(
-                  { user: item!, persist: true },
+                  { user: item! },
                   {
                     onSuccess: () => {
                       if (selectedIds.has(item!.login)) {

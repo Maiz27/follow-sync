@@ -11,9 +11,18 @@ export type GhostState = {
   removedGhostLogins: Set<string>;
 };
 
+/** Restores the pre-mutation ghost state. Call on mutation failure. */
+export type Rollback = () => void;
+
 export type GhostActions = {
   setGhosts: (ghosts: NetworkUser[]) => void;
   removeGhosts: (logins: string[]) => void;
+  /**
+   * Optimistically remove a ghost by login, returning a rollback that restores
+   * the exact prior ghost state (list, lookup set, and removed-logins
+   * tombstone) if the REST removal fails.
+   */
+  optimisticRemoveGhost: (login: string) => Rollback;
   setRemovedGhostLogins: (logins: string[]) => void;
   isGhost: (login: string) => boolean;
 };
@@ -46,6 +55,15 @@ export const useGhostStore = create<GhostStore>((set, get) => ({
       ghostsSet: new Set(remaining.map((g) => g.login)),
       removedGhostLogins: tombstone,
     });
+  },
+  optimisticRemoveGhost: (login) => {
+    const previous = {
+      ghosts: get().ghosts,
+      ghostsSet: get().ghostsSet,
+      removedGhostLogins: get().removedGhostLogins,
+    };
+    get().removeGhosts([login]);
+    return () => set(previous);
   },
   setRemovedGhostLogins: (logins) => {
     set({ removedGhostLogins: new Set(logins.map((l) => l.toLowerCase())) });

@@ -20,8 +20,9 @@ type NonFollowingTabProps = {
 };
 
 const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
-  const { followMutation, incrementActionCount } = useFollowManager();
-  const { isPending, mutate, mutateAsync } = followMutation;
+  const { followMutation, followNoPersist, incrementActionCount } =
+    useFollowManager();
+  const { isPending, mutate } = followMutation;
   const { persistChanges } = useCacheManager();
   const { search, setSearch, sort, setSort, processed } =
     useListControls(oneWayIn);
@@ -39,7 +40,7 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
   );
 
   const { execute: bulkFollow, isPending: isBulkFollowing } = useBulkOperation(
-    (user) => mutateAsync({ user, persist: false }),
+    (user) => followNoPersist(user),
     'Following',
     async () => {
       await persistChanges();
@@ -101,7 +102,7 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
             action={{
               onClick: () =>
                 mutate(
-                  { user: item!, persist: true },
+                  { user: item! },
                   {
                     onSuccess: () => {
                       if (selectedIds.has(item!.login)) {
