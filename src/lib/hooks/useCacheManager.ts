@@ -23,14 +23,8 @@ import {
   fetchRestFollowers,
 } from '@/lib/gql/fetchers';
 import { classifyFollowing, classifyFollowers, mergeGhosts } from '@/lib/utils';
-import {
-  GIST_CACHE_VERSION,
-  GIST_ID_STORAGE_KEY,
-  STALE_TIME_LARGE,
-  STALE_TIME_MANUAL_ONLY,
-  STALE_TIME_MEDIUM,
-  STALE_TIME_SMALL,
-} from '@/lib/constants';
+import { evaluateCachePolicy } from '@/lib/cachePolicy';
+import { GIST_CACHE_VERSION, GIST_ID_STORAGE_KEY } from '@/lib/constants';
 import { CachedData, NetworkUser, ProgressCallbacks } from '@/lib/types';
 import { useSession } from 'next-auth/react';
 
@@ -50,29 +44,6 @@ const enqueueWrite = <T>(task: () => Promise<T>): Promise<T> => {
     () => undefined
   );
   return run;
-};
-
-const getStaleTime = (
-  totalConnections: number,
-  customStaleTime: number | null
-) => {
-  if (customStaleTime) {
-    return customStaleTime * 60 * 1000;
-  }
-
-  if (totalConnections <= 2000) {
-    return STALE_TIME_SMALL;
-  }
-
-  if (totalConnections <= 10000) {
-    return STALE_TIME_MEDIUM;
-  }
-
-  if (totalConnections <= 50000) {
-    return STALE_TIME_LARGE;
-  }
-
-  return STALE_TIME_MANUAL_ONLY;
 };
 
 export const useCacheManager = () => {
@@ -142,11 +113,17 @@ export const useCacheManager = () => {
         if (canonicalGist) {
           const cachedData = parseCache(canonicalGist);
           if (cachedData) {
-            // Caches written by an older schema version (e.g. before
-            // organizations and the REST-diff ghost model existed) are forced
-            // to re-fetch so the user gets the corrected data.
-            const isOutdatedVersion =
-              cachedData.metadata.cacheVersion !== GIST_CACHE_VERSION;
+            // Evaluate against the RAW cached version before normalization
+            // overwrites it. Caches from an older schema version (e.g. before
+            // organizations and the REST-diff ghost model existed) are refetched
+            // so the user gets the corrected data.
+            const policy = evaluateCachePolicy({
+              metadata: cachedData.metadata,
+              timestamp: cachedData.timestamp,
+              customStaleTime: settings.customStaleTime,
+              currentCacheVersion: GIST_CACHE_VERSION,
+              now: Date.now(),
+            });
 
             const normalizedCachedData = normalizeCachedData(
               cachedData,
@@ -162,7 +139,7 @@ export const useCacheManager = () => {
             }
 
             if (
-              !isOutdatedVersion &&
+              !policy.isOutdatedVersion &&
               shouldMigrateCanonicalCache(
                 canonicalGist,
                 normalizedCachedData,
@@ -177,25 +154,16 @@ export const useCacheManager = () => {
               setGistName(activeGistName);
             }
 
-            const totalConnections =
-              normalizedCachedData.metadata.totalConnections;
-            const staleTime = getStaleTime(
-              totalConnections,
-              settings.customStaleTime
-            );
-            const isStale =
-              Date.now() - normalizedCachedData.timestamp > staleTime;
-
             // Only serve the cache when it matches the current schema.
-            if (!isOutdatedVersion) {
+            if (policy.shouldHydrate) {
               loadFromCache(normalizedCachedData);
 
-              if (!isStale) {
+              if (policy.decision === 'serve-fresh') {
                 toast.info('Loaded fresh data from cache.');
                 return normalizedCachedData.network;
               }
 
-              if (staleTime === STALE_TIME_MANUAL_ONLY) {
+              if (policy.decision === 'serve-manual') {
                 toast.info(
                   'Data loaded from cache. Refresh manually for the latest update.'
                 );
