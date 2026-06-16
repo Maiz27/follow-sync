@@ -18,7 +18,6 @@ export type GistActions = {
     timestamp: number;
     metadata: CachedData['metadata'];
   }) => void;
-  setTimestamp: (timestamp: number) => void;
 };
 
 export type GistStore = GistState & GistActions;
@@ -49,8 +48,5 @@ export const useGistStore = create<GistStore>((set) => ({
   },
   setGistData: (data) => {
     set(data);
-  },
-  setTimestamp: (timestamp) => {
-    set({ timestamp });
   },
 }));

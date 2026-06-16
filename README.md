@@ -7,7 +7,8 @@
 ## Features
 
 - **Comprehensive Network Analysis:** Get a clear picture of who you follow that doesn't follow you back, and vice-versa.
-- **Ghost Account Detection:** Identify "ghost" connections—accounts that have been deleted or suspended but still appear in your network lists. This provides a more accurate understanding of your active network, as these connections cannot be removed through the API.
+- **Ghost Account Detection & Removal:** Identify "ghost" connections—deleted or suspended accounts that still linger in your following list. Ghosts are detected for free by diffing GitHub's GraphQL following list (which still lists them) against the REST list (which drops them), and can be removed in one click via the REST unfollow endpoint—even though they no longer resolve on GitHub.
+- **Organization Awareness:** Organizations you follow are surfaced with a badge and excluded from non-mutual analysis (they can't follow you back). GitHub's GraphQL API omits organizations entirely, so they are recovered from the REST API.
 - **Single-Click Follow/Unfollow:** Manage your network directly from the Follow Sync interface with optimistic UI updates for a seamless experience.
 - **Adaptive Caching:** Utilizes your own GitHub Gists as a database, with an intelligent caching mechanism to respect GitHub's API rate limits while keeping your data fresh.
 - **Secure & Private:** All your network data is stored in a private Gist that you own. Follow Sync never stores your data on its servers.
@@ -20,18 +21,18 @@
 - **Language:** [TypeScript](https://www.typescriptlang.org/)
 - **State Management:** [TanStack Query (React Query)](https://tanstack.com/query/latest) for server state and [Zustand](https://github.com/pmndrs/zustand) for client state.
 - **Authentication:** [NextAuth.js](https://next-auth.js.org/) with GitHub OAuth
-- **API:** [GitHub GraphQL API](https://docs.github.com/en/graphql)
+- **API:** [GitHub GraphQL](https://docs.github.com/en/graphql) + [REST](https://docs.github.com/en/rest) APIs, proxied server-side
 - **Styling:** [Tailwind CSS](https://tailwindcss.com/)
 - **Hosting:** [Vercel](https://vercel.com/)
 
 ## Architecture Overview
 
-Follow Sync employs a **client-heavy, GitHub-as-Infrastructure** architecture. It leverages GitHub's own systems for authentication, data fetching, and even data persistence.
+Follow Sync employs a **GitHub-as-Infrastructure** architecture, leveraging GitHub's own systems for authentication, data, and persistence — while keeping your access token server-side.
 
-1. **Authentication:** You authorize the Follow Sync GitHub OAuth App, granting it limited, user-scoped permissions.
-2. **Data Fetching:** The app calls the GitHub GraphQL API to fetch your follower and following lists.
-3. **Analysis & Caching:** The data is analyzed in the client to find non-mutuals. The results are then stored in a private GitHub Gist owned by you. This Gist acts as a cache for all subsequent loads.
-4. **UI:** The interface is built with React Server Components and loads instantly from the Gist cache, triggering background refreshes based on the age and size of your network data.
+1. **Authentication:** You authorize the Follow Sync GitHub OAuth App, granting it limited, user-scoped permissions (`read:user user:follow gist`).
+2. **Data Fetching (server-proxied):** The browser never holds your GitHub token. It calls same-origin proxy routes (`/api/gh/graphql` and `/api/gh/rest/*`) that inject the access token server-side and forward to GitHub's GraphQL and REST APIs. The REST following/followers lists are diffed against GraphQL to recover organizations and detect ghosts.
+3. **Analysis & Caching:** The data is analyzed client-side to find non-mutuals. The results are stored in a private GitHub Gist owned by you, which acts as a cache for subsequent loads.
+4. **UI:** The interface loads from the Gist cache and triggers background refreshes based on the age and size of your network data.
 
 ## Project Status & Roadmap
 
@@ -87,8 +88,8 @@ NEXT_PUBLIC_DOMAIN="follow-sync.vercel.app"
 Once your `.env.local` file is configured, you can install the dependencies and start the development server.
 
 ```bash
-yarn install
-yarn dev
+pnpm install
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
@@ -96,4 +97,3 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-See the [LICENSE](LICENSE) file for details.

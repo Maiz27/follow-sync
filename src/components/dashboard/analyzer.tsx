@@ -19,15 +19,14 @@ import { useGhostStore } from '@/lib/store/ghost';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { formatNumber, timeAgo } from '@/lib/utils';
 import { IoSync } from 'react-icons/io5';
-import { LuLoaderCircle } from 'react-icons/lu';
 
 interface AnalyzerProps {
   refetch: () => void;
   isFetching: boolean;
   followers: UserInfoFragment[];
   following: UserInfoFragment[];
-  visibleNonMutualsYouFollow: UserInfoFragment[];
-  visibleNonMutualsFollowingYou: UserInfoFragment[];
+  nonMutualsYouFollow: UserInfoFragment[];
+  nonMutualsFollowingYou: UserInfoFragment[];
 }
 
 const Analyzer = ({
@@ -35,11 +34,10 @@ const Analyzer = ({
   isFetching,
   followers,
   following,
-  visibleNonMutualsYouFollow,
-  visibleNonMutualsFollowingYou,
+  nonMutualsYouFollow,
+  nonMutualsFollowingYou,
 }: AnalyzerProps) => {
   const ghosts = useGhostStore((state) => state.ghosts);
-  const isCheckingGhosts = useGhostStore((state) => state.isCheckingGhosts);
   const timestamp = useGistStore((state) => state.timestamp);
 
   const networkTabsData = useMemo(
@@ -56,34 +54,26 @@ const Analyzer = ({
       },
       {
         id: 'one-way-out',
-        label: `One-Way Out (${formatNumber(visibleNonMutualsYouFollow.length)})`,
-        component: <NonFollowersTab oneWayOut={visibleNonMutualsYouFollow} />,
+        label: `One-Way Out (${formatNumber(nonMutualsYouFollow.length)})`,
+        component: <NonFollowersTab oneWayOut={nonMutualsYouFollow} />,
       },
       {
         id: 'one-way-in',
-        label: `One-Way In (${formatNumber(visibleNonMutualsFollowingYou.length)})`,
-        component: <NonFollowingTab oneWayIn={visibleNonMutualsFollowingYou} />,
+        label: `One-Way In (${formatNumber(nonMutualsFollowingYou.length)})`,
+        component: <NonFollowingTab oneWayIn={nonMutualsFollowingYou} />,
       },
       {
         id: 'ghosts',
-        label: isCheckingGhosts ? (
-          <span className='inline-flex items-center gap-2'>
-            Ghosts
-            <LuLoaderCircle className='size-4 animate-spin' />
-          </span>
-        ) : (
-          `Ghosts (${formatNumber(ghosts.length)})`
-        ),
+        label: `Ghosts (${formatNumber(ghosts.length)})`,
         component: <GhostsTab ghosts={ghosts} />,
       },
     ],
     [
       followers,
       following,
-      visibleNonMutualsYouFollow,
-      visibleNonMutualsFollowingYou,
+      nonMutualsYouFollow,
+      nonMutualsFollowingYou,
       ghosts,
-      isCheckingGhosts,
     ]
   );
 

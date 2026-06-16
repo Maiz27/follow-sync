@@ -9,7 +9,7 @@ type AsyncMutationFn = (user: UserInfoFragment) => Promise<unknown>;
 export const useBulkOperation = (
   mutationFn: AsyncMutationFn,
   actionName: string,
-  onBulkSuccess?: () => void
+  onBulkSuccess?: () => void | Promise<void>
 ) => {
   const { show, update, complete, fail } = useProgress();
   const [isPending, setIsPending] = useState(false);
@@ -49,13 +49,23 @@ export const useBulkOperation = (
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
 
+    let postSuccessFailed = false;
     if (onBulkSuccess) {
-      onBulkSuccess();
+      try {
+        await onBulkSuccess();
+      } catch (error) {
+        console.error('Bulk operation post-success step failed:', error);
+        postSuccessFailed = true;
+      }
     }
 
     if (errorCount > 0) {
       fail({
-        message: `Completed with ${errorCount} errors. See console for details.`,
+        message: `Completed with ${errorCount} error(s). The rest succeeded.`,
+      });
+    } else if (postSuccessFailed) {
+      fail({
+        message: 'Actions applied, but saving your changes failed.',
       });
     } else {
       complete();

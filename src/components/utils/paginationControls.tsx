@@ -36,10 +36,9 @@ const PaginationControls: React.FC<PaginationControlsProps> = ({
         <PaginationItem>
           <PaginationPrevious
             onClick={prevPage}
+            disabled={currentPage === 1}
             aria-disabled={currentPage === 1}
-            className={
-              currentPage === 1 ? 'pointer-events-none opacity-50' : undefined
-            }
+            className={currentPage === 1 ? 'opacity-50' : undefined}
           />
         </PaginationItem>
 
@@ -66,12 +65,9 @@ const PaginationControls: React.FC<PaginationControlsProps> = ({
         <PaginationItem>
           <PaginationNext
             onClick={nextPage}
+            disabled={currentPage === totalPages}
             aria-disabled={currentPage === totalPages}
-            className={
-              currentPage === totalPages
-                ? 'pointer-events-none opacity-50'
-                : undefined
-            }
+            className={currentPage === totalPages ? 'opacity-50' : undefined}
           />
         </PaginationItem>
       </PaginationContent>

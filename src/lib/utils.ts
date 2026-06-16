@@ -1,11 +1,7 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { textSizes } from './types';
-import {
-  FollowerFieldsFragment,
-  FollowingFieldsFragment,
-  UserInfoFragment,
-} from './gql/types';
+import { NetworkUser, textSizes } from './types';
+import type { RestFollowingEntry } from './gql/fetchers';
 import { Metadata } from 'next';
 import { OpenGraph } from 'next/dist/lib/metadata/types/opengraph-types';
 import { BASE_URL, METADATA } from './constants';
@@ -86,30 +82,191 @@ export const textSizesClasses: Record<NonNullable<textSizes>, string> = {
   '7xl': 'text-7xl',
 };
 
+/**
+ * Non-mutual connections are only meaningful between real user accounts.
+ * Organizations cannot follow you back, and ghosts (deleted/suspended
+ * accounts) are surfaced separately, so both are excluded from the
+ * follow-back analysis.
+ */
+const isActionableUser = (user: NetworkUser) =>
+  user.accountType !== 'organization' && user.accountType !== 'ghost';
+
+const restEntryToNetworkUser = (entry: RestFollowingEntry): NetworkUser => ({
+  __typename: 'User',
+  id: entry.nodeId,
+  login: entry.login,
+  name: null,
+  avatarUrl: entry.avatarUrl,
+  url: entry.htmlUrl,
+  followers: { totalCount: 0 },
+  following: { totalCount: 0 },
+  accountType: entry.type === 'Organization' ? 'organization' : 'user',
+});
+
+/**
+ * Reconciles the GraphQL following list against the REST following list to
+ * classify every followed account. The two GitHub APIs are mirror images:
+ *
+ * - GraphQL `following` returns active users AND ghosts, but omits organizations.
+ * - REST `/user/following` returns active users AND organizations, but omits ghosts.
+ *
+ * So: a login in GraphQL but absent from REST is a ghost (deleted/suspended),
+ * and any REST entry typed `Organization` is an org that GraphQL hid from us.
+ */
+export const classifyFollowing = ({
+  graphqlFollowing,
+  restFollowing,
+}: {
+  graphqlFollowing: NetworkUser[];
+  restFollowing: RestFollowingEntry[];
+}): { following: NetworkUser[]; ghosts: NetworkUser[] } => {
+  const restByLogin = new Map(
+    restFollowing.map((entry) => [entry.login.toLowerCase(), entry])
+  );
+
+  const following: NetworkUser[] = [];
+  const ghosts: NetworkUser[] = [];
+
+  for (const user of graphqlFollowing) {
+    const restEntry = restByLogin.get(user.login.toLowerCase());
+    if (!restEntry) {
+      // In your following list but gone from REST => removable ghost.
+      ghosts.push({ ...user, accountType: 'ghost', removable: true });
+    } else if (restEntry.type === 'Organization') {
+      following.push({ ...user, accountType: 'organization' });
+    } else {
+      following.push({ ...user, accountType: 'user' });
+    }
+  }
+
+  // Organizations are never returned by GraphQL, so add them from REST.
+  const graphqlLogins = new Set(
+    graphqlFollowing.map((u) => u.login.toLowerCase())
+  );
+  for (const entry of restFollowing) {
+    if (entry.type !== 'Organization') continue;
+    if (graphqlLogins.has(entry.login.toLowerCase())) continue;
+    following.push(restEntryToNetworkUser(entry));
+  }
+
+  return { following, ghosts };
+};
+
+/**
+ * Detects ghosts among followers: accounts GraphQL still lists as following you
+ * but that are absent from the REST followers list (deleted/suspended). These
+ * ghosts are NOT removable — you can't unfollow someone who follows you.
+ */
+export const classifyFollowers = ({
+  graphqlFollowers,
+  restFollowers,
+}: {
+  graphqlFollowers: NetworkUser[];
+  restFollowers: RestFollowingEntry[];
+}): { followers: NetworkUser[]; ghosts: NetworkUser[] } => {
+  const restLogins = new Set(
+    restFollowers.map((entry) => entry.login.toLowerCase())
+  );
+
+  const followers: NetworkUser[] = [];
+  const ghosts: NetworkUser[] = [];
+
+  for (const user of graphqlFollowers) {
+    if (restLogins.has(user.login.toLowerCase())) {
+      followers.push({ ...user, accountType: 'user' });
+    } else {
+      ghosts.push({ ...user, accountType: 'ghost', removable: false });
+    }
+  }
+
+  return { followers, ghosts };
+};
+
+/**
+ * Merges following-side and follower-side ghosts, de-duplicated by login. A
+ * ghost present on both sides is removable (since you follow it).
+ */
+export const mergeGhosts = (
+  followingGhosts: NetworkUser[],
+  followerGhosts: NetworkUser[]
+): NetworkUser[] => {
+  const byLogin = new Map<string, NetworkUser>();
+  for (const ghost of [...followingGhosts, ...followerGhosts]) {
+    const key = ghost.login.toLowerCase();
+    const existing = byLogin.get(key);
+    if (!existing) {
+      byLogin.set(key, ghost);
+    } else if (ghost.removable && !existing.removable) {
+      byLogin.set(key, ghost);
+    }
+  }
+  return Array.from(byLogin.values());
+};
+
 export const getNonMutuals = (network: {
-  followers: FollowerFieldsFragment['nodes'];
-  following: FollowingFieldsFragment['nodes'];
+  followers: NetworkUser[];
+  following: NetworkUser[];
 }) => {
   const { followers, following } = network;
-  const followerLogins = new Set(followers!.map((u) => u!.login));
-  const followingLogins = new Set(following!.map((u) => u!.login));
+  const followerLogins = new Set(followers.map((u) => u.login));
+  const followingLogins = new Set(following.map((u) => u.login));
 
-  // Calculate non-mutuals using only logins
-  const nonMutualsYouFollow = following!.filter(
-    (u) => !followerLogins.has(u!.login)
+  const nonMutualsYouFollow = following.filter(
+    (u) => isActionableUser(u) && !followerLogins.has(u.login)
   );
 
-  const nonMutualsFollowingYou = followers!.filter(
-    (u) => !followingLogins.has(u!.login)
+  const nonMutualsFollowingYou = followers.filter(
+    (u) => isActionableUser(u) && !followingLogins.has(u.login)
   );
 
-  const stats = {
-    nonMutualsFollowingYou: nonMutualsFollowingYou as UserInfoFragment[],
-    nonMutualsYouFollow: nonMutualsYouFollow as UserInfoFragment[],
+  return {
+    nonMutualsFollowingYou,
+    nonMutualsYouFollow,
   };
-
-  return stats;
 };
+
+const csvEscape = (value: string | number): string => {
+  const str = String(value);
+  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+};
+
+/** Serializes a list of connections to CSV for export. */
+export const usersToCSV = (users: NetworkUser[]): string => {
+  const header = [
+    'login',
+    'name',
+    'url',
+    'followers',
+    'following',
+    'accountType',
+  ];
+  const rows = users.map((u) => [
+    u.login,
+    u.name ?? '',
+    `https://github.com/${u.login}`,
+    u.followers.totalCount,
+    u.following.totalCount,
+    u.accountType ?? 'user',
+  ]);
+  return [header, ...rows]
+    .map((row) => row.map(csvEscape).join(','))
+    .join('\n');
+};
+
+/** Serializes a list of connections to pretty JSON for export. */
+export const usersToJSON = (users: NetworkUser[]): string =>
+  JSON.stringify(
+    users.map((u) => ({
+      login: u.login,
+      name: u.name ?? null,
+      url: `https://github.com/${u.login}`,
+      followers: u.followers.totalCount,
+      following: u.following.totalCount,
+      accountType: u.accountType ?? 'user',
+    })),
+    null,
+    2
+  );
 
 export const getPageMetadata = (name: string): Metadata | undefined => {
   const pageMetaData = METADATA.get(name);

@@ -3,6 +3,7 @@ import { ThemeProvider } from '@/components/theme/themeProvider';
 import { AuthSessionProvider } from '@/components/auth/sessionProvider';
 import Navbar from '@/components/nav/navbar';
 import Footer from '@/components/nav/footer';
+import { Toaster } from '@/components/ui/sonner';
 import { Favicons } from '@/components/utils/Favicon';
 import { getPageMetadata } from '@/lib/utils';
 import './globals.css';
@@ -34,6 +35,7 @@ export default function RootLayout({
             <main>{children}</main>
             <Footer />
           </AuthSessionProvider>
+          <Toaster expand={true} />
         </ThemeProvider>
       </body>
     </html>

@@ -13,6 +13,7 @@ import type {
   User,
 } from '@/lib/gql/types';
 import { GraphQLClient } from 'graphql-request';
+import { ghRest, ghRestOk } from '@/lib/ghRest';
 
 /**
  * Defines the shape of the progress update object.
@@ -33,6 +34,33 @@ type GraphQLErrorLike = {
       message?: string;
     }>;
   };
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Retries a transient-failing async task with exponential backoff. GitHub's
+ * GraphQL endpoint occasionally returns 5xx/secondary-rate-limit errors during
+ * long paginated syncs; a few bounded retries make large-network fetches far
+ * more resilient than the previous fail-on-first-error behaviour.
+ */
+const withRetry = async <T>(
+  task: () => Promise<T>,
+  { retries = 3, baseDelayMs = 500 }: { retries?: number; baseDelayMs?: number } = {}
+): Promise<T> => {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await task();
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries) break;
+      // Exponential backoff with jitter.
+      const delay = baseDelayMs * 2 ** attempt + Math.floor(attempt * 137);
+      await sleep(delay);
+    }
+  }
+  throw lastError;
 };
 
 const getErrorMessage = (error: unknown, fallbackMessage: string) => {
@@ -117,10 +145,12 @@ export const fetchAllUserFollowersAndFollowing = async ({
     };
 
     try {
-      const data = await client.request<
-        GetUserFollowersAndFollowingQuery,
-        GetUserFollowersAndFollowingQueryVariables
-      >(GET_USER_FOLLOWERS_AND_FOLLOWING, variables);
+      const data = await withRetry(() =>
+        client.request<
+          GetUserFollowersAndFollowingQuery,
+          GetUserFollowersAndFollowingQueryVariables
+        >(GET_USER_FOLLOWERS_AND_FOLLOWING, variables)
+      );
 
       if (hasNextPageFollowers && data.user?.followers) {
         const { nodes, totalCount, pageInfo } = data.user.followers;
@@ -174,6 +204,94 @@ export const fetchAllUserFollowersAndFollowing = async ({
 
   return { followers: allFollowers, following: allFollowing };
 };
+
+const REST_FOLLOWING_PATH = '/user/following';
+const REST_FOLLOWERS_PATH = '/user/followers';
+const REST_PER_PAGE = 100;
+
+/**
+ * A single entry from the REST `/user/following` list. Unlike the GraphQL
+ * `following` connection, the REST list includes organizations (exposed via
+ * `type`) and excludes deleted/suspended accounts — the exact inverse of the
+ * GraphQL behaviour. We diff the two to classify orgs and ghosts.
+ */
+export type RestFollowingEntry = {
+  login: string;
+  nodeId: string;
+  avatarUrl: string;
+  htmlUrl: string;
+  type: 'User' | 'Organization';
+};
+
+type RawRestUser = {
+  login: string;
+  node_id: string;
+  avatar_url: string;
+  html_url: string;
+  type: 'User' | 'Organization';
+};
+
+const fetchRestUserList = async (
+  path: string
+): Promise<RestFollowingEntry[]> => {
+  const all: RestFollowingEntry[] = [];
+
+  for (let page = 1; ; page++) {
+    const pageItems = await withRetry(async () => {
+      const data = await ghRest<RawRestUser[]>(
+        `${path}?per_page=${REST_PER_PAGE}&page=${page}`
+      );
+      return data ?? [];
+    });
+    if (!pageItems.length) break;
+
+    for (const item of pageItems) {
+      all.push({
+        login: item.login,
+        nodeId: item.node_id,
+        avatarUrl: item.avatar_url,
+        htmlUrl: item.html_url,
+        type: item.type,
+      });
+    }
+
+    if (pageItems.length < REST_PER_PAGE) break;
+  }
+
+  return all;
+};
+
+/**
+ * Fetches the authenticated user's full following list via the REST API
+ * (through the same-origin proxy). Used alongside the GraphQL fetch to recover
+ * organizations (which GraphQL omits) and to detect ghosts (logins present in
+ * GraphQL but absent here).
+ */
+export const fetchRestFollowing = () =>
+  fetchRestUserList(REST_FOLLOWING_PATH);
+
+/**
+ * Fetches the authenticated user's full followers list via the REST API. Used
+ * to detect ghosts among followers (deleted accounts that GraphQL still lists
+ * as followers but REST drops).
+ */
+export const fetchRestFollowers = () =>
+  fetchRestUserList(REST_FOLLOWERS_PATH);
+
+/**
+ * Unfollows an account by login via the REST API. This works for ghost
+ * accounts (deleted/suspended) that the GraphQL `unfollowUser` mutation
+ * cannot remove because it requires a live node id. Returns `true` when the
+ * follow was removed (HTTP 204).
+ */
+export const removeFollowingByLogin = ({
+  login,
+}: {
+  login: string;
+}): Promise<boolean> =>
+  ghRestOk(`${REST_FOLLOWING_PATH}/${encodeURIComponent(login)}`, {
+    method: 'DELETE',
+  });
 
 export const followUser = async ({
   client,
