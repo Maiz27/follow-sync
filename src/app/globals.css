@@ -135,6 +135,11 @@
     @apply border-border outline-ring/50;
     font-family: 'Space Grotesk', sans-serif;
   }
+  html {
+    /* Always reserve scrollbar space so opening a Radix Select/Dialog (which
+       locks body scroll) doesn't shift the page and cause a visible "snap". */
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground antialiased;
   }
@@ -147,4 +152,15 @@ main {
 div[data-slot='dropdown-menu-item'] > *:first-child {
   /* styles for the first direct child only */
   @apply px-2 py-1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

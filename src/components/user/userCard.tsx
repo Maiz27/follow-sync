@@ -54,8 +54,13 @@ export const UserCard = () => {
         <div className='flex h-full w-full flex-col justify-center gap-4'>
           <div>
             <Avatar className='mx-auto h-fit w-64 overflow-hidden rounded-full md:w-40'>
-              <AvatarImage src={user.image!} />
-              <AvatarFallback>{user.name?.split(' ')[0][0]}</AvatarFallback>
+              <AvatarImage
+                src={user.image!}
+                alt={`${user.name || user.login}'s avatar`}
+              />
+              <AvatarFallback>
+                {(user.name || user.login || '?').charAt(0)}
+              </AvatarFallback>
             </Avatar>
 
             <div className='grid'>

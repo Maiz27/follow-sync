@@ -1,12 +1,32 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useGhostStore } from '@/lib/store/ghost';
 import { usePaginationStore } from '@/lib/store/pagination';
+import { useSettingsStore } from '@/lib/store/settings';
 import { DEFAULT_PAGE_SIZE } from '@/lib/constants';
 
-export const useSelectionManager = (listId: string, itemIds: string[] = []) => {
+type SelectionOptions = {
+  /**
+   * Whether ghosts are selectable on this list. Action tabs exclude them
+   * (they can't be followed/unfollowed), but the Ghosts tab includes them
+   * so they can be bulk-removed.
+   */
+  includeGhosts?: boolean;
+};
+
+export const useSelectionManager = (
+  listId: string,
+  itemIds: string[] = [],
+  { includeGhosts = false }: SelectionOptions = {}
+) => {
   const [selectedIds, setSelectedIds] = useState(new Set<string>());
   const ghosts = useGhostStore((state) => state.ghostsSet);
   const { pagination } = usePaginationStore();
+  // Must match the page size the list actually renders, otherwise "Select
+  // Page" would select rows that aren't visible.
+  const paginationPageSize = useSettingsStore(
+    (state) => state.paginationPageSize
+  );
+  const pageSize = paginationPageSize ?? DEFAULT_PAGE_SIZE;
   const currentPage = pagination[listId]?.currentPage ?? 1;
 
   useEffect(() => {
@@ -14,14 +34,15 @@ export const useSelectionManager = (listId: string, itemIds: string[] = []) => {
   }, [currentPage]);
 
   const pageItemIds = useMemo(() => {
-    const indexOfLastItem = currentPage * DEFAULT_PAGE_SIZE;
-    const indexOfFirstItem = indexOfLastItem - DEFAULT_PAGE_SIZE;
+    const indexOfLastItem = currentPage * pageSize;
+    const indexOfFirstItem = indexOfLastItem - pageSize;
     return itemIds.slice(indexOfFirstItem, indexOfLastItem);
-  }, [itemIds, currentPage]);
+  }, [itemIds, currentPage, pageSize]);
 
-  const nonGhostPageItemIds = useMemo(() => {
+  const selectablePageItemIds = useMemo(() => {
+    if (includeGhosts) return pageItemIds;
     return pageItemIds.filter((id) => !ghosts.has(id));
-  }, [pageItemIds, ghosts]);
+  }, [pageItemIds, ghosts, includeGhosts]);
 
   const handleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -48,14 +69,14 @@ export const useSelectionManager = (listId: string, itemIds: string[] = []) => {
   const handleSelectPage = () => {
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
-      const allPageItemsSelected = nonGhostPageItemIds.every((id) =>
+      const allPageItemsSelected = selectablePageItemIds.every((id) =>
         newSet.has(id)
       );
 
       if (allPageItemsSelected) {
-        nonGhostPageItemIds.forEach((id) => newSet.delete(id));
+        selectablePageItemIds.forEach((id) => newSet.delete(id));
       } else {
-        nonGhostPageItemIds.forEach((id) => newSet.add(id));
+        selectablePageItemIds.forEach((id) => newSet.add(id));
       }
       return newSet;
     });
@@ -77,10 +98,10 @@ export const useSelectionManager = (listId: string, itemIds: string[] = []) => {
 
   const isAllSelected = useMemo(() => {
     return (
-      nonGhostPageItemIds.length > 0 &&
-      nonGhostPageItemIds.every((id) => selectedIds.has(id))
+      selectablePageItemIds.length > 0 &&
+      selectablePageItemIds.every((id) => selectedIds.has(id))
     );
-  }, [selectedIds, nonGhostPageItemIds]);
+  }, [selectedIds, selectablePageItemIds]);
 
   return {
     selectedIds,

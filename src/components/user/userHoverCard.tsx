@@ -41,8 +41,13 @@ export const UserHoverCard = () => {
       <HoverCardContent className='w-fit max-w-md'>
         <div className='flex h-full w-full justify-between gap-4'>
           <Avatar className='h-fit w-24 overflow-hidden rounded-full'>
-            <AvatarImage src={user.image!} />
-            <AvatarFallback>{(user.name || user.login)?.[0]}</AvatarFallback>
+            <AvatarImage
+              src={user.image!}
+              alt={`${user.name || user.login}'s avatar`}
+            />
+            <AvatarFallback>
+              {(user.name || user.login || '?').charAt(0)}
+            </AvatarFallback>
           </Avatar>
 
           <div className='space-y-2'>

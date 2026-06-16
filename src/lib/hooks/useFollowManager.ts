@@ -5,6 +5,7 @@ import { followUser, unfollowUser } from '@/lib/gql/fetchers';
 import { useClientAuthenticatedGraphQLClient } from '@/lib/gql/client';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { useModalsStore } from '@/lib/store/modals';
+import { toUserMessage } from '@/lib/errors';
 import { useCacheManager } from './useCacheManager';
 
 type FollowMutationInput = {
@@ -34,7 +35,9 @@ export const useFollowManager = () => {
       if (context?.previousNetwork) {
         setNetwork(context.previousNetwork);
       }
-      toast.error(`Failed to follow @${user.login}: ${err.message}`);
+      toast.error(
+        toUserMessage(err, `Failed to follow @${user.login}.`)
+      );
     },
     onSuccess: async (_, { persist = true }) => {
       if (persist) {
@@ -59,7 +62,9 @@ export const useFollowManager = () => {
       if (context?.previousNetwork) {
         setNetwork(context.previousNetwork);
       }
-      toast.error(`Failed to unfollow @${user.login}: ${err.message}`);
+      toast.error(
+        toUserMessage(err, `Failed to unfollow @${user.login}.`)
+      );
     },
     onSuccess: async (_, { persist = true }) => {
       if (persist) {

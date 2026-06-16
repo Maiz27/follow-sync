@@ -3,10 +3,12 @@ import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
 import EmptyState from '@/components/ui/empty-state';
 import { TabHeader } from './tabHeader';
+import ListControls from '@/components/utils/listControls';
 import { useFollowManager } from '@/lib/hooks/useFollowManager';
 import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
 import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
-import { UserInfoFragment } from '@/lib/gql/types';
+import { useListControls } from '@/lib/hooks/useListControls';
+import { NetworkUser } from '@/lib/types';
 import { LuHeart } from 'react-icons/lu';
 import { TAB_DESCRIPTIONS } from '@/lib/constants';
 import { useCacheManager } from '@/lib/hooks/useCacheManager';
@@ -14,13 +16,15 @@ import { useCacheManager } from '@/lib/hooks/useCacheManager';
 const TAB_ID = 'following';
 
 type FollowingTabProps = {
-  following: UserInfoFragment[];
+  following: NetworkUser[];
 };
 
 const FollowingTab = ({ following }: FollowingTabProps) => {
   const { unfollowMutation, incrementActionCount } = useFollowManager();
   const { isPending, mutate, mutateAsync } = unfollowMutation;
   const { persistChanges } = useCacheManager();
+  const { search, setSearch, sort, setSort, processed } =
+    useListControls(following);
 
   const {
     selectedIds,
@@ -31,19 +35,21 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
     isAllSelected,
   } = useSelectionManager(
     TAB_ID,
-    following.map((u) => u!.login)
+    processed.map((u) => u.login)
   );
 
   const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
-    useBulkOperation((user) => mutateAsync({ user, persist: false }), 'Unfollowing', () => {
-      persistChanges();
-      clearSelection();
-    });
+    useBulkOperation(
+      (user) => mutateAsync({ user, persist: false }),
+      'Unfollowing',
+      async () => {
+        await persistChanges();
+        clearSelection();
+      }
+    );
 
   const handleBulkUnfollow = async () => {
-    const usersToUnfollow = following.filter(
-      (u) => u && selectedIds.has(u.login)
-    );
+    const usersToUnfollow = processed.filter((u) => selectedIds.has(u.login));
     await bulkUnfollow(usersToUnfollow);
   };
 
@@ -72,9 +78,17 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
           isBulkActionLoading: isBulkUnfollowing,
         }}
       />
+      <ListControls
+        search={search}
+        setSearch={setSearch}
+        sort={sort}
+        setSort={setSort}
+        data={processed}
+        exportName='follow-sync-following'
+      />
       <PaginatedList
         listId={TAB_ID}
-        data={following}
+        data={processed}
         getItemKey={(item) => item!.id || item!.login}
         renderItem={(item) => (
           <ConnectionCard

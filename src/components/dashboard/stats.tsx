@@ -32,7 +32,7 @@ const Stats = ({ list }: StatsProps) => {
             <CardHeader className='flex flex-col'>
               <CardTitle className='flex w-full items-center justify-center gap-2'>
                 <item.icon className='text-xl text-primary' />
-                <h3>{item.label}</h3>
+                <span>{item.label}</span>
               </CardTitle>
               <CardDescription className='text-sm text-muted-foreground'>
                 {item.description}

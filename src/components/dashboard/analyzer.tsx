@@ -19,7 +19,6 @@ import { useGhostStore } from '@/lib/store/ghost';
 import { UserInfoFragment } from '@/lib/gql/types';
 import { formatNumber, timeAgo } from '@/lib/utils';
 import { IoSync } from 'react-icons/io5';
-import { LuLoaderCircle } from 'react-icons/lu';
 
 interface AnalyzerProps {
   refetch: () => void;
@@ -39,7 +38,6 @@ const Analyzer = ({
   visibleNonMutualsFollowingYou,
 }: AnalyzerProps) => {
   const ghosts = useGhostStore((state) => state.ghosts);
-  const isCheckingGhosts = useGhostStore((state) => state.isCheckingGhosts);
   const timestamp = useGistStore((state) => state.timestamp);
 
   const networkTabsData = useMemo(
@@ -66,14 +64,7 @@ const Analyzer = ({
       },
       {
         id: 'ghosts',
-        label: isCheckingGhosts ? (
-          <span className='inline-flex items-center gap-2'>
-            Ghosts
-            <LuLoaderCircle className='size-4 animate-spin' />
-          </span>
-        ) : (
-          `Ghosts (${formatNumber(ghosts.length)})`
-        ),
+        label: `Ghosts (${formatNumber(ghosts.length)})`,
         component: <GhostsTab ghosts={ghosts} />,
       },
     ],
@@ -83,7 +74,6 @@ const Analyzer = ({
       visibleNonMutualsYouFollow,
       visibleNonMutualsFollowingYou,
       ghosts,
-      isCheckingGhosts,
     ]
   );
 

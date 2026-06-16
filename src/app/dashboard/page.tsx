@@ -6,8 +6,8 @@ import Stats from '@/components/dashboard/stats';
 import Analyzer from '@/components/dashboard/analyzer';
 import DashboardSkeleton from '@/components/dashboard/dashboardSkeleton';
 import { Section } from '@/components/utils/section';
+import { Button } from '@/components/ui/button';
 import { useNetworkManager } from '@/lib/hooks/useNetworkManager';
-import { useGhostDetector } from '@/lib/hooks/useGhostDetector';
 import { useGhostStore } from '@/lib/store/ghost';
 import { useNetworkStore } from '@/lib/store/network';
 import { STATS_DATA } from '@/lib/constants';
@@ -16,7 +16,7 @@ const ClientDashboard = () => {
   const { data: session } = useSession();
   const username = session?.user?.login;
 
-  const { isPending, isError, error, refetch, isFetching, isSuccess } =
+  const { isPending, isError, error, refetch, isFetching } =
     useNetworkManager(username);
 
   const followers = useNetworkStore((state) => state.network.followers);
@@ -53,10 +53,22 @@ const ClientDashboard = () => {
     ]
   );
 
-  useGhostDetector({ isNetworkReady: isSuccess });
-
   if (isPending) return <DashboardSkeleton />;
-  if (isError) return <div>Error: {error?.message}</div>;
+  if (isError)
+    return (
+      <Section className='my-10'>
+        <div className='flex min-h-[40vh] flex-col items-center justify-center gap-4 text-center'>
+          <h2 className='text-xl font-bold'>Couldn&apos;t load your network</h2>
+          <p className='max-w-md text-sm text-muted-foreground'>
+            {error?.message ||
+              'We ran into a problem talking to GitHub. This can happen if your session expired or GitHub is rate-limiting requests.'}
+          </p>
+          <Button onClick={() => refetch()} disabled={isFetching}>
+            {isFetching ? 'Retrying...' : 'Retry'}
+          </Button>
+        </div>
+      </Section>
+    );
 
   return (
     <Section className='my-10 grid gap-2 py-0'>

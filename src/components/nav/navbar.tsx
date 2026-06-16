@@ -40,6 +40,7 @@ const Navbar = () => {
             href={GITHUB_REPO_URL}
             target='_blank'
             rel='noopener noreferrer'
+            aria-label='View source on GitHub'
             className='grid size-9 place-items-center text-lg hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50'
           >
             <SiGithub />
