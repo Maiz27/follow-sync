@@ -24,27 +24,10 @@ import {
 } from '@/lib/gql/fetchers';
 import { classifyFollowing, classifyFollowers, mergeGhosts } from '@/lib/utils';
 import { evaluateCachePolicy } from '@/lib/cachePolicy';
+import { enqueuePersist } from '@/lib/persistenceQueue';
 import { GIST_CACHE_VERSION, GIST_ID_STORAGE_KEY } from '@/lib/constants';
 import { CachedData, NetworkUser, ProgressCallbacks } from '@/lib/types';
 import { useSession } from 'next-auth/react';
-
-/**
- * Serializes gist writes across the whole app. Follow/unfollow, bulk actions,
- * ghost removal and settings saves can all fire `persistChanges` concurrently;
- * without serialization their read-modify-write cycles race and clobber each
- * other (and can spawn duplicate gists). Chaining every write guarantees each
- * one observes the previous write's resulting gist id.
- */
-let writeChain: Promise<unknown> = Promise.resolve();
-
-const enqueueWrite = <T>(task: () => Promise<T>): Promise<T> => {
-  const run = writeChain.then(task, task);
-  writeChain = run.then(
-    () => undefined,
-    () => undefined
-  );
-  return run;
-};
 
 export const useCacheManager = () => {
   const setNetwork = useNetworkStore((state) => state.setNetwork);
@@ -305,7 +288,7 @@ export const useCacheManager = () => {
   const persistChanges = useCallback(async () => {
     if (!isAuthenticated) return;
 
-    await enqueueWrite(async () => {
+    await enqueuePersist(async () => {
       // Read state inside the serialized section so each write sees the latest
       // network/ghosts/gist id produced by any preceding write.
       const { network } = useNetworkStore.getState();
