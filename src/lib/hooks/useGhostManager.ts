@@ -11,10 +11,10 @@ import { toUserMessage } from '@/lib/errors';
 import { useCacheManager } from './useCacheManager';
 
 /**
- * Manages removal of ghost accounts (deleted/suspended users that still linger
+ * Manages removal of inferred ghost accounts (GraphQL-only entries that linger
  * in your following list). Removal goes through the REST `DELETE /user/following`
- * endpoint, which succeeds even for 404 accounts that the GraphQL `unfollowUser`
- * mutation cannot touch.
+ * endpoint and does not require the live node id expected by the GraphQL
+ * `unfollowUser` mutation.
  */
 export const useGhostManager = () => {
   const { status } = useSession();

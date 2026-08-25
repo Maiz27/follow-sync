@@ -4,12 +4,12 @@ import { SettingsState } from './store/settings';
 /**
  * How a connection is classified.
  * - `user`: an active GitHub user account.
- * - `organization`: an org you follow. Returned only by the REST API
- *   (GitHub's GraphQL `following` connection silently omits organizations),
- *   and excluded from non-mutual / follow-back analysis since orgs cannot
- *   follow you back.
- * - `ghost`: a deleted or suspended account that still lingers in your
- *   GraphQL following list but is absent from the REST list (a 404 account).
+ * - `organization`: an org you follow. GitHub's GraphQL `FollowingConnection`
+ *   is typed to `User`, so organizations come from REST and are excluded from
+ *   follow-back analysis because orgs cannot follow you back.
+ * - `ghost`: an account present only in a completed GraphQL follow list under
+ *   the API behavior observed by this app. This is an inferred classification,
+ *   not an account-status flag returned by GitHub.
  */
 export type AccountType = 'user' | 'organization' | 'ghost';
 

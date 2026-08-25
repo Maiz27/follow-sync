@@ -86,7 +86,8 @@ export const TAB_DESCRIPTIONS = {
   following: 'Users you are currently following on GitHub.',
   nonFollowers: 'Users you follow who have not followed you back.',
   nonFollowing: 'Users who follow you, but you have not followed them back.',
-  ghosts: 'Users who have deleted or made their GitHub profile private.',
+  ghosts:
+    "Accounts missing from one of GitHub's follow lists, which can happen after deletion or suspension.",
 };
 
 export const STATS_DATA = [
@@ -111,4 +112,3 @@ export const STATS_DATA = [
     description: 'Users who follow you, but you have not followed them back.',
   },
 ];
-

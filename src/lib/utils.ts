@@ -84,9 +84,8 @@ export const textSizesClasses: Record<NonNullable<textSizes>, string> = {
 
 /**
  * Non-mutual connections are only meaningful between real user accounts.
- * Organizations cannot follow you back, and ghosts (deleted/suspended
- * accounts) are surfaced separately, so both are excluded from the
- * follow-back analysis.
+ * Organizations cannot follow you back, and inferred ghosts are surfaced
+ * separately, so both are excluded from the follow-back analysis.
  */
 const isActionableUser = (user: NetworkUser) =>
   user.accountType !== 'organization' && user.accountType !== 'ghost';
@@ -104,14 +103,12 @@ const restEntryToNetworkUser = (entry: RestFollowingEntry): NetworkUser => ({
 });
 
 /**
- * Reconciles the GraphQL following list against the REST following list to
- * classify every followed account. The two GitHub APIs are mirror images:
- *
- * - GraphQL `following` returns active users AND ghosts, but omits organizations.
- * - REST `/user/following` returns active users AND organizations, but omits ghosts.
- *
- * So: a login in GraphQL but absent from REST is a ghost (deleted/suspended),
- * and any REST entry typed `Organization` is an org that GraphQL hid from us.
+ * Reconciles two completed following lists. Under the API behavior observed by
+ * this app, a GraphQL-only entry is treated as a ghost. This is an inference
+ * from membership in the two lists, not a deletion or suspension flag supplied
+ * by GitHub. GitHub's GraphQL `FollowingConnection` contains `User` nodes, so
+ * organizations cannot appear there. REST entries typed `Organization` are
+ * restored to the following list.
  */
 export const classifyFollowing = ({
   graphqlFollowing,
@@ -130,22 +127,22 @@ export const classifyFollowing = ({
   for (const user of graphqlFollowing) {
     const restEntry = restByLogin.get(user.login.toLowerCase());
     if (!restEntry) {
-      // In your following list but gone from REST => removable ghost.
+      // Under the observed contract, a GraphQL-only entry is a removable ghost.
       ghosts.push({ ...user, accountType: 'ghost', removable: true });
-    } else if (restEntry.type === 'Organization') {
-      following.push({ ...user, accountType: 'organization' });
     } else {
       following.push({ ...user, accountType: 'user' });
     }
   }
 
-  // Organizations are never returned by GraphQL, so add them from REST.
-  const graphqlLogins = new Set(
+  // GraphQL FollowingConnection contains User nodes, so restore orgs from REST.
+  const classifiedLogins = new Set(
     graphqlFollowing.map((u) => u.login.toLowerCase())
   );
   for (const entry of restFollowing) {
     if (entry.type !== 'Organization') continue;
-    if (graphqlLogins.has(entry.login.toLowerCase())) continue;
+    const login = entry.login.toLowerCase();
+    if (classifiedLogins.has(login)) continue;
+    classifiedLogins.add(login);
     following.push(restEntryToNetworkUser(entry));
   }
 
@@ -153,9 +150,10 @@ export const classifyFollowing = ({
 };
 
 /**
- * Detects ghosts among followers: accounts GraphQL still lists as following you
- * but that are absent from the REST followers list (deleted/suspended). These
- * ghosts are NOT removable — you can't unfollow someone who follows you.
+ * Reconciles two completed follower lists. Under the API behavior observed by
+ * this app, a GraphQL-only entry is treated as a ghost. This is a list-membership
+ * inference rather than a GitHub-supplied account-status flag. Follower-side
+ * ghosts are not removable because you cannot unfollow someone who follows you.
  */
 export const classifyFollowers = ({
   graphqlFollowers,

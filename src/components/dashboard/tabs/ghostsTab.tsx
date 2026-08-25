@@ -58,7 +58,7 @@ const GhostsTab = ({ ghosts }: GhostsTabProps) => {
       <EmptyState
         icon={LuGhost}
         title='No Ghosts Found'
-        description="We couldn't find any deleted or suspended accounts in your network. Good job!"
+        description='No accounts are missing from your GitHub follow lists.'
       />
     );
   }

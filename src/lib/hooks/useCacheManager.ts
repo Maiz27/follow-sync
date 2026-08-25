@@ -17,16 +17,11 @@ import {
   shouldMigrateCanonicalCache,
   writeCache,
 } from '@/lib/gist';
-import {
-  fetchAllUserFollowersAndFollowing,
-  fetchRestFollowing,
-  fetchRestFollowers,
-} from '@/lib/gql/fetchers';
-import { classifyFollowing, classifyFollowers, mergeGhosts } from '@/lib/utils';
+import { fetchAndClassifyNetwork } from '@/lib/networkSync';
 import { evaluateCachePolicy } from '@/lib/cachePolicy';
 import { enqueuePersist } from '@/lib/persistenceQueue';
 import { GIST_CACHE_VERSION, GIST_ID_STORAGE_KEY } from '@/lib/constants';
-import { CachedData, NetworkUser, ProgressCallbacks } from '@/lib/types';
+import { CachedData, ProgressCallbacks } from '@/lib/types';
 import { useSession } from 'next-auth/react';
 
 export const useCacheManager = () => {
@@ -168,7 +163,12 @@ export const useCacheManager = () => {
       });
 
       try {
-        const networkData = await fetchAllUserFollowersAndFollowing({
+        const {
+          followers,
+          following,
+          ghosts: allGhosts,
+          graphqlFollowingLogins,
+        } = await fetchAndClassifyNetwork({
           client,
           username,
           onProgress: (p) => {
@@ -189,44 +189,12 @@ export const useCacheManager = () => {
           },
         });
 
-        // The REST lists are the counterpart to the GraphQL ones: the REST
-        // following list surfaces organizations (GraphQL hides them) and the
-        // REST lists exclude ghosts (which GraphQL still returns). Diffing each
-        // side classifies users, orgs and ghosts.
-        const [restFollowing, restFollowers] = await Promise.all([
-          fetchRestFollowing(),
-          fetchRestFollowers(),
-        ]);
-
         const fetchEnd = performance.now();
         const fetchDuration = Math.round((fetchEnd - fetchStart) / 1000);
-
-        const graphqlFollowers = (
-          (networkData.followers.nodes ?? []) as NetworkUser[]
-        ).filter((u): u is NetworkUser => Boolean(u?.login));
-
-        const graphqlFollowing = (
-          (networkData.following.nodes ?? []) as NetworkUser[]
-        ).filter((u): u is NetworkUser => Boolean(u?.login));
-
-        const { followers, ghosts: followerGhosts } = classifyFollowers({
-          graphqlFollowers,
-          restFollowers,
-        });
-
-        const { following, ghosts: followingGhosts } = classifyFollowing({
-          graphqlFollowing,
-          restFollowing,
-        });
-
-        const allGhosts = mergeGhosts(followingGhosts, followerGhosts);
 
         // Suppress just-removed ghosts that GitHub's eventually-consistent
         // GraphQL still returns. Self-clean the tombstone to only logins still
         // present in the GraphQL following list.
-        const graphqlFollowingLogins = new Set(
-          graphqlFollowing.map((u) => u.login.toLowerCase())
-        );
         const prunedRemovedGhosts = [
           ...useGhostStore.getState().removedGhostLogins,
         ].filter((login) => graphqlFollowingLogins.has(login));

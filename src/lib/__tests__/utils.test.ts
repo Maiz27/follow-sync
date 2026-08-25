@@ -77,14 +77,12 @@ describe('getNonMutuals', () => {
 });
 
 describe('classifyFollowing', () => {
-  it('classifies ghosts, orgs, and active users and keeps counts consistent', () => {
-    // GraphQL returns active users AND ghosts (but no orgs).
+  it('classifies active users, restores orgs, and infers ghosts from completed lists', () => {
     const graphqlFollowing: NetworkUser[] = [
       makeUser('activeOne'),
       makeUser('activeTwo'),
       makeUser('ghostOne'),
     ];
-    // REST returns active users AND orgs (but no ghosts).
     const restFollowing: RestFollowingEntry[] = [
       makeRestEntry('activeOne', 'User'),
       makeRestEntry('activeTwo', 'User'),
@@ -108,9 +106,7 @@ describe('classifyFollowing', () => {
 
     // Every GraphQL login lands in exactly one of following/ghosts, plus the
     // recovered org appended to following.
-    expect(following.length + ghosts.length).toBe(
-      graphqlFollowing.length + 1
-    );
+    expect(following.length + ghosts.length).toBe(graphqlFollowing.length + 1);
   });
 
   it('matches logins case-insensitively', () => {
@@ -120,6 +116,23 @@ describe('classifyFollowing', () => {
     });
     expect(ghosts).toEqual([]);
     expect(following[0]?.accountType).toBe('user');
+  });
+
+  it('restores organizations once when REST casing differs', () => {
+    const { following, ghosts } = classifyFollowing({
+      graphqlFollowing: [],
+      restFollowing: [
+        makeRestEntry('AcmeOrg', 'Organization'),
+        makeRestEntry('acmeorg', 'Organization'),
+      ],
+    });
+
+    expect(ghosts).toEqual([]);
+    expect(following).toHaveLength(1);
+    expect(following[0]).toMatchObject({
+      login: 'AcmeOrg',
+      accountType: 'organization',
+    });
   });
 });
 
@@ -134,6 +147,16 @@ describe('classifyFollowers', () => {
     expect(ghosts.map((u) => u.login)).toEqual(['deadFan']);
     expect(ghosts[0]?.accountType).toBe('ghost');
     expect(ghosts[0]?.removable).toBe(false);
+  });
+
+  it('matches follower logins case-insensitively', () => {
+    const { followers, ghosts } = classifyFollowers({
+      graphqlFollowers: [makeUser('CamelCase')],
+      restFollowers: [makeRestEntry('camelcase', 'User')],
+    });
+
+    expect(ghosts).toEqual([]);
+    expect(followers[0]?.accountType).toBe('user');
   });
 });
 

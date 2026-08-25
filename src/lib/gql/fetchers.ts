@@ -46,7 +46,10 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 const withRetry = async <T>(
   task: () => Promise<T>,
-  { retries = 3, baseDelayMs = 500 }: { retries?: number; baseDelayMs?: number } = {}
+  {
+    retries = 3,
+    baseDelayMs = 500,
+  }: { retries?: number; baseDelayMs?: number } = {}
 ): Promise<T> => {
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -210,10 +213,9 @@ const REST_FOLLOWERS_PATH = '/user/followers';
 const REST_PER_PAGE = 100;
 
 /**
- * A single entry from the REST `/user/following` list. Unlike the GraphQL
- * `following` connection, the REST list includes organizations (exposed via
- * `type`) and excludes deleted/suspended accounts — the exact inverse of the
- * GraphQL behaviour. We diff the two to classify orgs and ghosts.
+ * A single entry from a REST follow list. REST exposes the account `type`, so
+ * the classifier can restore organizations that cannot appear in GraphQL's
+ * `FollowingConnection`, whose nodes are schema-typed as `User`.
  */
 export type RestFollowingEntry = {
   login: string;
@@ -264,25 +266,22 @@ const fetchRestUserList = async (
 /**
  * Fetches the authenticated user's full following list via the REST API
  * (through the same-origin proxy). Used alongside the GraphQL fetch to recover
- * organizations (which GraphQL omits) and to detect ghosts (logins present in
- * GraphQL but absent here).
+ * organizations that GraphQL's User-only `FollowingConnection` cannot return
+ * and to infer ghosts from entries present only in the completed GraphQL list.
  */
-export const fetchRestFollowing = () =>
-  fetchRestUserList(REST_FOLLOWING_PATH);
+export const fetchRestFollowing = () => fetchRestUserList(REST_FOLLOWING_PATH);
 
 /**
- * Fetches the authenticated user's full followers list via the REST API. Used
- * to detect ghosts among followers (deleted accounts that GraphQL still lists
- * as followers but REST drops).
+ * Fetches the authenticated user's full followers list via the REST API. Once
+ * both paginated lists complete, GraphQL-only entries are treated as ghosts
+ * under the API behavior observed by this app.
  */
-export const fetchRestFollowers = () =>
-  fetchRestUserList(REST_FOLLOWERS_PATH);
+export const fetchRestFollowers = () => fetchRestUserList(REST_FOLLOWERS_PATH);
 
 /**
- * Unfollows an account by login via the REST API. This works for ghost
- * accounts (deleted/suspended) that the GraphQL `unfollowUser` mutation
- * cannot remove because it requires a live node id. Returns `true` when the
- * follow was removed (HTTP 204).
+ * Unfollows an inferred ghost by login via the REST API. This path does not
+ * require the live node id expected by the GraphQL `unfollowUser` mutation.
+ * Returns `true` when the follow was removed (HTTP 204).
  */
 export const removeFollowingByLogin = ({
   login,
