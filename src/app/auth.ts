@@ -4,6 +4,13 @@ import GitHub from 'next-auth/providers/github';
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     GitHub({
+      // GitHub returns an RFC 9207 `iss` parameter on the OAuth callback.
+      // @auth/core validates it against the provider issuer, which defaults to
+      // the `https://authjs.dev` placeholder on this pinned version and makes
+      // every callback fail. Setting it explicitly matches what GitHub sends
+      // (and what @auth/core >= 0.41.2 sets on its own).
+      issuer: 'https://github.com/login/oauth',
+
       // `read:user` for profile reads, `user:follow` for follow/unfollow
       // mutations, and `gist` for the private-gist cache store. This is the
       // minimal set — the broad `user` scope additionally grants profile
