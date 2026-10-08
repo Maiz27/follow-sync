@@ -82,7 +82,6 @@ let activeSync: AbortController | null = null;
 const SYNC_MESSAGE = 'Fetching connections from GitHub...';
 
 export const useCacheManager = () => {
-  const setNetwork = useNetworkStore((state) => state.setNetwork);
   const reconcileNetwork = useNetworkStore((state) => state.reconcileNetwork);
   const setGhosts = useGhostStore((state) => state.setGhosts);
   const setRemovedGhostLogins = useGhostStore(
@@ -100,9 +99,26 @@ export const useCacheManager = () => {
 
   const loadFromCache = useCallback(
     (cachedData: CachedData) => {
-      setNetwork(cachedData.network);
-      setGhosts(cachedData.ghosts);
-      setRemovedGhostLogins(cachedData.removedGhosts ?? []);
+      // The stores only ever hold this account's state (switchAccount resets
+      // them when the account changes), so this may be a reload of the same
+      // account's cache, e.g. after a remount once React Query dropped the
+      // query. Follows/unfollows in flight or not yet written to the gist are
+      // re-applied on top of it rather than overwritten, as after a sync.
+      reconcileNetwork(
+        cachedData.network,
+        cachedData.syncedAt ?? cachedData.timestamp
+      );
+      // Same for ghost removals: keep those made here since.
+      const removedGhosts = new Set([
+        ...(cachedData.removedGhosts ?? []).map((login) => login.toLowerCase()),
+        ...useGhostStore.getState().removedGhostLogins,
+      ]);
+      setGhosts(
+        cachedData.ghosts.filter(
+          (ghost) => !removedGhosts.has(ghost.login.toLowerCase())
+        )
+      );
+      setRemovedGhostLogins([...removedGhosts]);
       setGistData({
         timestamp: cachedData.timestamp,
         syncedAt: cachedData.syncedAt ?? cachedData.timestamp,
@@ -120,7 +136,7 @@ export const useCacheManager = () => {
         settings.setCustomStaleTime(cachedData.settings.customStaleTime);
       }
     },
-    [setNetwork, setGhosts, setRemovedGhostLogins, setGistData]
+    [reconcileNetwork, setGhosts, setRemovedGhostLogins, setGistData]
   );
 
   const initializeAndFetchNetwork = useCallback(

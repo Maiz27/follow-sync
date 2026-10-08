@@ -885,3 +885,46 @@ describe('useCacheManager: duplicate cleanup', () => {
     );
   });
 });
+
+describe('useCacheManager: reloading the cache in the same session', () => {
+  it('keeps in-flight and recent changes when the cache is served again', async () => {
+    const cached = cacheData('octocat', { ghosts: [user('ghosty')] });
+    mocks.findCanonicalCacheGist.mockResolvedValue(
+      discovery(gistFor(cached, 'octocat'))
+    );
+    const load = async () => {
+      // A fresh hook, as after a remount once React Query dropped the query.
+      const { result } = renderHook(() => useCacheManager());
+      await act(async () => {
+        await result.current.initializeAndFetchNetwork(
+          client,
+          'octocat',
+          progress()
+        );
+      });
+    };
+    await load();
+
+    // Changes whose cache write hasn't landed in the gist yet.
+    const pendingFollow = useNetworkStore
+      .getState()
+      .optimisticFollow(user('buddy'));
+    useNetworkStore.getState().optimisticUnfollow(user('friend')).commit();
+    useGhostStore.getState().optimisticRemoveGhost('ghosty');
+
+    await load();
+
+    expect(mocks.fetchAndClassifyNetwork).not.toHaveBeenCalled();
+    expect(
+      useNetworkStore.getState().network.following.map((u) => u.login)
+    ).toEqual(['buddy']);
+    expect(useGhostStore.getState().ghosts).toEqual([]);
+    expect(useGhostStore.getState().removedGhostLogins.has('ghosty')).toBe(
+      true
+    );
+
+    // The in-flight follow can still be undone on its own.
+    pendingFollow.rollback();
+    expect(useNetworkStore.getState().network.following).toEqual([]);
+  });
+});
