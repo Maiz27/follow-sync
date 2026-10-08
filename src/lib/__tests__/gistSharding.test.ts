@@ -649,6 +649,43 @@ describe('single-file caches from before sharding', () => {
     expect(await readBack('legacy')).toEqual(cache(6));
   });
 
+  it('merges a single-file cache an older deployment changed since it was read', async () => {
+    const github = fakeGitHub();
+    const legacy = {
+      ...cache(5),
+      ignoredLogins: ['old'],
+      metadata: { ...cache(5).metadata, cacheVersion: '3.0' },
+    };
+    github.seed('legacy', {
+      [GIST_FILENAME]: serializeCache(encodeCache(legacy)),
+    });
+    const { canonicalGist } = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+      preferredGistId: 'legacy',
+    });
+    rememberCacheBase(canonicalGist!, parseCache(canonicalGist!)!);
+    // Another device, still on 3.0, rewrites the single file.
+    github.edit('legacy', {
+      [GIST_FILENAME]: serializeCache(
+        encodeCache({ ...legacy, ignoredLogins: ['old', 'theirs'] })
+      ),
+    });
+
+    await writeCache(
+      {
+        ...legacy,
+        ignoredLogins: ['old', 'mine'],
+        timestamp: 5,
+        metadata: { ...legacy.metadata, cacheVersion: '4.0' },
+      },
+      'legacy'
+    );
+
+    expect(
+      [...((await readBack('legacy'))?.ignoredLogins ?? [])].sort()
+    ).toEqual(['mine', 'old', 'theirs']);
+  });
+
   it('keeps a single-file cache too large to relay as the cache to rewrite', async () => {
     const github = fakeGitHub();
     const huge = 'x'.repeat(GITHUB_INLINE_LIMIT + 1);
