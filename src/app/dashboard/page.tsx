@@ -84,7 +84,7 @@ const ClientDashboard = () => {
     );
 
   return (
-    <Section className='my-10 grid gap-2 py-0'>
+    <Section className='my-10 grid min-w-0 gap-2 py-0'>
       {isError && (
         <div
           role='alert'

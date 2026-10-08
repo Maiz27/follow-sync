@@ -22,14 +22,16 @@ const Navbar = () => {
 
   return (
     <header className='z-50 w-full bg-background'>
-      <div className='flex h-[calc(.25rem*14)] w-full items-center justify-between px-4 md:px-6'>
-        <Link href='/' className='flex items-center space-x-2'>
+      <div className='flex h-[calc(.25rem*14)] w-full items-center justify-between gap-3 px-4 md:px-6'>
+        <Link href='/' className='flex shrink-0 items-center gap-2'>
           <Logo />
-          <span className='text-xl font-extrabold text-primary'>
+          {/* The wordmark never wraps; below 360px it yields to the controls. */}
+          <span className='hidden text-lg font-extrabold whitespace-nowrap text-primary min-[360px]:inline sm:text-xl'>
             Follow Sync
           </span>
+          <span className='sr-only min-[360px]:hidden'>Follow Sync</span>
         </Link>
-        <div className='flex h-4 items-center space-x-2'>
+        <div className='flex h-4 shrink-0 items-center gap-1 sm:gap-2'>
           {status === 'loading' ? (
             // Fixed-size placeholder matching the avatar trigger, so the bar
             // doesn't shift once the session resolves.
@@ -54,7 +56,7 @@ const Navbar = () => {
             </SignInButton>
           )}
 
-          <Separator orientation='vertical' className='ml-2' />
+          <Separator orientation='vertical' className='ml-1 sm:ml-2' />
 
           <Link
             href={GITHUB_REPO_URL}
@@ -66,7 +68,7 @@ const Navbar = () => {
             <SiGithub />
           </Link>
 
-          <Separator orientation='vertical' className='ml-2' />
+          <Separator orientation='vertical' className='ml-1 sm:ml-2' />
 
           <ThemeToggle />
         </div>

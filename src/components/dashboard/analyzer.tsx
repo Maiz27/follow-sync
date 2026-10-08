@@ -94,7 +94,9 @@ const Analyzer = ({
   );
 
   return (
-    <Card>
+    // min-w-0: as a grid item the card would otherwise grow to the tab strip's
+    // full width and push the whole page past a phone viewport.
+    <Card className='min-w-0'>
       <CardHeader>
         <div className='mb-2 flex flex-col justify-between gap-2 md:flex-row md:items-center'>
           <div className='grid gap-1.5'>
