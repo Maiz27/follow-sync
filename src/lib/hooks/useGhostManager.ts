@@ -47,9 +47,12 @@ export const useGhostManager = () => {
     }
   };
 
-  /** Removes a single ghost and persists the change to the cache. */
-  const removeGhost = async (user: NetworkUser) => {
-    if (removingLogins.has(user.login)) return;
+  /**
+   * Removes a single ghost and persists the change to the cache. Resolves to
+   * whether the ghost was removed on GitHub.
+   */
+  const removeGhost = async (user: NetworkUser): Promise<boolean> => {
+    if (removingLogins.has(user.login)) return false;
 
     setRemovingLogins((prev) => new Set(prev).add(user.login));
     let removed = false;
@@ -59,16 +62,18 @@ export const useGhostManager = () => {
       await persistChanges();
       toast.success(`Removed ghost @${user.login}.`);
     } catch (error) {
+      if (!removed) {
+        toast.error(toUserMessage(error, `Failed to remove @${user.login}.`));
+        return false;
+      }
       // Distinguish a removal failure (ghost still there, rolled back) from a
       // persistence failure (ghost removed on GitHub, only the cache didn't
       // save) so the toast isn't misleading.
-      toast.error(
-        removed
-          ? toUserMessage(
-              error,
-              `Removed @${user.login}, but updating the cache failed.`
-            )
-          : toUserMessage(error, `Failed to remove @${user.login}.`)
+      toast.warning(
+        toUserMessage(
+          error,
+          `Removed @${user.login}, but updating the cache failed.`
+        )
       );
     } finally {
       setRemovingLogins((prev) => {
@@ -77,6 +82,7 @@ export const useGhostManager = () => {
         return next;
       });
     }
+    return true;
   };
 
   /**

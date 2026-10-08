@@ -18,6 +18,15 @@ export type SettingsActions = {
 
 export type SettingsStore = SettingsState & SettingsActions;
 
+/**
+ * Snaps a page size to the supported options (older caches may hold 500).
+ */
+export const clampPageSize = (size: number) => {
+  if (PAGE_SIZE_LIST.includes(size)) return size;
+  const allowed = PAGE_SIZE_LIST.filter((option) => option <= size);
+  return allowed.length ? allowed[allowed.length - 1] : PAGE_SIZE_LIST[0];
+};
+
 export const useSettingsStore = create<SettingsStore>((set) => ({
   isSettingsModalOpen: false,
   showAvatars: true,
@@ -26,7 +35,8 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   toggleSettingsModal: () =>
     set((state) => ({ isSettingsModalOpen: !state.isSettingsModalOpen })),
   setShowAvatars: (show) => set({ showAvatars: show }),
-  setPaginationPageSize: (size) => set({ paginationPageSize: size }),
+  setPaginationPageSize: (size) =>
+    set({ paginationPageSize: clampPageSize(size) }),
   setCustomStaleTime: (time) => set({ customStaleTime: time }),
   saveSettings: async (persistChanges) => {
     await persistChanges();

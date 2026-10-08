@@ -68,6 +68,16 @@ export const timeAgo = (timestamp: number) => {
   return 'just now';
 };
 
+/**
+ * GitHub stores the profile website as typed, often without a scheme
+ * ("example.com"), which a plain href would resolve relative to this site.
+ */
+export const toExternalUrl = (value?: string | null) => {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+};
+
 export const textSizesClasses: Record<NonNullable<textSizes>, string> = {
   xs: 'text-xs',
   sm: 'text-sm',

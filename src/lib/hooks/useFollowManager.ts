@@ -1,4 +1,5 @@
-import { useMutation } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
+import { useMutation, useMutationState } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useNetworkStore, type OptimisticHandle } from '@/lib/store/network';
 import { followUser, unfollowUser } from '@/lib/gql/fetchers';
@@ -16,6 +17,9 @@ type MutationContext = {
   handle: OptimisticHandle;
 };
 
+const FOLLOW_MUTATION_KEY = ['follow-user'];
+const UNFOLLOW_MUTATION_KEY = ['unfollow-user'];
+
 /**
  * Connection mutations. The optimistic update + rollback live in the network
  * store (the single source of truth); this hook just wires them to the API call
@@ -29,12 +33,14 @@ export const useFollowManager = () => {
     (state) => state.optimisticUnfollow
   );
   const { persistChanges } = useCacheManager();
-  const { incrementActionCount } = useModalsStore();
+  const incrementActionCount = useModalsStore(
+    (state) => state.incrementActionCount
+  );
 
-  const requireClient = () => {
+  const requireClient = useCallback(() => {
     if (!client) throw new Error('GraphQL client not available');
     return client;
-  };
+  }, [client]);
 
   /**
    * Saves the cache after a change GitHub already applied. Deliberately not
@@ -60,6 +66,7 @@ export const useFollowManager = () => {
     FollowMutationInput,
     MutationContext
   >({
+    mutationKey: FOLLOW_MUTATION_KEY,
     mutationFn: ({ user }) =>
       followUser({ client: requireClient(), userId: user.id }),
     onMutate: ({ user }) => ({ handle: optimisticFollow(user) }),
@@ -79,6 +86,7 @@ export const useFollowManager = () => {
     FollowMutationInput,
     MutationContext
   >({
+    mutationKey: UNFOLLOW_MUTATION_KEY,
     mutationFn: ({ user }) =>
       unfollowUser({ client: requireClient(), userId: user.id }),
     onMutate: ({ user }) => ({ handle: optimisticUnfollow(user) }),
@@ -92,33 +100,117 @@ export const useFollowManager = () => {
     },
   });
 
+  // Logins with a follow/unfollow in flight (from any component), so each card
+  // shows its own busy state instead of one shared flag disabling every card.
+  const pendingVariables = useMutationState({
+    filters: { status: 'pending' },
+    select: (mutation) => ({
+      key: mutation.options.mutationKey?.[0],
+      login: (mutation.state.variables as FollowMutationInput | undefined)?.user
+        ?.login,
+    }),
+  });
+  const pendingLogins = useMemo(
+    () =>
+      new Set(
+        pendingVariables
+          .filter(
+            (m) =>
+              m.login &&
+              (m.key === FOLLOW_MUTATION_KEY[0] ||
+                m.key === UNFOLLOW_MUTATION_KEY[0])
+          )
+          .map((m) => m.login as string)
+      ),
+    [pendingVariables]
+  );
+
+  /**
+   * Single-card actions: run the mutation, confirm with an Undo action, and
+   * count it toward the (one-time) star prompt. Resolve to whether GitHub
+   * accepted the change; failures are already toasted by the mutation.
+   */
+  const { mutateAsync: followAsync } = followMutation;
+  const { mutateAsync: unfollowAsync } = unfollowMutation;
+
+  const follow = useCallback(
+    async (user: NetworkUser) => {
+      try {
+        await followAsync({ user });
+      } catch {
+        return false;
+      }
+      incrementActionCount();
+      toast.success(`Followed @${user.login}.`, {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            unfollowAsync({ user }).catch(() => undefined);
+          },
+        },
+      });
+      return true;
+    },
+    [followAsync, unfollowAsync, incrementActionCount]
+  );
+
+  const unfollow = useCallback(
+    async (user: NetworkUser) => {
+      try {
+        await unfollowAsync({ user });
+      } catch {
+        return false;
+      }
+      incrementActionCount();
+      toast.success(`Unfollowed @${user.login}.`, {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            followAsync({ user }).catch(() => undefined);
+          },
+        },
+      });
+      return true;
+    },
+    [followAsync, unfollowAsync, incrementActionCount]
+  );
+
   // Non-persisting variants for bulk operations: same store-owned optimistic
   // update + rollback, but the caller persists once after the whole batch.
-  const followNoPersist = async (user: NetworkUser) => {
-    const handle = optimisticFollow(user);
-    try {
-      await followUser({ client: requireClient(), userId: user.id });
-      handle.commit();
-    } catch (error) {
-      handle.rollback();
-      throw error;
-    }
-  };
+  const followNoPersist = useCallback(
+    async (user: NetworkUser) => {
+      const handle = optimisticFollow(user);
+      try {
+        await followUser({ client: requireClient(), userId: user.id });
+        handle.commit();
+      } catch (error) {
+        handle.rollback();
+        throw error;
+      }
+    },
+    [optimisticFollow, requireClient]
+  );
 
-  const unfollowNoPersist = async (user: NetworkUser) => {
-    const handle = optimisticUnfollow(user);
-    try {
-      await unfollowUser({ client: requireClient(), userId: user.id });
-      handle.commit();
-    } catch (error) {
-      handle.rollback();
-      throw error;
-    }
-  };
+  const unfollowNoPersist = useCallback(
+    async (user: NetworkUser) => {
+      const handle = optimisticUnfollow(user);
+      try {
+        await unfollowUser({ client: requireClient(), userId: user.id });
+        handle.commit();
+      } catch (error) {
+        handle.rollback();
+        throw error;
+      }
+    },
+    [optimisticUnfollow, requireClient]
+  );
 
   return {
     followMutation,
     unfollowMutation,
+    follow,
+    unfollow,
+    pendingLogins,
     followNoPersist,
     unfollowNoPersist,
     incrementActionCount,

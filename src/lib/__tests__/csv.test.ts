@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { csvEscape, usersToCSV } from '@/lib/utils';
+import { csvEscape, toExternalUrl, usersToCSV } from '@/lib/utils';
 import type { NetworkUser } from '@/lib/types';
 
 const makeUser = (login: string, name: string | null): NetworkUser => ({
@@ -42,5 +42,19 @@ describe('usersToCSV', () => {
     expect(row).toBe(
       `evil,"'=HYPERLINK(""http://x"")",https://github.com/evil,3,4,user`
     );
+  });
+});
+
+describe('toExternalUrl', () => {
+  it('adds https:// to scheme-less websites', () => {
+    expect(toExternalUrl('example.com')).toBe('https://example.com');
+    expect(toExternalUrl('  blog.dev/me ')).toBe('https://blog.dev/me');
+  });
+
+  it('keeps explicit http(s) URLs and ignores empty values', () => {
+    expect(toExternalUrl('http://a.b')).toBe('http://a.b');
+    expect(toExternalUrl('HTTPS://a.b')).toBe('HTTPS://a.b');
+    expect(toExternalUrl('')).toBeUndefined();
+    expect(toExternalUrl(null)).toBeUndefined();
   });
 });

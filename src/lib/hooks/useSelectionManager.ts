@@ -43,9 +43,8 @@ export const useSelectionManager = (
     [unselectableIds, includeGhosts, ghosts]
   );
 
-  useEffect(() => {
-    clearSelection();
-  }, [currentPage]);
+  // Selections persist across pages so "Select All" (and page-by-page
+  // selection) can span the whole filtered list.
 
   // Drop selected ids that fall out of the list when it's searched/sorted, so
   // the selected count and bulk actions stay in sync with what's actually

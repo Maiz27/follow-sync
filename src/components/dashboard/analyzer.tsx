@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -39,6 +40,9 @@ const Analyzer = ({
 }: AnalyzerProps) => {
   const ghosts = useGhostStore((state) => state.ghosts);
   const timestamp = useGistStore((state) => state.timestamp);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const networkTabsData = useMemo(
     () => [
@@ -71,6 +75,21 @@ const Analyzer = ({
     [followers, following, nonMutualsYouFollow, nonMutualsFollowingYou, ghosts]
   );
 
+  // The active tab lives in `?tab=` so it survives reloads and can be linked.
+  const requestedTab = searchParams.get('tab');
+  const activeTab = networkTabsData.some((tab) => tab.id === requestedTab)
+    ? (requestedTab as string)
+    : networkTabsData[0].id;
+
+  const handleTabChange = useCallback(
+    (tabId: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', tabId);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
+
   return (
     <Card>
       <CardHeader>
@@ -87,7 +106,7 @@ const Analyzer = ({
 
         <div className='mb-2 flex flex-col justify-between md:flex-row md:items-center'>
           <span className='flex items-center gap-2'>
-            <IoSync /> Last synced: {timeAgo(timestamp!)}
+            <IoSync /> Last synced: {timestamp ? timeAgo(timestamp) : 'Never'}
           </span>
           <Button size='sm' onClick={() => refetch()} disabled={isFetching}>
             <IoSync className={isFetching ? 'animate-spin' : ''} />
@@ -96,7 +115,11 @@ const Analyzer = ({
         </div>
 
         <CardContent className='h-full w-full overflow-hidden px-0'>
-          <TabManager tabs={networkTabsData} defaultValue='followers' />
+          <TabManager
+            tabs={networkTabsData}
+            value={activeTab}
+            onValueChange={handleTabChange}
+          />
         </CardContent>
       </CardHeader>
     </Card>

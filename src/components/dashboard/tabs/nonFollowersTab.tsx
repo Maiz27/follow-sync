@@ -1,123 +1,45 @@
-import React from 'react';
-import ConnectionCard from '../connectionCard';
-import PaginatedList from '@/components/utils/paginatedList';
-import EmptyState from '@/components/ui/empty-state';
-import { TabHeader } from './tabHeader';
-import ListControls from '@/components/utils/listControls';
-import { useFollowManager } from '@/lib/hooks/useFollowManager';
-import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
-import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
-import { useListControls } from '@/lib/hooks/useListControls';
-import { NetworkUser } from '@/lib/types';
+import React, { useMemo } from 'react';
 import { LuUserX } from 'react-icons/lu';
-import { TAB_DESCRIPTIONS } from '@/lib/constants';
+import ConnectionListTab, { ConnectionListAction } from './connectionListTab';
+import { useFollowManager } from '@/lib/hooks/useFollowManager';
 import { useCacheManager } from '@/lib/hooks/useCacheManager';
-
-const TAB_ID = 'nonFollowers';
+import { NetworkUser } from '@/lib/types';
+import { TAB_DESCRIPTIONS } from '@/lib/constants';
 
 type NonFollowersTabProps = {
   oneWayOut: NetworkUser[];
 };
 
 const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
-  const { unfollowMutation, unfollowNoPersist, incrementActionCount } =
-    useFollowManager();
-  const { isPending, mutate } = unfollowMutation;
+  const { unfollow, unfollowNoPersist, pendingLogins } = useFollowManager();
   const { persistChanges } = useCacheManager();
-  const { search, setSearch, sort, setSort, processed } =
-    useListControls(oneWayOut);
 
-  const {
-    selectedIds,
-    handleSelect,
-    clearSelection,
-    handleDeselect,
-    handleSelectPage,
-    isAllSelected,
-  } = useSelectionManager(
-    TAB_ID,
-    processed.map((u) => u.login)
+  const action = useMemo<ConnectionListAction>(
+    () => ({
+      label: 'Unfollow',
+      verb: 'Unfollow',
+      progressTitle: 'Unfollowing',
+      run: unfollow,
+      runSilently: unfollowNoPersist,
+      persist: persistChanges,
+      pendingLogins,
+    }),
+    [unfollow, unfollowNoPersist, persistChanges, pendingLogins]
   );
 
-  const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
-    useBulkOperation(
-      (user) => unfollowNoPersist(user),
-      'Unfollowing',
-      async () => {
-        await persistChanges();
-        clearSelection();
-      }
-    );
-
-  const handleBulkUnfollow = async () => {
-    const usersToUnfollow = processed.filter((u) => selectedIds.has(u.login));
-    await bulkUnfollow(usersToUnfollow);
-  };
-
-  if (oneWayOut.length === 0) {
-    return (
-      <EmptyState
-        icon={LuUserX}
-        title='No One-Way Out Connections'
-        description="Everyone you follow also follows you back. That's great!"
-      />
-    );
-  }
-
   return (
-    <div>
-      <TabHeader
-        description={TAB_DESCRIPTIONS[TAB_ID]}
-        selectedCount={selectedIds.size}
-        selection={{
-          onSelectAll: handleSelectPage,
-          isAllSelected: isAllSelected,
-        }}
-        action={{
-          label: 'Unfollow Selected',
-          onBulkAction: handleBulkUnfollow,
-          isBulkActionLoading: isBulkUnfollowing,
-        }}
-      />
-      <ListControls
-        search={search}
-        setSearch={setSearch}
-        sort={sort}
-        setSort={setSort}
-        data={processed}
-        exportName='follow-sync-one-way-out'
-      />
-      <PaginatedList
-        listId={TAB_ID}
-        data={processed}
-        getItemKey={(item) => item!.id || item!.login}
-        renderItem={(item) => (
-          <ConnectionCard
-            user={item!}
-            selection={{
-              isSelected: selectedIds.has(item!.login),
-              onSelect: handleSelect,
-            }}
-            action={{
-              onClick: () =>
-                mutate(
-                  { user: item! },
-                  {
-                    onSuccess: () => {
-                      if (selectedIds.has(item!.login)) {
-                        handleDeselect(item!.login);
-                      }
-                      incrementActionCount();
-                    },
-                  }
-                ),
-              label: 'Unfollow',
-              loading: isPending,
-            }}
-          />
-        )}
-      />
-    </div>
+    <ConnectionListTab
+      listId='nonFollowers'
+      description={TAB_DESCRIPTIONS.nonFollowers}
+      exportName='follow-sync-one-way-out'
+      users={oneWayOut}
+      action={action}
+      empty={{
+        icon: LuUserX,
+        title: 'No One-Way Out Connections',
+        description: "Everyone you follow also follows you back. That's great!",
+      }}
+    />
   );
 };
 

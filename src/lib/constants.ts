@@ -38,7 +38,9 @@ export const GITHUB_REPO_URL = 'https://github.com/maiz27/follow-sync';
 
 export const DEFAULT_PAGE_SIZE = 100;
 
-export const PAGE_SIZE_LIST = [50, 100, 200, 500];
+// Capped at 200: every card is a real DOM subtree, and larger pages made
+// rendering/search noticeably janky on big networks.
+export const PAGE_SIZE_LIST = [50, 100, 200];
 
 export const METADATA = new Map([
   [

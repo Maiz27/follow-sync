@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Session } from 'next-auth';
 import { SignInButton, SignOutButton } from './buttons';
 import { Button } from '../ui/button';
+import { UserHoverCard } from '../user/userHoverCard';
 import { LuArrowRight, LuGithub } from 'react-icons/lu';
 
 /**
@@ -22,7 +23,7 @@ const GetStarted = ({ session }: { session: Session | null }) => {
           </Link>
         </Button>
         <p className='flex items-center gap-1 text-sm text-muted-foreground'>
-          {login ? `Signed in as @${login}` : 'Signed in'}
+          Signed in as <UserHoverCard fallbackLogin={login} />
           <span aria-hidden='true'>·</span>
           <SignOutButton
             variant='link'

@@ -26,12 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '../ui/button';
 import { PAGE_SIZE_LIST } from '@/lib/constants';
-import { LuInfo, LuTrash2 } from 'react-icons/lu';
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from '../ui/hover-card';
+import { LuTrash2 } from 'react-icons/lu';
 
 const SettingsModal = () => {
   const [isSaving, setIsSaving] = useState(false);
@@ -48,6 +43,21 @@ const SettingsModal = () => {
     saveSettings,
   } = useSettingsStore();
   const { persistChanges, cleanupDuplicateCaches } = useCacheManager();
+  const [staleTimeInput, setStaleTimeInput] = useState(
+    customStaleTime === null ? '' : String(customStaleTime)
+  );
+  const isStaleTimeValid =
+    staleTimeInput.trim() === '' ||
+    (Number.isInteger(Number(staleTimeInput)) && Number(staleTimeInput) >= 1);
+
+  const handleStaleTimeChange = (value: string) => {
+    setStaleTimeInput(value);
+    if (value.trim() === '') {
+      setCustomStaleTime(null);
+    } else if (Number.isInteger(Number(value)) && Number(value) >= 1) {
+      setCustomStaleTime(Number(value));
+    }
+  };
   const { status } = useSession();
   const isAuthenticated = status === 'authenticated';
 
@@ -121,39 +131,39 @@ const SettingsModal = () => {
               </SelectContent>
             </Select>
           </div>
-          <div className='grid grid-cols-4 items-center gap-4'>
+          <div className='grid grid-cols-4 items-center gap-x-4 gap-y-1'>
             <Label
               htmlFor='custom-stale-time'
               className='col-span-2 text-right'
             >
               Stale Time (minutes)
-              <HoverCard>
-                <HoverCardTrigger>
-                  <Button variant='link'>
-                    <LuInfo />
-                  </Button>
-                </HoverCardTrigger>
-                <HoverCardContent>
-                  <p className='col-span-4 text-xs text-muted-foreground'>
-                    Overrides the default adaptive caching. By default, cache
-                    stale time is 15min, 3hr, 12hr, and NEVER based on network
-                    size; 2K, 10K, 50K, and 50K+ connections, respectively.
-                  </p>
-                </HoverCardContent>
-              </HoverCard>
             </Label>
             <Input
               id='custom-stale-time'
               type='number'
-              value={customStaleTime ?? ''}
-              onChange={(e) =>
-                setCustomStaleTime(
-                  e.target.value ? Number(e.target.value) : null
-                )
-              }
+              inputMode='numeric'
+              min={1}
+              step={1}
+              value={staleTimeInput}
+              onChange={(e) => handleStaleTimeChange(e.target.value)}
+              aria-describedby='custom-stale-time-help'
+              aria-invalid={!isStaleTimeValid}
               className='col-span-2'
-              placeholder='Disabled'
+              placeholder='Adaptive'
             />
+            <p
+              id='custom-stale-time-help'
+              className='col-span-4 text-xs text-muted-foreground'
+            >
+              Optional. Overrides the adaptive cache lifetime, which is 15 min,
+              3 h, 12 h, or manual-only for networks up to 2K, 10K, 50K, and
+              over 50K connections. Leave empty to use it.
+            </p>
+            {!isStaleTimeValid && (
+              <p role='alert' className='col-span-4 text-xs text-destructive'>
+                Enter a whole number of minutes (1 or more), or leave it empty.
+              </p>
+            )}
           </div>
           <div className='grid gap-2 rounded-md border p-4'>
             <div className='flex items-center justify-between gap-4'>
@@ -181,7 +191,7 @@ const SettingsModal = () => {
         <DialogFooter>
           <Button
             onClick={handleSave}
-            disabled={isSaving || !isAuthenticated}
+            disabled={isSaving || !isAuthenticated || !isStaleTimeValid}
             className={isSaving ? 'animate-pulse' : ''}
           >
             Save
