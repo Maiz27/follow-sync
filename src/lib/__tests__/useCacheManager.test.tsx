@@ -405,3 +405,81 @@ describe('useCacheManager: legacy gist id', () => {
     expect(window.localStorage.getItem(LEGACY_GIST_ID_STORAGE_KEY)).toBeNull();
   });
 });
+
+describe('useCacheManager: changes since last sync', () => {
+  const syncedAt = Date.now() - 24 * 60 * 60 * 1000;
+  const oldDiff = {
+    since: syncedAt - 1000,
+    at: syncedAt,
+    newFollowers: ['someone'],
+    lostFollowers: [],
+    newFollowing: [],
+    removedFollowing: [],
+    counts: {
+      newFollowers: 1,
+      lostFollowers: 0,
+      newFollowing: 0,
+      removedFollowing: 0,
+    },
+  };
+
+  const runSync = async () => {
+    const { result } = renderHook(() => useCacheManager());
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(
+        client,
+        'octocat',
+        progress()
+      );
+    });
+  };
+
+  beforeEach(() => {
+    const stale = cacheData('octocat', {
+      timestamp: syncedAt,
+      lastDiff: oldDiff,
+    });
+    mocks.findCanonicalCacheGist.mockResolvedValue(
+      discovery(gistFor(stale, 'octocat'))
+    );
+  });
+
+  it('clears the previous diff when a sync finds no changes', async () => {
+    mocks.fetchAndClassifyNetwork.mockResolvedValue(fetched());
+
+    await runSync();
+
+    expect(useGistStore.getState().lastDiff).toBeNull();
+    expect(lastWrite().lastDiff).toBeNull();
+  });
+
+  it('records what changed since the previous full sync', async () => {
+    mocks.fetchAndClassifyNetwork.mockResolvedValue(
+      fetched({ followers: [user('fan'), user('newfan')] })
+    );
+
+    await runSync();
+
+    expect(useGistStore.getState().lastDiff).toMatchObject({
+      since: syncedAt,
+      newFollowers: ['newfan'],
+      removedFollowing: [],
+    });
+  });
+
+  it('does not report an in-app follow made during the sync as an unfollow elsewhere', async () => {
+    mocks.fetchAndClassifyNetwork.mockImplementation(async () => {
+      // Followed in the app while GitHub was being read; the fetched list
+      // predates it.
+      useNetworkStore.getState().optimisticFollow(user('buddy')).commit();
+      return fetched();
+    });
+
+    await runSync();
+
+    expect(useGistStore.getState().lastDiff).toBeNull();
+    expect(
+      useNetworkStore.getState().network.following.map((u) => u.login)
+    ).toEqual(['friend', 'buddy']);
+  });
+});

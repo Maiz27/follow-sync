@@ -358,20 +358,10 @@ export const useCacheManager = () => {
           (g) => !removedGhostSet.has(g.login.toLowerCase())
         );
 
-        // "Changes since last sync": compare against the snapshot this session
-        // already holds (the cache, plus any changes made in-app since), so
-        // only changes made elsewhere — new/lost followers etc. — show up.
-        const previousTimestamp = useGistStore.getState().syncedAt;
-        if (previousTimestamp !== null) {
-          const diff = diffNetworks(
-            useNetworkStore.getState().network,
-            { followers, following },
-            { since: previousTimestamp, at: Date.now() }
-          );
-          if (hasChanges(diff)) {
-            useGistStore.getState().setLastDiff(diff);
-          }
-        }
+        // The snapshot this session holds (the cache, plus any changes made
+        // in-app since), read before the fetched lists replace it.
+        const previousSyncedAt = useGistStore.getState().syncedAt;
+        const previousNetwork = useNetworkStore.getState().network;
 
         // Hydrate the store with the freshly fetched network first, so a gist
         // write failure can't throw away an expensive successful sync. Follows
@@ -379,6 +369,19 @@ export const useCacheManager = () => {
         reconcileNetwork({ followers, following }, syncStartedAt);
         setGhosts(ghosts);
         setRemovedGhostLogins(prunedRemovedGhosts);
+
+        // "Changes since last sync": diff the previous snapshot against the
+        // fetched lists *with* in-app changes re-applied, so only changes made
+        // elsewhere show up — not a follow made here while GitHub was being
+        // read. A sync that finds nothing replaces the previous diff.
+        if (previousSyncedAt !== null) {
+          const diff = diffNetworks(
+            previousNetwork,
+            useNetworkStore.getState().network,
+            { since: previousSyncedAt, at: Date.now() }
+          );
+          useGistStore.getState().setLastDiff(hasChanges(diff) ? diff : null);
+        }
 
         const timestamp = Date.now();
         const reconciled = useNetworkStore.getState().network;
