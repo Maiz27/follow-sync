@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { evaluateCachePolicy, getStaleTime } from '@/lib/cachePolicy';
 import {
+  GIST_CACHE_VERSION,
+  READABLE_CACHE_VERSIONS,
   STALE_TIME_LARGE,
   STALE_TIME_MANUAL_ONLY,
   STALE_TIME_MEDIUM,
@@ -9,7 +11,7 @@ import {
 } from '@/lib/constants';
 import type { CachedData } from '@/lib/types';
 
-const CURRENT_VERSION = '3.0';
+const CURRENT_VERSION = GIST_CACHE_VERSION;
 
 const metadata = (
   overrides: Partial<CachedData['metadata']> = {}
@@ -47,7 +49,7 @@ describe('getStaleTime', () => {
 describe('evaluateCachePolicy', () => {
   const base = {
     customStaleTime: null,
-    currentCacheVersion: CURRENT_VERSION,
+    readableCacheVersions: READABLE_CACHE_VERSIONS,
     now: 1_000_000,
   };
 
@@ -99,5 +101,22 @@ describe('evaluateCachePolicy', () => {
     expect(policy.isOutdatedVersion).toBe(true);
     expect(policy.shouldHydrate).toBe(false);
     expect(policy.decision).toBe('refetch');
+  });
+
+  it('still serves a 3.0 cache, so the 4.0 bump forces no resync', () => {
+    const policy = evaluateCachePolicy({
+      ...base,
+      metadata: metadata({ cacheVersion: '3.0', totalConnections: 100 }),
+      syncedAt: base.now - 1000,
+    });
+    expect(policy.isOutdatedVersion).toBe(false);
+    expect(policy.decision).toBe('serve-fresh');
+  });
+
+  it('writes new caches under a version older code does not accept', () => {
+    // Before the bump the app wrote and accepted only '3.0'; a cache written
+    // now must read as outdated there (resync) rather than be misparsed.
+    expect(GIST_CACHE_VERSION).not.toBe('3.0');
+    expect(READABLE_CACHE_VERSIONS).toContain('3.0');
   });
 });

@@ -133,4 +133,8 @@ describe('/api/gh/gist-raw', () => {
 
     expect(response.status).toBe(413);
   });
+
+  it('caps relayed files below what Vercel lets a function return (4.5 MB)', () => {
+    expect(MAX_GIST_RAW_BYTES).toBeLessThan(4.5 * 1000 * 1000);
+  });
 });

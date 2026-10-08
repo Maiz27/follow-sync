@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getGitHubToken } from '@/lib/server/githubToken';
 import { isSameOriginRequest } from '@/lib/server/requestGuards';
 import { buildProxyHeaders } from '@/lib/server/proxyHeaders';
+import { byteLength, shapeGistResponse } from '@/lib/server/gistResponse';
+import { GIST_VIEW_HEADER, MAX_PROXY_BODY_BYTES } from '@/lib/constants';
 
 const GITHUB_REST_URL = 'https://api.github.com';
 const GITHUB_API_VERSION = '2022-11-28';
@@ -44,6 +46,16 @@ const isAllowedRequest = (segments: string[], method: string) =>
       )
   );
 
+/**
+ * 413 for bodies the host (Vercel: 4.5 MB per request/response) can't carry.
+ * The client turns it into "Your network is too large to cache on this host".
+ */
+const payloadTooLarge = () =>
+  NextResponse.json(
+    { error: 'Payload too large for this host.' },
+    { status: 413 }
+  );
+
 const proxy = async (req: NextRequest, segments: string[], method: string) => {
   if (!isAllowedRequest(segments, method) || !isSameOriginRequest(req)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -64,9 +76,15 @@ const proxy = async (req: NextRequest, segments: string[], method: string) => {
   };
 
   const init: RequestInit = { method, headers };
-  if (method === 'POST' || method === 'PATCH' || method === 'PUT') {
+  if (method === 'POST' || method === 'PATCH') {
     headers['Content-Type'] = 'application/json';
-    init.body = await req.text();
+    const body = await req.text();
+    // The host refuses bodies past its limit before they get here; refuse
+    // anything near it the same way (and clearly) wherever this runs.
+    if (byteLength(body) > MAX_PROXY_BODY_BYTES) {
+      return payloadTooLarge();
+    }
+    init.body = body;
   }
 
   // Bound the upstream call so a stalled GitHub connection can't hang the
@@ -76,7 +94,19 @@ const proxy = async (req: NextRequest, segments: string[], method: string) => {
 
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
-    const data = await response.text();
+    let data = await response.text();
+
+    // A single gist (cache reads and writes) can hold far more inline file
+    // content than the host lets a function return; shrink it to fit.
+    if (response.ok && segments[0] === 'gists' && data) {
+      data = shapeGistResponse(data, {
+        omitContent: req.headers.get(GIST_VIEW_HEADER) === 'meta',
+        maxBytes: MAX_PROXY_BODY_BYTES,
+      });
+    }
+    if (byteLength(data) > MAX_PROXY_BODY_BYTES) {
+      return payloadTooLarge();
+    }
 
     return new NextResponse(data || null, {
       status: response.status,

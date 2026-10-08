@@ -20,7 +20,7 @@
 - **Changes Since Last Sync:** After a refresh, a dismissible summary shows new followers, who unfollowed you, and follows changed outside the app.
 - **Filters:** Hide organizations or ignored accounts in any list.
 - **Guided Start:** A short, dismissible tour explains each dashboard tab on your first visit.
-- **Large Networks:** The cache uses a compact format (~3-4x smaller than plain JSON) and is read past the Gist API's 1 MB inline limit, so networks with tens of thousands of connections load from cache instead of re-syncing.
+- **Large Networks:** The cache uses a compact format (~80 bytes per connection, ~3-4x smaller than plain JSON) split across several files in the gist: a small manifest plus chunk files under 1 MB each (roughly 10,000 connections per chunk). Every read and write request stays under Vercel's 4.5 MB function body limit, so there is no practical cap on network size; large networks just take a few more requests to load and save.
 - **Customizable Settings:** Tailor your experience with settings for pagination, avatar display, and cache lifetime.
 
 ## Technology Stack

@@ -9,6 +9,7 @@ import { pickPersistedSettings, useSettingsStore } from '@/lib/store/settings';
 import { useIgnoreStore } from '@/lib/store/ignore';
 import { switchAccount } from '@/lib/store/account';
 import { diffNetworks, hasChanges } from '@/lib/networkDiff';
+import { toUserMessage } from '@/lib/errors';
 
 import {
   buildCacheKey,
@@ -26,6 +27,7 @@ import { enqueuePersist } from '@/lib/persistenceQueue';
 import {
   GIST_CACHE_VERSION,
   LEGACY_GIST_ID_STORAGE_KEY,
+  READABLE_CACHE_VERSIONS,
   gistIdStorageKey,
 } from '@/lib/constants';
 import { readStorage, writeStorage } from '@/lib/storage';
@@ -232,7 +234,7 @@ export const useCacheManager = () => {
               customStaleTime:
                 cachedData.settings?.customStaleTime ??
                 useSettingsStore.getState().customStaleTime,
-              currentCacheVersion: GIST_CACHE_VERSION,
+              readableCacheVersions: READABLE_CACHE_VERSIONS,
               now: Date.now(),
             });
 
@@ -452,7 +454,10 @@ export const useCacheManager = () => {
           // erroring the whole sync.
           console.error('Failed to persist network cache to gist:', error);
           toast.error(
-            'Synced your network, but saving the cache to a gist failed.'
+            toUserMessage(
+              error,
+              'Synced your network, but saving the cache to a gist failed.'
+            )
           );
         }
         // Superseded during the write: the progress toast and the result

@@ -11,8 +11,42 @@ export const GH_GIST_RAW_PROXY = '/api/gh/gist-raw';
 
 // GitHub Gist
 export const GIST_DESCRIPTION_PREFIX = 'Follow Sync Cache';
-export const GIST_CACHE_VERSION = '3.0';
+/**
+ * Version written into new caches. '4.0' caches are sharded (see gist.ts): the
+ * file named `GIST_FILENAME` is a small manifest and the data lives in chunk
+ * files. Bumped from '3.0' so an older deployment (after a rollback) sees new
+ * caches as outdated and resyncs instead of misreading them.
+ */
+export const GIST_CACHE_VERSION = '4.0';
+/**
+ * Versions this code can read and serve without a resync: '3.0' single-file
+ * caches (legacy objects or compact-1) are still served and rewritten as '4.0'
+ * on the next write.
+ */
+export const READABLE_CACHE_VERSIONS: readonly string[] = ['3.0', '4.0'];
 export const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
+/** Chunk files of a sharded cache: `<prefix><generation>.<n>`. */
+export const GIST_CHUNK_PREFIX = '[FOLLOW_SYNC] Network Cache.part.';
+
+/**
+ * Vercel refuses function request and response bodies over 4.5 MB (413
+ * FUNCTION_PAYLOAD_TOO_LARGE), and every GitHub call goes through a function
+ * here. The proxies stay under this budget, with headroom.
+ */
+export const MAX_PROXY_BODY_BYTES = 4_000_000;
+/** Largest gist write (PATCH/POST body) the client sends in one request. */
+export const MAX_GIST_WRITE_BYTES = 3_500_000;
+/**
+ * Characters per cache chunk file. Under GitHub's 1 MB inline-content limit,
+ * so chunks usually arrive with the gist itself, and far under the proxy
+ * budget when one has to be fetched from its raw URL.
+ */
+export const CACHE_CHUNK_CHARS = 900_000;
+/**
+ * Request header asking the REST proxy to drop file contents from a gist
+ * response (`meta`): only names, sizes and revisions are needed.
+ */
+export const GIST_VIEW_HEADER = 'x-follow-sync-gist-view';
 /**
  * localStorage keys. Anything tied to a GitHub account lives under
  * `USER_STORAGE_PREFIX` and is keyed by login, so a second account on the same

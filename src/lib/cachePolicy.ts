@@ -60,7 +60,7 @@ export const evaluateCachePolicy = ({
   metadata,
   syncedAt,
   customStaleTime,
-  currentCacheVersion,
+  readableCacheVersions,
   now,
 }: {
   metadata: CachedData['metadata'];
@@ -70,10 +70,13 @@ export const evaluateCachePolicy = ({
    */
   syncedAt: number;
   customStaleTime: number | null;
-  currentCacheVersion: string;
+  /** Cache versions this code can serve (see READABLE_CACHE_VERSIONS). */
+  readableCacheVersions: readonly string[];
   now: number;
 }): CachePolicy => {
-  const isOutdatedVersion = metadata.cacheVersion !== currentCacheVersion;
+  const isOutdatedVersion = !readableCacheVersions.includes(
+    metadata.cacheVersion
+  );
   const staleTime = getStaleTime(metadata.totalConnections, customStaleTime);
   const isStale = now - syncedAt > staleTime;
   const shouldHydrate = !isOutdatedVersion;

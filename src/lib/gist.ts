@@ -1,10 +1,14 @@
-import { CacheGist, CachedData } from './types';
+import { CacheGist, CacheGistFile, CachedData } from './types';
 import {
+  CACHE_CHUNK_CHARS,
   GIST_CACHE_VERSION,
+  GIST_CHUNK_PREFIX,
   GIST_DESCRIPTION_PREFIX,
   GIST_FILENAME,
+  GIST_VIEW_HEADER,
+  MAX_GIST_WRITE_BYTES,
 } from './constants';
-import { ghGistRaw, ghRest, ghRestOk } from './ghRest';
+import { GitHubRestError, ghGistRaw, ghRest, ghRestOk } from './ghRest';
 import { decodeCache, encodeCache } from './cacheCodec';
 
 // Requests go through the same-origin proxy (via the ghRest gateway), which
@@ -108,15 +112,40 @@ const fetchGistById = async (gistId: string) => {
 
   const cacheGist = toCacheGist(gist);
 
-  // Files over 1 MB come back truncated; load the full cache from raw_url so
-  // large networks don't fail to parse and trigger a full sync on every load.
+  // Files over 1 MB come back truncated (and the proxy drops inline content
+  // that would push its response over the host's body limit); load those
+  // from raw_url so the cache parses instead of triggering a full sync.
   const cacheFile = cacheGist.files.find((file) => file.name === GIST_FILENAME);
-  if (cacheFile?.truncated && cacheFile.rawUrl) {
-    cacheFile.text = await ghGistRaw(cacheFile.rawUrl);
-    cacheFile.truncated = false;
+  if (cacheFile) await loadFullText(cacheFile);
+
+  // A sharded cache: load the chunks its manifest names the same way.
+  const manifest = readManifest(cacheFile?.text);
+  if (manifest) {
+    const chunkFiles = manifest.chunks
+      .map((ref) => cacheGist.files.find((file) => file.name === ref.file))
+      .filter((file): file is CacheGistFile => Boolean(file));
+    await mapWithConcurrency(chunkFiles, GIST_FETCH_CONCURRENCY, loadFullText);
   }
 
   return cacheGist;
+};
+
+const loadFullText = async (file: CacheGistFile) => {
+  if ((file.truncated || typeof file.text !== 'string') && file.rawUrl) {
+    try {
+      file.text = await ghGistRaw(file.rawUrl);
+      file.truncated = false;
+    } catch (error) {
+      // Too large for the host to relay (an old single-file cache): keep the
+      // gist as an unreadable cache candidate, so the next sync rewrites it
+      // in chunks instead of leaving it behind and creating another gist.
+      if (error instanceof GitHubRestError && error.status === 413) {
+        file.truncated = true;
+        return;
+      }
+      throw error;
+    }
+  }
 };
 
 const listAllGists = async () => {
@@ -262,33 +291,164 @@ export const getGistIdentifier = (
 };
 
 // Parsing a multi-megabyte cache is expensive and scoring/sorting candidates
-// asks for it repeatedly; memoize per gist object (and file text).
+// asks for it repeatedly; memoize per gist object (and file texts).
 const parsedCacheMemo = new WeakMap<
   CacheGist,
-  { text: string | null | undefined; data: CachedData | null }
+  { signature: string; data: CachedData | null }
 >();
 
 /**
- * Parses the content of a Gist object retrieved from the API. Accepts both the
- * compact format and caches written before it existed.
+ * Sharded cache format ('4.0'). The file named `GIST_FILENAME` holds only this
+ * manifest; the compact cache document (see cacheCodec), serialized, is cut
+ * into chunk files of at most `CACHE_CHUNK_CHARS` characters. That keeps every
+ * request and response under the host's body limit however large the network
+ * is: each chunk is written and read on its own when needed.
+ *
+ * Chunk files are named after the write's `generation`, so a new write never
+ * touches the chunks the current manifest points to: chunks are written
+ * first and the manifest last, and a write that fails half-way leaves the
+ * previous cache intact (its orphaned chunks are removed by the next write).
+ * A reader only uses the chunks the manifest lists, with the lengths it
+ * records. The manifest also carries `metadata` and `timestamp`, so older
+ * code reads it as an outdated cache and resyncs instead of failing.
+ */
+export const SHARDED_CACHE_FORMAT = 'sharded-1';
+
+type ChunkRef = { file: string; length: number };
+
+export type ShardedManifest = {
+  format: typeof SHARDED_CACHE_FORMAT;
+  generation: string;
+  chunks: ChunkRef[];
+  timestamp: number;
+  syncedAt?: number;
+  metadata: CachedData['metadata'];
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isShardedManifest = (value: unknown): value is ShardedManifest =>
+  isRecord(value) &&
+  value.format === SHARDED_CACHE_FORMAT &&
+  typeof value.generation === 'string' &&
+  Array.isArray(value.chunks) &&
+  value.chunks.length > 0 &&
+  value.chunks.every(
+    (ref) =>
+      isRecord(ref) &&
+      typeof ref.file === 'string' &&
+      ref.file.startsWith(`${GIST_CHUNK_PREFIX}${value.generation}.`) &&
+      typeof ref.length === 'number'
+  );
+
+const readManifest = (content: string | null | undefined) => {
+  if (!content) return null;
+  try {
+    const value: unknown = JSON.parse(content);
+    return isShardedManifest(value) ? value : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Cuts `text` into consecutive pieces of at most `size` characters. */
+export const splitIntoChunks = (text: string, size = CACHE_CHUNK_CHARS) => {
+  const chunks: string[] = [];
+  for (let i = 0; i < text.length; i += size) {
+    chunks.push(text.slice(i, i + size));
+  }
+  return chunks.length ? chunks : [''];
+};
+
+const chunkFileName = (generation: string, index: number) =>
+  `${GIST_CHUNK_PREFIX}${generation}.${index + 1}`;
+
+export const isCacheChunkFile = (name: string) =>
+  name.startsWith(GIST_CHUNK_PREFIX);
+
+/** A fresh id for one cache write; names that write's chunk files. */
+export const newGeneration = () =>
+  `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+
+/** The gist files of a sharded cache: chunk files plus the manifest. */
+export const buildShardedCache = (data: CachedData, generation: string) => {
+  // ASCII-escaped (see serializeCache), so length is bytes on the wire.
+  const payload = serializeCache(encodeCache(data));
+  const chunks = splitIntoChunks(payload).map((content, index) => ({
+    file: chunkFileName(generation, index),
+    content,
+  }));
+  const manifest: ShardedManifest = {
+    format: SHARDED_CACHE_FORMAT,
+    generation,
+    chunks: chunks.map(({ file, content }) => ({
+      file,
+      length: content.length,
+    })),
+    timestamp: data.timestamp,
+    ...(data.syncedAt === undefined ? {} : { syncedAt: data.syncedAt }),
+    metadata: data.metadata,
+  };
+  return { manifest: serializeCache(manifest), chunks };
+};
+
+/**
+ * Reassembles a sharded cache from the chunk files its manifest lists. Null
+ * when any chunk is missing, not loaded, or not the length the manifest
+ * recorded (e.g. left over from a different write).
+ */
+const decodeSharded = (gist: CacheGist, manifest: ShardedManifest) => {
+  const pieces: string[] = [];
+  for (const ref of manifest.chunks) {
+    const file = gist.files.find((candidate) => candidate.name === ref.file);
+    if (
+      !file ||
+      file.truncated ||
+      typeof file.text !== 'string' ||
+      file.text.length !== ref.length
+    ) {
+      return null;
+    }
+    pieces.push(file.text);
+  }
+  return decodeCache(JSON.parse(pieces.join('')));
+};
+
+const parseSignature = (gist: CacheGist) =>
+  gist.files
+    .map(
+      (file) =>
+        `${file.name}:${file.truncated ? 't' : ''}:${file.text?.length ?? -1}`
+    )
+    .join('|');
+
+/**
+ * Parses the content of a Gist object retrieved from the API. Accepts the
+ * sharded format and the single-file caches written before it (compact-1
+ * and legacy objects).
  */
 export const parseCache = (gist: CacheGist): CachedData | null => {
   const file = gist.files.find((candidate) => candidate.name === GIST_FILENAME);
   const content = file?.text;
 
+  const signature = parseSignature(gist);
   const memo = parsedCacheMemo.get(gist);
-  if (memo && memo.text === content) return memo.data;
+  if (memo && memo.signature === signature) return memo.data;
 
   let data: CachedData | null = null;
   try {
     if (content && !file?.truncated) {
-      data = decodeCache(JSON.parse(content));
+      const value: unknown = JSON.parse(content);
+      data = isShardedManifest(value)
+        ? decodeSharded(gist, value)
+        : decodeCache(value);
     }
   } catch (error) {
     console.error('Failed to parse cache content:', error);
   }
 
-  parsedCacheMemo.set(gist, { text: content, data });
+  parsedCacheMemo.set(gist, { signature, data });
   return data;
 };
 
@@ -433,7 +593,53 @@ export const findCanonicalCacheGist = async ({
   };
 };
 
-const updateCacheGist = async (
+type GistFileWrite = { content: string } | null;
+type GistFiles = Record<string, GistFileWrite>;
+
+type CacheWritePlan = {
+  description: string;
+  manifest: string;
+  chunks: Array<{ file: string; content: string }>;
+};
+
+/**
+ * Serialized size of one `files` entry in a write body. Contents are ASCII
+ * (see serializeCache), so string length is the byte count.
+ */
+const fileEntryBytes = (name: string, entry: GistFileWrite) =>
+  JSON.stringify(name).length +
+  (entry ? JSON.stringify(entry.content).length + 16 : 5);
+
+const filesBytes = (files: GistFiles) =>
+  Object.entries(files).reduce(
+    (total, [name, entry]) => total + fileEntryBytes(name, entry),
+    0
+  );
+
+/** Headroom for the description and the rest of the body around `files`. */
+const BODY_OVERHEAD_BYTES = 2_048;
+
+/** Groups files into write bodies of at most `MAX_GIST_WRITE_BYTES`. */
+const batchFiles = (files: GistFiles) => {
+  const budget = MAX_GIST_WRITE_BYTES - BODY_OVERHEAD_BYTES;
+  const batches: GistFiles[] = [];
+  let current: GistFiles = {};
+  let currentBytes = 0;
+  for (const [name, entry] of Object.entries(files)) {
+    const bytes = fileEntryBytes(name, entry);
+    if (currentBytes > 0 && currentBytes + bytes > budget) {
+      batches.push(current);
+      current = {};
+      currentBytes = 0;
+    }
+    current[name] = entry;
+    currentBytes += bytes;
+  }
+  if (currentBytes > 0) batches.push(current);
+  return batches;
+};
+
+const patchGist = async (
   gistId: string,
   body: object
 ): Promise<CacheGist | null> => {
@@ -448,7 +654,7 @@ const updateCacheGist = async (
   return updatedGist ? toCacheGist(updatedGist) : null;
 };
 
-const createCacheGist = async (body: object) => {
+const postGist = async (body: object) => {
   const createdGist = await ghRest<GitHubGistDetail>('/gists', {
     method: 'POST',
     headers: JSON_HEADERS,
@@ -460,6 +666,82 @@ const createCacheGist = async (body: object) => {
   }
 
   return toCacheGist(createdGist);
+};
+
+/**
+ * The gist's file names, without their contents (the proxy drops them on
+ * request). Null when the gist no longer exists.
+ */
+const fetchGistFileNames = async (gistId: string) => {
+  const gist = await ghRest<GitHubGistDetail>(`/gists/${gistId}`, {
+    headers: { [GIST_VIEW_HEADER]: 'meta' },
+  });
+  if (!gist) return null;
+  return Object.values(gist.files ?? {})
+    .map((file) => file.filename ?? '')
+    .filter(Boolean);
+};
+
+/**
+ * Writes a sharded cache to `gistId` (or a new gist when null). Small caches
+ * go out in one request. Larger ones are split so no request body exceeds
+ * `MAX_GIST_WRITE_BYTES`: chunk files first, then the manifest, which is what
+ * makes the new chunks the cache. Chunk files no manifest will reference any
+ * more (the previous write's, or orphans of a failed one) are deleted with
+ * the manifest. Null when the gist disappeared.
+ */
+const writeShardedCache = async (
+  gistId: string | null,
+  plan: CacheWritePlan
+): Promise<CacheGist | null> => {
+  const chunkFiles: GistFiles = Object.fromEntries(
+    plan.chunks.map(({ file, content }) => [file, { content }])
+  );
+  const finalFiles: GistFiles = {
+    [GIST_FILENAME]: { content: plan.manifest },
+  };
+
+  if (gistId) {
+    const existing = await fetchGistFileNames(gistId);
+    if (!existing) return null;
+    for (const name of existing) {
+      if (isCacheChunkFile(name) && !(name in chunkFiles)) {
+        finalFiles[name] = null;
+      }
+    }
+  }
+
+  const allFiles = { ...chunkFiles, ...finalFiles };
+  if (filesBytes(allFiles) + BODY_OVERHEAD_BYTES <= MAX_GIST_WRITE_BYTES) {
+    return gistId
+      ? patchGist(gistId, { description: plan.description, files: allFiles })
+      : postGist({
+          description: plan.description,
+          public: false,
+          files: allFiles,
+        });
+  }
+
+  let targetId = gistId;
+  for (const files of batchFiles(chunkFiles)) {
+    if (!targetId) {
+      // Created without a manifest, so it isn't a readable cache until the
+      // last request below lands.
+      const created = await postGist({
+        description: plan.description,
+        public: false,
+        files,
+      });
+      targetId = created.id;
+      continue;
+    }
+    if (!(await patchGist(targetId, { files }))) return null;
+  }
+
+  return patchGist(targetId!, {
+    description: plan.description,
+    files: finalFiles,
+  });
 };
 
 const deleteGist = (gistId: string) =>
@@ -537,18 +819,14 @@ export const writeCache = async (
     throw new Error('Cannot write cache without a normalized owner login.');
   }
 
-  const body = {
+  const { manifest, chunks } = buildShardedCache(
+    normalizedData,
+    newGeneration()
+  );
+  const plan: CacheWritePlan = {
     description: buildCacheDescription(normalizedOwnerLogin),
-    files: {
-      [GIST_FILENAME]: {
-        // Compact (not pretty-printed) — pretty-printing inflates the payload
-        // ~35%, and large networks can approach GitHub's per-file gist limit.
-        // ASCII-escaped so GitHub never flags the gist for bidirectional or
-        // hidden Unicode coming from account display names. See serializeCache.
-        content: serializeCache(encodeCache(normalizedData)),
-      },
-    },
-    public: false,
+    manifest,
+    chunks,
   };
 
   const updateTargets = new Set<string>();
@@ -557,7 +835,7 @@ export const writeCache = async (
   }
 
   for (const targetId of updateTargets) {
-    const updatedGist = await updateCacheGist(targetId, body);
+    const updatedGist = await writeShardedCache(targetId, plan);
     if (updatedGist) {
       return updatedGist;
     }
@@ -572,14 +850,18 @@ export const writeCache = async (
 
     const canonicalGistId = discoveryResult.canonicalGist?.id;
     if (canonicalGistId && !updateTargets.has(canonicalGistId)) {
-      const updatedGist = await updateCacheGist(canonicalGistId, body);
+      const updatedGist = await writeShardedCache(canonicalGistId, plan);
       if (updatedGist) {
         return updatedGist;
       }
     }
   }
 
-  return createCacheGist(body);
+  const createdGist = await writeShardedCache(null, plan);
+  if (!createdGist) {
+    throw new Error('Failed to create Gist cache.');
+  }
+  return createdGist;
 };
 
 export const shouldMigrateCanonicalCache = (

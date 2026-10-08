@@ -7,6 +7,7 @@ vi.mock('@/lib/server/githubToken', () => ({
 
 import { NextRequest } from 'next/server';
 import { DELETE, GET, PATCH, POST } from '@/app/api/gh/rest/[...path]/route';
+import { MAX_PROXY_BODY_BYTES } from '@/lib/constants';
 
 const ctx = (path: string[]) => ({ params: Promise.resolve({ path }) });
 const request = (path: string, method = 'GET') =>
@@ -109,5 +110,128 @@ describe('/api/gh/rest allowlist', () => {
 
     expect(response.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('/api/gh/rest body limits', () => {
+  const GIST_ID = 'aa5a315d61ae9438b18d';
+  const gistJson = (files: Record<string, string>) =>
+    JSON.stringify({
+      id: GIST_ID,
+      updated_at: '2024-01-01T00:00:00Z',
+      history: [{ version: 'v3' }, { version: 'v2' }, { version: 'v1' }],
+      files: Object.fromEntries(
+        Object.entries(files).map(([name, content]) => [
+          name,
+          {
+            filename: name,
+            content,
+            truncated: false,
+            raw_url: `https://gist.githubusercontent.com/o/${GIST_ID}/raw/${name}`,
+          },
+        ])
+      ),
+    });
+
+  it('refuses a request body over the host limit with 413, without calling GitHub', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const body = JSON.stringify({
+      files: { a: { content: 'x'.repeat(MAX_PROXY_BODY_BYTES) } },
+    });
+
+    const response = await PATCH(
+      new NextRequest(`https://app.example/api/gh/rest/gists/${GIST_ID}`, {
+        method: 'PATCH',
+        headers: { host: 'app.example', 'sec-fetch-site': 'same-origin' },
+        body,
+      }),
+      ctx(['gists', GIST_ID])
+    );
+
+    expect(response.status).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('drops the largest inline contents from a gist response that would exceed the limit', async () => {
+    const big = 'b'.repeat(1_000_000);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            gistJson({
+              manifest: '{"m":1}',
+              c1: big,
+              c2: big,
+              c3: big,
+              c4: big,
+              c5: big,
+            })
+          )
+      )
+    );
+
+    const response = await GET(
+      request(`gists/${GIST_ID}`),
+      ctx(['gists', GIST_ID])
+    );
+    const text = await response.text();
+    const gist = JSON.parse(text);
+
+    expect(response.status).toBe(200);
+    expect(text.length).toBeLessThanOrEqual(MAX_PROXY_BODY_BYTES);
+    expect(gist.files.manifest.content).toBe('{"m":1}');
+    const dropped = Object.values(
+      gist.files as Record<
+        string,
+        { content: string | null; truncated: boolean; raw_url: string }
+      >
+    ).filter((file) => file.content === null);
+    expect(dropped.length).toBeGreaterThan(0);
+    for (const file of dropped) {
+      expect(file.truncated).toBe(true);
+      expect(file.raw_url).toContain('gist.githubusercontent.com');
+    }
+    expect(gist.history).toEqual([{ version: 'v3' }]);
+  });
+
+  it('drops every content when only the file list is asked for', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(gistJson({ a: 'aaa', b: 'bbb' })))
+    );
+
+    const response = await GET(
+      new NextRequest(`https://app.example/api/gh/rest/gists/${GIST_ID}`, {
+        headers: {
+          host: 'app.example',
+          'sec-fetch-site': 'same-origin',
+          'x-follow-sync-gist-view': 'meta',
+        },
+      }),
+      ctx(['gists', GIST_ID])
+    );
+    const gist = await response.json();
+
+    expect(Object.keys(gist.files)).toEqual(['a', 'b']);
+    expect(gist.files.a).toMatchObject({ content: null, truncated: true });
+  });
+
+  it('answers 413 instead of relaying a non-gist response over the limit', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify(['x'.repeat(MAX_PROXY_BODY_BYTES)]))
+      )
+    );
+
+    const response = await GET(
+      request('user/following'),
+      ctx(['user', 'following'])
+    );
+
+    expect(response.status).toBe(413);
   });
 });

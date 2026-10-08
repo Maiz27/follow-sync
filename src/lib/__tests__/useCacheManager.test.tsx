@@ -928,3 +928,34 @@ describe('useCacheManager: reloading the cache in the same session', () => {
     expect(useNetworkStore.getState().network.following).toEqual([]);
   });
 });
+
+describe('useCacheManager: cache version bump', () => {
+  it('serves a fresh 3.0 cache without resyncing, and writes the current version next', async () => {
+    const data = cacheData('octocat');
+    const legacy = {
+      ...data,
+      metadata: { ...data.metadata, cacheVersion: '3.0' },
+    };
+    mocks.findCanonicalCacheGist.mockResolvedValue(
+      discovery(gistFor(legacy, 'octocat'))
+    );
+    const { result } = renderHook(() => useCacheManager());
+
+    let network: unknown;
+    await act(async () => {
+      network = await result.current.initializeAndFetchNetwork(
+        client,
+        'octocat',
+        progress()
+      );
+    });
+
+    expect(mocks.fetchAndClassifyNetwork).not.toHaveBeenCalled();
+    expect(network).toEqual(legacy.network);
+
+    await act(async () => {
+      await result.current.persistChanges();
+    });
+    expect(lastWrite().metadata.cacheVersion).toBe(GIST_CACHE_VERSION);
+  });
+});
