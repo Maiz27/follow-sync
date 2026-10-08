@@ -79,7 +79,9 @@ export const useGistStore = create<GistStore>((set, get) => ({
   },
   setGistName: (gistName, forOwnerLogin) => {
     const owner = forOwnerLogin?.toLowerCase() ?? null;
-    if (owner) {
+    // Once the account state has been reset (sign-out), a write that finishes
+    // late must not put the signed-out account's gist id back in storage.
+    if (owner && get().ownerLogin !== null) {
       writeStorage(gistIdStorageKey(owner), gistName);
     }
     if (owner === get().ownerLogin) set({ gistName });

@@ -100,6 +100,25 @@ const mergeUniqueUsers = (
 };
 
 /**
+ * The cursor for the next page of a list. A page that claims more pages
+ * follow but hands back no cursor, or the cursor just requested, would make
+ * the loop re-request the same page until the retry budget runs out, so that
+ * is treated as an error instead.
+ */
+const nextPageCursor = (
+  list: 'followers' | 'following',
+  hasNextPage: boolean,
+  currentCursor: string | null,
+  endCursor: string | null | undefined
+): string | null => {
+  const next = endCursor || null;
+  if (hasNextPage && (!next || next === currentCursor)) {
+    throw new Error(`GitHub's ${list} pagination cursor did not advance.`);
+  }
+  return next;
+};
+
+/**
  * Fetches all followers and following of the signed-in user (GraphQL `viewer`),
  * with progress reporting. Also returns the viewer's current login as GitHub
  * reports it, which can differ from the login captured at sign-in.
@@ -170,7 +189,12 @@ export const fetchAllUserFollowersAndFollowing = async ({
           allFollowers.totalCount = totalCount;
         }
         hasNextPageFollowers = pageInfo?.hasNextPage || false;
-        currentCursorFollowers = pageInfo?.endCursor || null;
+        currentCursorFollowers = nextPageCursor(
+          'followers',
+          hasNextPageFollowers,
+          currentCursorFollowers,
+          pageInfo?.endCursor
+        );
       }
 
       if (hasNextPageFollowing && data.viewer?.following) {
@@ -184,7 +208,12 @@ export const fetchAllUserFollowersAndFollowing = async ({
           allFollowing.totalCount = totalCount;
         }
         hasNextPageFollowing = pageInfo?.hasNextPage || false;
-        currentCursorFollowing = pageInfo?.endCursor || null;
+        currentCursorFollowing = nextPageCursor(
+          'following',
+          hasNextPageFollowing,
+          currentCursorFollowing,
+          pageInfo?.endCursor
+        );
       }
 
       onProgress?.({

@@ -12,12 +12,13 @@ import { resetAccountState } from '@/lib/store/account';
  * sign-out entry point (dropdown, landing page) so they behave identically.
  * Account-scoped localStorage (the remembered cache gist id) is cleared first,
  * so the next account on this browser can't pick up the previous one's cache,
- * and the in-memory account state is dropped once the session is gone.
+ * and the in-memory account state is dropped before the sign-out request, so a
+ * cache write that finishes while it is in flight can't restore either.
  */
 export const signOutAndReset = async () => {
   clearUserStorage();
-  await signOut({ redirectTo: '/' });
   resetAccountState();
+  await signOut({ redirectTo: '/' });
 };
 
 export const SignInButton = ({

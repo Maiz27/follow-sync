@@ -54,4 +54,18 @@ describe('signOutAndReset', () => {
     expect(useSettingsStore.getState().showAvatars).toBe(true);
     expect(usePaginationStore.getState().pagination).toEqual({});
   });
+  it('does not let a cache write that lands during sign-out restore the gist id', async () => {
+    useGistStore.getState().setOwnerLogin('alice');
+    useGistStore.getState().setGistName('G1', 'alice');
+    signOut.mockImplementationOnce(async () => {
+      // A persist that was already in flight finishes while signOut runs.
+      useGistStore.getState().setGistName('G2', 'alice');
+      return undefined;
+    });
+
+    await signOutAndReset();
+
+    expect(window.localStorage.getItem(gistIdStorageKey('alice'))).toBeNull();
+    expect(useGistStore.getState().gistName).toBeNull();
+  });
 });
