@@ -138,9 +138,16 @@ export const useCacheManager = () => {
       activeSync = controller;
       const { signal } = controller;
 
-      // The remembered gist id is scoped to this account; the old global key
-      // could belong to whoever used this browser before, so drop it.
+      // The remembered gist id is scoped to this account. The old global key
+      // is carried over once (unless this account already has its own) and
+      // then dropped: it could belong to whoever used this browser before,
+      // but it is only a hint — discovery still checks that GitHub reports
+      // this account as the gist's owner before using it.
       setOwnerLogin(username);
+      const legacyGistName = readStorage(LEGACY_GIST_ID_STORAGE_KEY);
+      if (legacyGistName && !readStorage(gistIdStorageKey(username))) {
+        writeStorage(gistIdStorageKey(username), legacyGistName);
+      }
       writeStorage(LEGACY_GIST_ID_STORAGE_KEY, null);
       const localGistName = readStorage(gistIdStorageKey(username));
       if (!useGistStore.getState().gistName) {

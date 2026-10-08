@@ -37,7 +37,12 @@ vi.mock('@/lib/gist', async (importOriginal) => ({
 import { useCacheManager } from '@/lib/hooks/useCacheManager';
 import { buildCacheDescription, serializeCache } from '@/lib/gist';
 import { encodeCache } from '@/lib/cacheCodec';
-import { GIST_CACHE_VERSION, GIST_FILENAME } from '@/lib/constants';
+import {
+  GIST_CACHE_VERSION,
+  GIST_FILENAME,
+  LEGACY_GIST_ID_STORAGE_KEY,
+  gistIdStorageKey,
+} from '@/lib/constants';
 import { useGistStore } from '@/lib/store/gist';
 import { useNetworkStore } from '@/lib/store/network';
 import { useGhostStore } from '@/lib/store/ghost';
@@ -354,5 +359,49 @@ describe('useCacheManager: sync lifecycle', () => {
     expect(
       useNetworkStore.getState().network.following.map((u) => u.login)
     ).toEqual(['newest']);
+  });
+});
+
+describe('useCacheManager: legacy gist id', () => {
+  it('migrates the legacy global gist id to the account key before dropping it', async () => {
+    window.localStorage.setItem(LEGACY_GIST_ID_STORAGE_KEY, 'LEGACY');
+    mocks.findCanonicalCacheGist.mockResolvedValue(discovery(null));
+    mocks.fetchAndClassifyNetwork.mockResolvedValue(fetched());
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(
+        client,
+        'octocat',
+        progress()
+      );
+    });
+
+    // Still only a hint: discovery validates its ownership before use.
+    expect(mocks.findCanonicalCacheGist).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredGistId: 'LEGACY' })
+    );
+    expect(window.localStorage.getItem(LEGACY_GIST_ID_STORAGE_KEY)).toBeNull();
+  });
+
+  it('keeps an existing account-scoped gist id over the legacy one', async () => {
+    window.localStorage.setItem(LEGACY_GIST_ID_STORAGE_KEY, 'LEGACY');
+    window.localStorage.setItem(gistIdStorageKey('octocat'), 'MINE');
+    mocks.findCanonicalCacheGist.mockResolvedValue(discovery(null));
+    mocks.fetchAndClassifyNetwork.mockResolvedValue(fetched());
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(
+        client,
+        'octocat',
+        progress()
+      );
+    });
+
+    expect(mocks.findCanonicalCacheGist).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredGistId: 'MINE' })
+    );
+    expect(window.localStorage.getItem(LEGACY_GIST_ID_STORAGE_KEY)).toBeNull();
   });
 });

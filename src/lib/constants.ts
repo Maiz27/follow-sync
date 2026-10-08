@@ -17,7 +17,9 @@ export const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
  * localStorage keys. Anything tied to a GitHub account lives under
  * `USER_STORAGE_PREFIX` and is keyed by login, so a second account on the same
  * browser never picks up the first one's cache gist; sign-out clears the whole
- * prefix. `LEGACY_GIST_ID_STORAGE_KEY` is the old global key, removed on sight.
+ * prefix. `LEGACY_GIST_ID_STORAGE_KEY` is the old global key: its value is moved
+ * to the signed-in account's key (still ownership-checked before use), then it
+ * is removed.
  */
 export const USER_STORAGE_PREFIX = 'follow-sync:user:';
 export const LEGACY_GIST_ID_STORAGE_KEY = 'Follow Sync_gist_id';
