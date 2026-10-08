@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getGitHubToken } from '@/lib/server/githubToken';
 import { isSameOriginRequest } from '@/lib/server/requestGuards';
 import { buildProxyHeaders } from '@/lib/server/proxyHeaders';
+import { MAX_GIST_RAW_BYTES, readTextCapped } from '@/lib/server/readCapped';
 
 const RAW_GIST_HOST = 'gist.githubusercontent.com';
 const UPSTREAM_TIMEOUT_MS = 30_000;
@@ -11,7 +12,8 @@ const UPSTREAM_TIMEOUT_MS = 30_000;
  * (GitHub cuts `content` at 1 MB and points to `raw_url` instead). Only raw
  * gist URLs are accepted — this is not an open proxy — and only for signed-in
  * users. Proxied (rather than fetched by the browser) so the app keeps talking
- * to its own origin only.
+ * to its own origin only. Bodies over `MAX_GIST_RAW_BYTES` are refused (413)
+ * rather than buffered.
  */
 export async function GET(req: NextRequest) {
   if (!isSameOriginRequest(req)) {
@@ -51,8 +53,14 @@ export async function GET(req: NextRequest) {
       redirect: 'error',
       signal: controller.signal,
     });
-    const data = await response.text();
-    return new NextResponse(data || null, {
+    const body = await readTextCapped(response, MAX_GIST_RAW_BYTES);
+    if (!body.ok) {
+      return NextResponse.json(
+        { error: 'Gist file is too large.' },
+        { status: 413 }
+      );
+    }
+    return new NextResponse(body.text || null, {
       status: response.status,
       headers: buildProxyHeaders(response, 'text/plain; charset=utf-8'),
     });
