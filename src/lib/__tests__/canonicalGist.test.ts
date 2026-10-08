@@ -77,6 +77,26 @@ describe('scoreCacheGist', () => {
     );
   });
 
+  it.each([
+    ['a number', '42'],
+    [
+      'an object without metadata',
+      '{"network":{"followers":[],"following":[]}}',
+    ],
+    ['invalid JSON', '{"network":'],
+  ])('scores a cache-named gist holding %s without throwing', (_, text) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const malformed: CacheGist = {
+      ...gistFor(OWNER),
+      files: [{ name: GIST_FILENAME, text }],
+    };
+    expect(parseCache(malformed)).toBeNull();
+    expect(() => scoreCacheGist(malformed, OWNER)).not.toThrow();
+    expect(scoreCacheGist(malformed, OWNER)).toBeLessThan(
+      scoreCacheGist(gistFor(OWNER), OWNER)
+    );
+  });
+
   it('scores a non-cache gist at zero', () => {
     const empty: CacheGist = {
       id: 'g',
@@ -165,6 +185,31 @@ describe('findCanonicalCacheGist', () => {
     });
 
     expect(result.canonicalGist).toBeNull();
+  });
+
+  it('ignores a malformed cache gist and offers it for duplicate cleanup', async () => {
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path.startsWith('/gists?'))
+        return [summary('BAD', OWNER), summary('A', OWNER)] as never;
+      if (path === '/gists/A')
+        return {
+          ...detail('A', OWNER),
+          updated_at: '2020-01-01T00:00:00Z',
+        } as never;
+      if (path === '/gists/BAD')
+        return {
+          ...summary('BAD', OWNER),
+          files: { [GIST_FILENAME]: { filename: GIST_FILENAME, content: '7' } },
+        } as never;
+      return null;
+    });
+
+    const { canonicalGist, duplicateGists } = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+    });
+
+    expect(canonicalGist?.id).toBe('A');
+    expect(duplicateGists.map((g) => g.id)).toEqual(['BAD']);
   });
 
   it('returns no canonical gist when none score above zero', async () => {

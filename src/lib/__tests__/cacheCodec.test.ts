@@ -63,7 +63,7 @@ describe('compact cache codec', () => {
       user('x', { avatarUrl: 'https://example.com/a.png' }),
     ];
     expect(
-      decodeCache(encodeCache(original)).network.followers[0].avatarUrl
+      decodeCache(encodeCache(original))?.network.followers[0].avatarUrl
     ).toBe('https://example.com/a.png');
   });
 
@@ -78,5 +78,27 @@ describe('compact cache codec', () => {
     const compact = encodeCache(data);
     expect(compact.format).toBe(COMPACT_CACHE_FORMAT);
     expect(legacySize / serializeCache(compact).length).toBeGreaterThan(2.5);
+  });
+
+  it.each([
+    ['a number', 42],
+    ['null', null],
+    ['an empty object', {}],
+    ['a network that is not lists', { network: 1, metadata: {} }],
+    [
+      'missing metadata',
+      { network: { followers: [], following: [] }, ghosts: [] },
+    ],
+    [
+      'a compact cache with non-list users',
+      {
+        format: COMPACT_CACHE_FORMAT,
+        network: { followers: 'x', following: [] },
+        ghosts: [],
+        metadata: {},
+      },
+    ],
+  ])('rejects %s instead of passing it through', (_, value) => {
+    expect(decodeCache(value)).toBeNull();
   });
 });

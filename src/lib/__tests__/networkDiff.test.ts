@@ -78,7 +78,7 @@ describe('diffNetworks', () => {
       },
     };
     const restored = decodeCache(JSON.parse(JSON.stringify(encodeCache(data))));
-    expect(restored.ignoredLogins).toEqual(['spam']);
-    expect(restored.lastDiff).toEqual(lastDiff);
+    expect(restored?.ignoredLogins).toEqual(['spam']);
+    expect(restored?.lastDiff).toEqual(lastDiff);
   });
 });

@@ -213,8 +213,8 @@ export const scoreCacheGist = (gist: CacheGist, ownerLogin: string) => {
   if (isCacheDescription(gist.description)) score += 5;
   if (parsed) score += 20;
 
-  const parsedOwnerLogin = parsed?.metadata.ownerLogin?.toLowerCase();
-  const parsedCacheKey = parsed?.metadata.cacheKey;
+  const parsedOwnerLogin = parsed?.metadata?.ownerLogin?.toLowerCase();
+  const parsedCacheKey = parsed?.metadata?.cacheKey;
 
   if (parsedOwnerLogin === normalizedOwnerLogin) score += 40;
   if (parsedCacheKey === expectedCacheKey) score += 80;

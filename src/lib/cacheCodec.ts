@@ -8,7 +8,8 @@ import type { AccountType, CachedData, NetworkUser } from './types';
  * connection — so caches broke at roughly 3,400 connections. Users are stored
  * as positional tuples without derivable fields (profile URL, `__typename`,
  * the avatar host), which is ~3-4x smaller. Old caches (plain `CachedData`)
- * still parse: `decodeCache` passes them through unchanged.
+ * still parse: `decodeCache` passes them through unchanged once their shape
+ * checks out.
  */
 export const COMPACT_CACHE_FORMAT = 'compact-1';
 
@@ -104,12 +105,41 @@ const isCompactCache = (value: unknown): value is CompactCache =>
   value !== null &&
   (value as { format?: unknown }).format === COMPACT_CACHE_FORMAT;
 
-/** Accepts either the compact or the legacy object format. */
-export const decodeCache = (value: unknown): CachedData => {
-  if (!isCompactCache(value)) return value as CachedData;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * Whether a parsed cache (either format) has the shape the app relies on: both
+ * network lists, a ghost list (absent in some old caches) and a metadata
+ * object. Anything else is treated as no cache at all.
+ */
+const hasCacheShape = (
+  value: Record<string, unknown>
+): value is Record<string, unknown> & {
+  network: { followers: unknown[]; following: unknown[] };
+  ghosts?: unknown[];
+  metadata: Record<string, unknown>;
+} =>
+  isRecord(value.network) &&
+  Array.isArray(value.network.followers) &&
+  Array.isArray(value.network.following) &&
+  (value.ghosts === undefined || Array.isArray(value.ghosts)) &&
+  isRecord(value.metadata);
+
+/**
+ * Accepts either the compact or the legacy object format. Returns null for
+ * anything that isn't a cache (a malformed or hand-edited gist), so callers
+ * never trip over missing fields.
+ */
+export const decodeCache = (value: unknown): CachedData | null => {
+  if (!isRecord(value) || !hasCacheShape(value)) return null;
+
+  if (!isCompactCache(value)) {
+    return { ...value, ghosts: value.ghosts ?? [] } as unknown as CachedData;
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { format, network, ghosts, ...rest } = value;
+  const { format, network, ghosts = [], ...rest } = value;
   return {
     ...rest,
     network: {
