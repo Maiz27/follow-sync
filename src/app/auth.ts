@@ -1,6 +1,20 @@
 import NextAuth, { Profile } from 'next-auth';
 import GitHub from 'next-auth/providers/github';
 
+const PROFILE_FIELDS = [
+  'login',
+  'company',
+  'blog',
+  'location',
+  'bio',
+  'twitter_username',
+] as const;
+
+const pickProfile = (profile: Profile | undefined): Profile =>
+  Object.fromEntries(
+    PROFILE_FIELDS.map((field) => [field, profile?.[field] ?? null])
+  ) as Profile;
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     GitHub({
@@ -30,22 +44,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, account, profile }) {
       if (account?.access_token) {
         token.accessToken = account.access_token;
-        token.profile = profile;
+        // Keep only the profile fields the UI shows — the full GitHub profile
+        // bloats the cookie (forcing chunking) and isn't needed.
+        token.profile = pickProfile(profile);
       }
       return token;
     },
     async session({ session, token }) {
       const { login, company, blog, location, bio, twitter_username } =
-        token.profile as Profile;
+        (token.profile ?? {}) as Profile;
 
       session.user = {
         ...session.user,
-        login: login as string | undefined,
-        company: company as string | undefined,
-        blog: blog as string | undefined,
-        location: location as string | undefined,
-        bio: bio as string | undefined,
-        twitter_username: twitter_username as string | undefined,
+        login: (login as string | null) ?? undefined,
+        company: (company as string | null) ?? undefined,
+        blog: (blog as string | null) ?? undefined,
+        location: (location as string | null) ?? undefined,
+        bio: (bio as string | null) ?? undefined,
+        twitter_username: (twitter_username as string | null) ?? undefined,
       };
 
       return session;

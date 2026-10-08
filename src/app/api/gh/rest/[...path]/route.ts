@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGitHubToken } from '@/lib/server/githubToken';
+import { isSameOriginRequest } from '@/lib/server/requestGuards';
 
 const GITHUB_REST_URL = 'https://api.github.com';
 const GITHUB_API_VERSION = '2022-11-28';
@@ -21,7 +22,7 @@ const isAllowedPath = (segments: string[]) => {
 };
 
 const proxy = async (req: NextRequest, segments: string[], method: string) => {
-  if (!isAllowedPath(segments)) {
+  if (!isAllowedPath(segments) || !isSameOriginRequest(req)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

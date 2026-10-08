@@ -33,7 +33,14 @@ export const useGhostManager = () => {
     // uniform with the follow/unfollow mutations.
     const rollback = optimisticRemoveGhost(user.login);
     try {
-      await removeFollowingByLogin({ login: user.login });
+      const removed = await removeFollowingByLogin({ login: user.login });
+      if (!removed) {
+        // 404: GitHub couldn't resolve the account, so the follow wasn't
+        // removed. Treat it as a failure instead of silently hiding the ghost.
+        throw new Error(
+          `GitHub could not find @${user.login} (404); the ghost was not removed.`
+        );
+      }
     } catch (error) {
       rollback();
       throw error;

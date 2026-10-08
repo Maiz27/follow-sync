@@ -223,9 +223,17 @@ export const getNonMutuals = (network: {
   };
 };
 
-const csvEscape = (value: string | number): string => {
-  const str = String(value);
-  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+/**
+ * Escapes one CSV cell. Text cells starting with a formula trigger (`=`, `+`,
+ * `-`, `@`, tab or CR) are prefixed with `'` so spreadsheet apps show them as
+ * text instead of evaluating them — display names are attacker-controlled.
+ */
+export const csvEscape = (value: string | number): string => {
+  let str = String(value);
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+  return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 };
 
 /** Serializes a list of connections to CSV for export. */

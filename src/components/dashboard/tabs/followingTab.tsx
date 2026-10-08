@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
 import EmptyState from '@/components/ui/empty-state';
@@ -27,6 +27,18 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
   const { search, setSearch, sort, setSort, processed } =
     useListControls(following);
 
+  const itemIds = useMemo(() => processed.map((u) => u.login), [processed]);
+  // Organizations are listed but can't be selected for bulk unfollow.
+  const orgLogins = useMemo(
+    () =>
+      new Set(
+        processed
+          .filter((u) => u.accountType === 'organization')
+          .map((u) => u.login)
+      ),
+    [processed]
+  );
+
   const {
     selectedIds,
     handleSelect,
@@ -34,10 +46,7 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
     handleDeselect,
     handleSelectPage,
     isAllSelected,
-  } = useSelectionManager(
-    TAB_ID,
-    processed.map((u) => u.login)
-  );
+  } = useSelectionManager(TAB_ID, itemIds, { unselectableIds: orgLogins });
 
   const { execute: bulkUnfollow, isPending: isBulkUnfollowing } =
     useBulkOperation(

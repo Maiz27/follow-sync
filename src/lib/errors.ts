@@ -38,3 +38,16 @@ export const toUserMessage = (error: unknown, fallback: string): string => {
 
   return fallback;
 };
+
+/** Whether an error means the GitHub session is no longer valid (HTTP 401). */
+export const isAuthError = (error: unknown): boolean => {
+  const raw = (
+    error instanceof Error ? error.message : String(error ?? '')
+  ).toLowerCase();
+  return (
+    raw.includes('(401)') ||
+    raw.includes('"status":401') ||
+    raw.includes('unauthorized') ||
+    raw.includes('bad credentials')
+  );
+};

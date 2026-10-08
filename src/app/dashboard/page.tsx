@@ -10,6 +10,9 @@ import { Button } from '@/components/ui/button';
 import { useNetworkManager } from '@/lib/hooks/useNetworkManager';
 import { useNetworkStore } from '@/lib/store/network';
 import { STATS_DATA } from '@/lib/constants';
+import { isAuthError, toUserMessage } from '@/lib/errors';
+import { SignInButton } from '@/components/auth/buttons';
+import { LuGithub } from 'react-icons/lu';
 
 const ClientDashboard = () => {
   const { data: session } = useSession();
@@ -56,12 +59,21 @@ const ClientDashboard = () => {
         <div className='flex min-h-[40vh] flex-col items-center justify-center gap-4 text-center'>
           <h2 className='text-xl font-bold'>Couldn&apos;t load your network</h2>
           <p className='max-w-md text-sm text-muted-foreground'>
-            {error?.message ||
-              'We ran into a problem talking to GitHub. This can happen if your session expired or GitHub is rate-limiting requests.'}
+            {toUserMessage(
+              error,
+              'We ran into a problem talking to GitHub. This can happen if your session expired or GitHub is rate-limiting requests.'
+            )}
           </p>
-          <Button onClick={() => refetch()} disabled={isFetching}>
-            {isFetching ? 'Retrying...' : 'Retry'}
-          </Button>
+          {isAuthError(error) ? (
+            <SignInButton>
+              <LuGithub />
+              Sign in again
+            </SignInButton>
+          ) : (
+            <Button onClick={() => refetch()} disabled={isFetching}>
+              {isFetching ? 'Retrying...' : 'Retry'}
+            </Button>
+          )}
         </div>
       </Section>
     );

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useGhostStore } from '@/lib/store/ghost';
 import { usePaginationStore } from '@/lib/store/pagination';
 import { useSettingsStore } from '@/lib/store/settings';
@@ -11,12 +11,20 @@ type SelectionOptions = {
    * so they can be bulk-removed.
    */
   includeGhosts?: boolean;
+  /**
+   * Ids that are listed (so page slicing stays aligned with what's rendered)
+   * but can never be selected — e.g. organizations, which can't be followed
+   * back or bulk-unfollowed from here.
+   */
+  unselectableIds?: ReadonlySet<string>;
 };
+
+const EMPTY_SET: ReadonlySet<string> = new Set();
 
 export const useSelectionManager = (
   listId: string,
   itemIds: string[] = [],
-  { includeGhosts = false }: SelectionOptions = {}
+  { includeGhosts = false, unselectableIds = EMPTY_SET }: SelectionOptions = {}
 ) => {
   const [selectedIds, setSelectedIds] = useState(new Set<string>());
   const ghosts = useGhostStore((state) => state.ghostsSet);
@@ -29,6 +37,12 @@ export const useSelectionManager = (
   const pageSize = paginationPageSize ?? DEFAULT_PAGE_SIZE;
   const currentPage = pagination[listId]?.currentPage ?? 1;
 
+  const isSelectable = useCallback(
+    (id: string) =>
+      !unselectableIds.has(id) && (includeGhosts || !ghosts.has(id)),
+    [unselectableIds, includeGhosts, ghosts]
+  );
+
   useEffect(() => {
     clearSelection();
   }, [currentPage]);
@@ -40,14 +54,14 @@ export const useSelectionManager = (
   useEffect(() => {
     setSelectedIds((prev) => {
       if (prev.size === 0) return prev;
-      const present = new Set(itemIds);
+      const present = new Set(itemIds.filter(isSelectable));
       const next = new Set<string>();
       prev.forEach((id) => {
         if (present.has(id)) next.add(id);
       });
       return next.size === prev.size ? prev : next;
     });
-  }, [itemIds]);
+  }, [itemIds, isSelectable]);
 
   const pageItemIds = useMemo(() => {
     const indexOfLastItem = currentPage * pageSize;
@@ -55,10 +69,15 @@ export const useSelectionManager = (
     return itemIds.slice(indexOfFirstItem, indexOfLastItem);
   }, [itemIds, currentPage, pageSize]);
 
-  const selectablePageItemIds = useMemo(() => {
-    if (includeGhosts) return pageItemIds;
-    return pageItemIds.filter((id) => !ghosts.has(id));
-  }, [pageItemIds, ghosts, includeGhosts]);
+  const selectablePageItemIds = useMemo(
+    () => pageItemIds.filter(isSelectable),
+    [pageItemIds, isSelectable]
+  );
+
+  const selectableItemIds = useMemo(
+    () => itemIds.filter(isSelectable),
+    [itemIds, isSelectable]
+  );
 
   const handleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -100,10 +119,10 @@ export const useSelectionManager = (
 
   const handleSelectAll = () => {
     setSelectedIds((prev) => {
-      if (prev.size === itemIds.length) {
+      if (prev.size === selectableItemIds.length) {
         return new Set<string>();
       } else {
-        return new Set(itemIds);
+        return new Set(selectableItemIds);
       }
     });
   };
@@ -127,5 +146,6 @@ export const useSelectionManager = (
     handleSelectAll,
     clearSelection,
     isAllSelected,
+    selectableCount: selectableItemIds.length,
   };
 };
