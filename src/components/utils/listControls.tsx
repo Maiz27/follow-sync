@@ -73,7 +73,10 @@ const ListControls = ({
         />
       </div>
 
-      <Select value={sort} onValueChange={(value) => setSort(value as SortOption)}>
+      <Select
+        value={sort}
+        onValueChange={(value) => setSort(value as SortOption)}
+      >
         <SelectTrigger className='sm:w-44' aria-label='Sort connections'>
           <SelectValue />
         </SelectTrigger>

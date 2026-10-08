@@ -39,8 +39,7 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
 
   // Prefer the classification carried on the user; fall back to the ghost
   // store for any data that predates the `accountType` field.
-  const accountType =
-    user.accountType ?? (isGhostInStore ? 'ghost' : 'user');
+  const accountType = user.accountType ?? (isGhostInStore ? 'ghost' : 'user');
   const isGhost = accountType === 'ghost';
   const isOrg = accountType === 'organization';
 
@@ -69,7 +68,9 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
         )}
       >
         {(isGhost || isOrg) && (
-          <div className={cn('absolute top-2', canSelect ? 'right-10' : 'right-2')}>
+          <div
+            className={cn('absolute top-2', canSelect ? 'right-10' : 'right-2')}
+          >
             {isGhost ? (
               <Badge variant='destructive'>
                 <LuGhost />

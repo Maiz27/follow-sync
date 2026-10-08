@@ -36,7 +36,12 @@ export const useFollowManager = () => {
     return client;
   };
 
-  const followMutation = useMutation<unknown, Error, FollowMutationInput, MutationContext>({
+  const followMutation = useMutation<
+    unknown,
+    Error,
+    FollowMutationInput,
+    MutationContext
+  >({
     mutationFn: ({ user }) =>
       followUser({ client: requireClient(), userId: user.id }),
     onMutate: ({ user }) => ({ rollback: optimisticFollow(user) }),
@@ -49,7 +54,12 @@ export const useFollowManager = () => {
     },
   });
 
-  const unfollowMutation = useMutation<unknown, Error, FollowMutationInput, MutationContext>({
+  const unfollowMutation = useMutation<
+    unknown,
+    Error,
+    FollowMutationInput,
+    MutationContext
+  >({
     mutationFn: ({ user }) =>
       unfollowUser({ client: requireClient(), userId: user.id }),
     onMutate: ({ user }) => ({ rollback: optimisticUnfollow(user.id) }),

@@ -20,11 +20,7 @@ const isAllowedPath = (segments: string[]) => {
   return false;
 };
 
-const proxy = async (
-  req: NextRequest,
-  segments: string[],
-  method: string
-) => {
+const proxy = async (req: NextRequest, segments: string[], method: string) => {
   if (!isAllowedPath(segments)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }

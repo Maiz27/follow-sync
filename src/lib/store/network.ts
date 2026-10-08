@@ -49,7 +49,9 @@ export const useNetworkStore = create<NetworkStore>((set, get) => ({
   },
   optimisticFollow: (user) => {
     const previous = get().network;
-    set(setNetworkState({ ...previous, following: [...previous.following, user] }));
+    set(
+      setNetworkState({ ...previous, following: [...previous.following, user] })
+    );
     return () => set(setNetworkState(previous));
   },
   optimisticUnfollow: (userId) => {

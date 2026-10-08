@@ -31,7 +31,9 @@ describe('network store optimistic mutations', () => {
     const { setNetwork } = useNetworkStore.getState();
     setNetwork({ followers: [], following: [makeUser('existing')] });
 
-    const rollback = useNetworkStore.getState().optimisticFollow(makeUser('new'));
+    const rollback = useNetworkStore
+      .getState()
+      .optimisticFollow(makeUser('new'));
 
     const afterFollow = useNetworkStore.getState();
     expect(afterFollow.network.following.map((u) => u.login)).toEqual([
@@ -49,7 +51,9 @@ describe('network store optimistic mutations', () => {
       useNetworkStore.getState().network.following.map((u) => u.login)
     ).toEqual(['existing']);
     expect(
-      useNetworkStore.getState().nonMutuals.nonMutualsYouFollow.map((u) => u.login)
+      useNetworkStore
+        .getState()
+        .nonMutuals.nonMutualsYouFollow.map((u) => u.login)
     ).not.toContain('new');
   });
 

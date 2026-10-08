@@ -53,7 +53,9 @@ export const UserHoverCard = () => {
           <div className='space-y-2'>
             <div className='grid'>
               <span className='text-lg font-semibold'>{user.name}</span>
-              <span className='text-xs text-muted-foreground'>@{user.login}</span>
+              <span className='text-xs text-muted-foreground'>
+                @{user.login}
+              </span>
             </div>
 
             <p className='py-1 text-sm'>{user.bio}</p>

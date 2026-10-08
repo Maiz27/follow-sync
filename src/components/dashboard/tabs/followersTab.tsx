@@ -56,4 +56,3 @@ const FollowersTab = ({ followers }: FollowersTabProps) => {
 };
 
 export default FollowersTab;
-

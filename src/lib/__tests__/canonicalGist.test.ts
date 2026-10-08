@@ -48,7 +48,10 @@ const summary = (id: string, ownerLogin: string) => ({
 const detail = (id: string, ownerLogin: string) => ({
   ...summary(id, ownerLogin),
   files: {
-    [GIST_FILENAME]: { filename: GIST_FILENAME, content: cacheContent(ownerLogin) },
+    [GIST_FILENAME]: {
+      filename: GIST_FILENAME,
+      content: cacheContent(ownerLogin),
+    },
   },
 });
 

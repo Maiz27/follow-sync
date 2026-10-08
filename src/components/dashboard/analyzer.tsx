@@ -68,13 +68,7 @@ const Analyzer = ({
         component: <GhostsTab ghosts={ghosts} />,
       },
     ],
-    [
-      followers,
-      following,
-      nonMutualsYouFollow,
-      nonMutualsFollowingYou,
-      ghosts,
-    ]
+    [followers, following, nonMutualsYouFollow, nonMutualsFollowingYou, ghosts]
   );
 
   return (

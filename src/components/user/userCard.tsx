@@ -22,7 +22,6 @@ export const UserCard = () => {
 
   const user = session.user;
 
-
   const properties = [
     { icon: LuBuilding2, value: user.company },
     { icon: LuMapPin, value: user.location },
@@ -117,4 +116,3 @@ export const UserCard = () => {
     </Card>
   );
 };
-
