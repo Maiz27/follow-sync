@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -41,7 +41,6 @@ const Analyzer = ({
 }: AnalyzerProps) => {
   const ghosts = useGhostStore((state) => state.ghosts);
   const syncedAt = useGistStore((state) => state.syncedAt);
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -82,13 +81,16 @@ const Analyzer = ({
     ? (requestedTab as string)
     : networkTabsData[0].id;
 
+  // The native History API updates the URL (and useSearchParams) in place;
+  // router.replace would make a server round-trip for the RSC payload on
+  // every tab click.
   const handleTabChange = useCallback(
     (tabId: string) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set('tab', tabId);
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
     },
-    [pathname, router, searchParams]
+    [pathname, searchParams]
   );
 
   return (

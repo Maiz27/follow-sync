@@ -78,7 +78,8 @@ export const useSelectionManager = (
     [itemIds, isSelectable]
   );
 
-  const handleSelect = (id: string) => {
+  // Stable identities: passed to every memoized row.
+  const handleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(id)) {
@@ -88,17 +89,17 @@ export const useSelectionManager = (
       }
       return newSet;
     });
-  };
+  }, []);
 
-  const handleDeselect = (id: string) => {
+  /** Deselects the given ids (e.g. the rows a bulk action succeeded on). */
+  const handleDeselect = useCallback((...ids: string[]) => {
     setSelectedIds((prev) => {
+      if (!ids.some((id) => prev.has(id))) return prev;
       const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      }
+      ids.forEach((id) => newSet.delete(id));
       return newSet;
     });
-  };
+  }, []);
 
   const handleSelectPage = () => {
     setSelectedIds((prev) => {

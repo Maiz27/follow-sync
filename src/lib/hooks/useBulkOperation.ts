@@ -21,7 +21,8 @@ const formatWait = (ms: number | null) => {
 export const useBulkOperation = (
   mutationFn: AsyncMutationFn,
   actionName: string,
-  onBulkSuccess?: () => void | Promise<void>
+  /** Runs once after a run where any row succeeded, with those rows. */
+  onBulkSuccess?: (succeeded: NetworkUser[]) => void | Promise<void>
 ) => {
   const { show, update, complete, fail } = useProgress();
   const [isPending, setIsPending] = useState(false);
@@ -67,7 +68,7 @@ export const useBulkOperation = (
     let postSuccessFailed = false;
     if (onBulkSuccess && result.succeeded.length > 0) {
       try {
-        await onBulkSuccess();
+        await onBulkSuccess(result.succeeded);
       } catch (error) {
         console.error('Bulk operation post-success step failed:', error);
         postSuccessFailed = true;

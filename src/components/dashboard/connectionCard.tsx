@@ -24,32 +24,35 @@ import {
 import { Checkbox } from '../ui/checkbox';
 import { useSettingsStore } from '@/lib/store/settings';
 
+/**
+ * Props are flat primitives and callbacks that receive the row, so lists can
+ * pass the same (stable) callbacks to every card and `React.memo` skips cards
+ * whose own state didn't change.
+ */
 type ConnectionCardProps = {
   user: NetworkUser;
-  action?: {
-    label: string;
-    onClick: () => void;
-    isDisabled?: boolean;
-    loading?: boolean;
-  };
-  selection?: {
-    isSelected: boolean;
-    onSelect: (id: string) => void;
-  };
-  /** Ignore-list controls ("never suggest @x in the One-Way lists"). */
-  ignore?: {
-    isIgnored: boolean;
-    onToggle: (login: string) => void;
-  };
+  /** Action button label; the button shows only with `onAction`. */
+  actionLabel?: string;
+  actionLoading?: boolean;
+  onAction?: (user: NetworkUser) => void;
+  /** Selection checkbox; shown only with `onSelect`. */
+  isSelected?: boolean;
+  onSelect?: (login: string) => void;
+  /** Ignore-list menu ("never suggest @x in the One-Way lists"). */
+  isIgnored?: boolean;
+  onToggleIgnore?: (login: string) => void;
 };
 
 const ConnectionCard = ({
   user,
-  selection,
-  action,
-  ignore,
+  actionLabel,
+  actionLoading,
+  onAction,
+  isSelected = false,
+  onSelect,
+  isIgnored = false,
+  onToggleIgnore,
 }: ConnectionCardProps) => {
-  const { onClick, label, loading, isDisabled } = action || {};
   const isGhostInStore = useGhostStore((state) => state.isGhost(user.login));
   const showAvatars = useSettingsStore((state) => state.showAvatars);
 
@@ -64,15 +67,15 @@ const ConnectionCard = ({
 
   // Organizations can't be followed back and are surfaced for awareness only,
   // so they get no selection checkbox or action button.
-  const canSelect = Boolean(selection) && !isOrg;
-  const canAct = Boolean(action) && !isOrg;
+  const canSelect = Boolean(onSelect) && !isOrg;
+  const canAct = Boolean(onAction) && !isOrg;
 
   return (
     <div className='relative'>
       {canSelect && (
         <Checkbox
-          checked={selection!.isSelected}
-          onCheckedChange={() => selection!.onSelect(user.login)}
+          checked={isSelected}
+          onCheckedChange={() => onSelect?.(user.login)}
           aria-label={`Select @${user.login}`}
           className='absolute top-2 right-2 z-10'
         />
@@ -80,10 +83,10 @@ const ConnectionCard = ({
       <Card
         className={cn(
           'h-full w-full transition-colors',
-          selection?.isSelected && 'border-primary'
+          isSelected && 'border-primary'
         )}
       >
-        {(isGhost || isOrg || ignore?.isIgnored) && (
+        {(isGhost || isOrg || isIgnored) && (
           <div
             className={cn('absolute top-2', canSelect ? 'right-10' : 'right-2')}
           >
@@ -148,14 +151,14 @@ const ConnectionCard = ({
             <Button
               size='sm'
               variant={isGhost ? 'destructive' : 'outline'}
-              onClick={onClick}
-              disabled={isDisabled || loading}
-              className={loading ? 'animate-pulse cursor-progress' : ''}
+              onClick={() => onAction?.(user)}
+              disabled={actionLoading}
+              className={actionLoading ? 'animate-pulse cursor-progress' : ''}
             >
-              {label}
+              {actionLabel}
             </Button>
           )}
-          {ignore && !isGhost && !isOrg && (
+          {onToggleIgnore && !isGhost && !isOrg && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -170,10 +173,10 @@ const ConnectionCard = ({
               <DropdownMenuContent align='end'>
                 <DropdownMenuItem
                   className='px-2 py-1.5'
-                  onSelect={() => ignore.onToggle(user.login)}
+                  onSelect={() => onToggleIgnore(user.login)}
                 >
                   <LuEyeOff />
-                  {ignore.isIgnored
+                  {isIgnored
                     ? 'Suggest in One-Way lists again'
                     : 'Never suggest in One-Way lists'}
                 </DropdownMenuItem>

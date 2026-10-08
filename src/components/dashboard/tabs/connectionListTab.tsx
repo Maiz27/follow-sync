@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { IconType } from 'react-icons';
 import ConnectionCard from '../connectionCard';
 import PaginatedList from '@/components/utils/paginatedList';
@@ -115,7 +115,6 @@ const ConnectionListTab = ({
     handleDeselect,
     handleSelectPage,
     handleSelectAll,
-    clearSelection,
     isAllSelected,
     selectableCount,
   } = useSelectionManager(listId, itemIds, { includeGhosts, unselectableIds });
@@ -124,10 +123,27 @@ const ConnectionListTab = ({
   const { execute: runBulk, isPending: isBulkRunning } = useBulkOperation(
     action?.runSilently ?? noopBulk,
     action?.progressTitle ?? '',
-    async () => {
+    async (succeeded) => {
+      // Rows that failed (or were skipped) stay selected for a retry.
+      handleDeselect(...succeeded.map((u) => u.login));
       await action?.persist();
-      clearSelection();
     }
+  );
+
+  // The latest action, read by the stable card callback below: the action
+  // object changes identity whenever its pending set does, and passing it
+  // straight to every memoized card would re-render the whole page.
+  const actionRef = useRef(action);
+  useEffect(() => {
+    actionRef.current = action;
+  }, [action]);
+
+  const handleAction = useCallback(
+    async (user: NetworkUser) => {
+      const succeeded = await actionRef.current?.run(user);
+      if (succeeded) handleDeselect(user.login);
+    },
+    [handleDeselect]
   );
 
   const selectedUsers = useMemo(
@@ -193,34 +209,23 @@ const ConnectionListTab = ({
         }
         onClearSearch={isSearching ? () => setSearch('') : undefined}
         renderItem={(item) => {
-          const ignore = ignorable
-            ? { isIgnored: isIgnoredUser(item), onToggle: toggleIgnored }
-            : undefined;
-          return action && canAct(item) ? (
+          const actionable = Boolean(action) && canAct(item);
+          return (
             <ConnectionCard
               user={item}
-              ignore={ignore}
-              selection={
-                canSelect(item)
-                  ? {
-                      isSelected: selectedIds.has(item.login),
-                      onSelect: handleSelect,
-                    }
-                  : undefined
-              }
-              action={{
-                label: action.label,
-                loading: action.pendingLogins.has(item.login),
-                onClick: async () => {
-                  const succeeded = await action.run(item);
-                  if (succeeded && selectedIds.has(item.login)) {
-                    handleDeselect(item.login);
-                  }
-                },
-              }}
+              isIgnored={ignorable && isIgnoredUser(item)}
+              onToggleIgnore={ignorable ? toggleIgnored : undefined}
+              {...(actionable && {
+                actionLabel: action?.label,
+                actionLoading: action?.pendingLogins.has(item.login),
+                onAction: handleAction,
+              })}
+              {...(actionable &&
+                canSelect(item) && {
+                  isSelected: selectedIds.has(item.login),
+                  onSelect: handleSelect,
+                })}
             />
-          ) : (
-            <ConnectionCard user={item} ignore={ignore} />
           );
         }}
       />
