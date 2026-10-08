@@ -25,7 +25,8 @@ const makeGraphqlUser = (login: string) => ({
 });
 
 const firstGraphqlPage = {
-  user: {
+  viewer: {
+    login: 'octocat',
     followers: {
       totalCount: 0,
       pageInfo: { hasNextPage: false, endCursor: null },
@@ -65,10 +66,7 @@ describe('paginated follow fetchers', () => {
     request.mockRejectedValue(new Error('GraphQL page 2 failed'));
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const fetchPromise = fetchAllUserFollowersAndFollowing({
-      client,
-      username: 'octocat',
-    });
+    const fetchPromise = fetchAllUserFollowersAndFollowing({ client });
     const rejection = expect(fetchPromise).rejects.toThrow(
       'GraphQL page 2 failed'
     );

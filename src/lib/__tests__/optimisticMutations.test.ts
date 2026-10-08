@@ -1,6 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useNetworkStore } from '@/lib/store/network';
+import {
+  PENDING_OP_GRACE_MS,
+  applyPendingOps,
+  useNetworkStore,
+} from '@/lib/store/network';
 import { useGhostStore } from '@/lib/store/ghost';
 import type { NetworkUser } from '@/lib/types';
 
@@ -19,11 +23,15 @@ const makeUser = (
   accountType,
 });
 
+const followingLogins = () =>
+  useNetworkStore.getState().network.following.map((u) => u.login);
+
 describe('network store optimistic mutations', () => {
   beforeEach(() => {
     useNetworkStore.setState({
       network: { followers: [], following: [] },
       nonMutuals: { nonMutualsFollowingYou: [], nonMutualsYouFollow: [] },
+      pendingOps: [],
     });
   });
 
@@ -31,7 +39,7 @@ describe('network store optimistic mutations', () => {
     const { setNetwork } = useNetworkStore.getState();
     setNetwork({ followers: [], following: [makeUser('existing')] });
 
-    const rollback = useNetworkStore
+    const { rollback } = useNetworkStore
       .getState()
       .optimisticFollow(makeUser('new'));
 
@@ -47,9 +55,7 @@ describe('network store optimistic mutations', () => {
 
     rollback();
 
-    expect(
-      useNetworkStore.getState().network.following.map((u) => u.login)
-    ).toEqual(['existing']);
+    expect(followingLogins()).toEqual(['existing']);
     expect(
       useNetworkStore
         .getState()
@@ -57,22 +63,127 @@ describe('network store optimistic mutations', () => {
     ).not.toContain('new');
   });
 
-  it('optimisticUnfollow removes by id; rollback restores', () => {
+  it('optimisticFollow does not duplicate an already-followed user', () => {
+    useNetworkStore
+      .getState()
+      .setNetwork({ followers: [], following: [makeUser('dup')] });
+
+    const { rollback } = useNetworkStore
+      .getState()
+      .optimisticFollow(makeUser('dup'));
+    expect(followingLogins()).toEqual(['dup']);
+
+    // Undoing a no-op must not remove the pre-existing follow.
+    rollback();
+    expect(followingLogins()).toEqual(['dup']);
+  });
+
+  it('optimisticUnfollow removes the user; rollback restores its position', () => {
     const { setNetwork } = useNetworkStore.getState();
     const target = makeUser('target');
-    setNetwork({ followers: [], following: [makeUser('keep'), target] });
+    setNetwork({
+      followers: [],
+      following: [makeUser('keep'), target, makeUser('last')],
+    });
 
-    const rollback = useNetworkStore.getState().optimisticUnfollow(target.id);
+    const { rollback } = useNetworkStore.getState().optimisticUnfollow(target);
 
-    expect(
-      useNetworkStore.getState().network.following.map((u) => u.login)
-    ).toEqual(['keep']);
+    expect(followingLogins()).toEqual(['keep', 'last']);
 
     rollback();
 
-    expect(
-      useNetworkStore.getState().network.following.map((u) => u.login)
-    ).toEqual(['keep', 'target']);
+    expect(followingLogins()).toEqual(['keep', 'target', 'last']);
+  });
+
+  it('rollback only undoes its own change, keeping concurrent ones', () => {
+    useNetworkStore.getState().setNetwork({ followers: [], following: [] });
+
+    const first = useNetworkStore.getState().optimisticFollow(makeUser('a'));
+    useNetworkStore.getState().optimisticFollow(makeUser('b'));
+
+    // 'a' fails after 'b' was applied — 'b' must survive the rollback.
+    first.rollback();
+
+    expect(followingLogins()).toEqual(['b']);
+  });
+
+  it('rollback does not resurrect state replaced by a sync that landed meanwhile', () => {
+    useNetworkStore.getState().setNetwork({ followers: [], following: [] });
+    const { rollback } = useNetworkStore
+      .getState()
+      .optimisticFollow(makeUser('a'));
+
+    useNetworkStore
+      .getState()
+      .reconcileNetwork(
+        { followers: [makeUser('fresh-follower')], following: [makeUser('x')] },
+        Date.now()
+      );
+    rollback();
+
+    const { network } = useNetworkStore.getState();
+    expect(network.following.map((u) => u.login)).toEqual(['x']);
+    expect(network.followers.map((u) => u.login)).toEqual(['fresh-follower']);
+  });
+});
+
+describe('sync reconciliation', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    useNetworkStore.setState({
+      network: { followers: [], following: [] },
+      nonMutuals: { nonMutualsFollowingYou: [], nonMutualsYouFollow: [] },
+      pendingOps: [],
+    });
+  });
+
+  it('re-applies follows/unfollows made while a sync was running', () => {
+    const store = useNetworkStore.getState();
+    store.setNetwork({
+      followers: [],
+      following: [makeUser('old'), makeUser('gone')],
+    });
+    const syncStartedAt = Date.now();
+
+    // During the refresh: follow 'new' and unfollow 'gone'.
+    store.optimisticFollow(makeUser('new')).commit();
+    store.optimisticUnfollow(makeUser('gone')).commit();
+
+    // The sync fetched GitHub before those changes landed.
+    useNetworkStore
+      .getState()
+      .reconcileNetwork(
+        { followers: [], following: [makeUser('old'), makeUser('gone')] },
+        syncStartedAt
+      );
+
+    expect(followingLogins()).toEqual(['old', 'new']);
+  });
+
+  it('drops changes confirmed long before the sync started', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    useNetworkStore.getState().optimisticFollow(makeUser('ancient')).commit();
+
+    vi.setSystemTime(PENDING_OP_GRACE_MS * 2);
+    // GitHub (the source of truth) no longer has the follow.
+    useNetworkStore
+      .getState()
+      .reconcileNetwork({ followers: [], following: [] }, Date.now());
+
+    expect(followingLogins()).toEqual([]);
+    expect(useNetworkStore.getState().pendingOps).toEqual([]);
+    vi.useRealTimers();
+  });
+
+  it('applyPendingOps is idempotent', () => {
+    const user = makeUser('a');
+    const ops = [
+      { id: 1, kind: 'follow' as const, user, startedAt: 0 },
+      { id: 2, kind: 'follow' as const, user, startedAt: 1 },
+    ];
+    const result = applyPendingOps({ followers: [], following: [user] }, ops);
+    expect(result.following).toHaveLength(1);
   });
 });
 
@@ -105,5 +216,21 @@ describe('ghost store optimistic removal', () => {
     expect(afterRollback.ghosts.map((g) => g.login)).toEqual(['g1', 'g2']);
     expect(afterRollback.ghostsSet.has('g1')).toBe(true);
     expect(afterRollback.removedGhostLogins.has('g1')).toBe(false);
+  });
+
+  it('rolling back one removal keeps a concurrent removal', () => {
+    useGhostStore.getState().setGhosts([
+      { ...makeUser('g1', 'ghost'), removable: true },
+      { ...makeUser('g2', 'ghost'), removable: true },
+    ]);
+
+    const rollbackG1 = useGhostStore.getState().optimisticRemoveGhost('g1');
+    useGhostStore.getState().optimisticRemoveGhost('g2');
+    rollbackG1();
+
+    const state = useGhostStore.getState();
+    expect(state.ghosts.map((g) => g.login)).toEqual(['g1']);
+    expect(state.removedGhostLogins.has('g2')).toBe(true);
+    expect(state.removedGhostLogins.has('g1')).toBe(false);
   });
 });

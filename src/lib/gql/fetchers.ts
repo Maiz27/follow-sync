@@ -105,18 +105,17 @@ const mergeUniqueUsers = (
 };
 
 /**
- * Fetches all followers and following for a given GitHub user, with progress reporting.
+ * Fetches all followers and following of the signed-in user (GraphQL `viewer`),
+ * with progress reporting. Also returns the viewer's current login as GitHub
+ * reports it, which can differ from the login captured at sign-in.
  * @param client - The authenticated GraphQL client.
- * @param username - The GitHub username to fetch data for.
  * @param onProgress - An optional callback function that receives progress updates.
  */
 export const fetchAllUserFollowersAndFollowing = async ({
   client,
-  username,
   onProgress,
 }: {
   client: GraphQLClient;
-  username: string;
   onProgress?: (progress: FetchProgress) => void;
 }) => {
   const allFollowers: Pick<FollowerFieldsFragment, 'nodes' | 'totalCount'> = {
@@ -137,10 +136,10 @@ export const fetchAllUserFollowersAndFollowing = async ({
   let currentCursorFollowing: string | null = null;
 
   const pageSize = 100;
+  let viewerLogin: string | null = null;
 
   while (hasNextPageFollowers || hasNextPageFollowing) {
     const variables: GetUserFollowersAndFollowingQueryVariables = {
-      login: username,
       firstFollowers: hasNextPageFollowers ? pageSize : 0,
       afterFollowers: currentCursorFollowers,
       firstFollowing: hasNextPageFollowing ? pageSize : 0,
@@ -155,8 +154,10 @@ export const fetchAllUserFollowersAndFollowing = async ({
         >(GET_USER_FOLLOWERS_AND_FOLLOWING, variables)
       );
 
-      if (hasNextPageFollowers && data.user?.followers) {
-        const { nodes, totalCount, pageInfo } = data.user.followers;
+      viewerLogin = data.viewer?.login ?? viewerLogin;
+
+      if (hasNextPageFollowers && data.viewer?.followers) {
+        const { nodes, totalCount, pageInfo } = data.viewer.followers;
         mergeUniqueUsers(
           allFollowers.nodes as User[],
           nodes as User[],
@@ -169,8 +170,8 @@ export const fetchAllUserFollowersAndFollowing = async ({
         currentCursorFollowers = pageInfo?.endCursor || null;
       }
 
-      if (hasNextPageFollowing && data.user?.following) {
-        const { nodes, totalCount, pageInfo } = data.user.following;
+      if (hasNextPageFollowing && data.viewer?.following) {
+        const { nodes, totalCount, pageInfo } = data.viewer.following;
         mergeUniqueUsers(
           allFollowing.nodes as User[],
           nodes as User[],
@@ -205,7 +206,7 @@ export const fetchAllUserFollowersAndFollowing = async ({
     }
   }
 
-  return { followers: allFollowers, following: allFollowing };
+  return { followers: allFollowers, following: allFollowing, viewerLogin };
 };
 
 const REST_FOLLOWING_PATH = '/user/following';

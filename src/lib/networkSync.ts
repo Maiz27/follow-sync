@@ -19,16 +19,13 @@ const hasLogin = (user: NetworkUser | null | undefined): user is NetworkUser =>
  */
 export const fetchAndClassifyNetwork = async ({
   client,
-  username,
   onProgress,
 }: {
   client: GraphQLClient;
-  username: string;
   onProgress?: (progress: FetchProgress) => void;
 }) => {
   const networkData = await fetchAllUserFollowersAndFollowing({
     client,
-    username,
     onProgress,
   });
 
@@ -50,6 +47,7 @@ export const fetchAndClassifyNetwork = async ({
   });
 
   return {
+    viewerLogin: networkData.viewerLogin,
     followers,
     following,
     ghosts: mergeGhosts(followingGhosts, followerGhosts),

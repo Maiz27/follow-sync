@@ -51,9 +51,9 @@ describe('fetchAndClassifyNetwork', () => {
       new Error('GraphQL pagination failed')
     );
 
-    await expect(
-      fetchAndClassifyNetwork({ client, username: 'octocat' })
-    ).rejects.toThrow('GraphQL pagination failed');
+    await expect(fetchAndClassifyNetwork({ client })).rejects.toThrow(
+      'GraphQL pagination failed'
+    );
 
     expect(mocks.fetchRestFollowing).not.toHaveBeenCalled();
     expect(mocks.fetchRestFollowers).not.toHaveBeenCalled();
@@ -69,9 +69,9 @@ describe('fetchAndClassifyNetwork', () => {
     );
     mocks.fetchRestFollowers.mockResolvedValue([]);
 
-    await expect(
-      fetchAndClassifyNetwork({ client, username: 'octocat' })
-    ).rejects.toThrow('REST pagination failed');
+    await expect(fetchAndClassifyNetwork({ client })).rejects.toThrow(
+      'REST pagination failed'
+    );
   });
 
   it('runs the real classifiers after every fetch completes', async () => {
@@ -93,10 +93,7 @@ describe('fetchAndClassifyNetwork', () => {
       makeRestEntry('activefollower'),
     ]);
 
-    const result = await fetchAndClassifyNetwork({
-      client,
-      username: 'octocat',
-    });
+    const result = await fetchAndClassifyNetwork({ client });
 
     expect(result.followers).toEqual([
       expect.objectContaining({

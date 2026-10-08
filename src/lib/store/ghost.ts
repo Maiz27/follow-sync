@@ -18,9 +18,9 @@ export type GhostActions = {
   setGhosts: (ghosts: NetworkUser[]) => void;
   removeGhosts: (logins: string[]) => void;
   /**
-   * Optimistically remove a ghost by login, returning a rollback that restores
-   * the exact prior ghost state (list, lookup set, and removed-logins
-   * tombstone) if the REST removal fails.
+   * Optimistically remove a ghost by login, returning a rollback that undoes
+   * only this removal (re-adds the ghost and clears its tombstone) if the REST
+   * removal fails — other ghosts removed meanwhile stay removed.
    */
   optimisticRemoveGhost: (login: string) => Rollback;
   setRemovedGhostLogins: (logins: string[]) => void;
@@ -57,13 +57,27 @@ export const useGhostStore = create<GhostStore>((set, get) => ({
     });
   },
   optimisticRemoveGhost: (login) => {
-    const previous = {
-      ghosts: get().ghosts,
-      ghostsSet: get().ghostsSet,
-      removedGhostLogins: get().removedGhostLogins,
-    };
+    const key = login.toLowerCase();
+    const before = get().ghosts;
+    const index = before.findIndex((g) => g.login.toLowerCase() === key);
+    const removed = index === -1 ? null : before[index];
+    const wasTombstoned = get().removedGhostLogins.has(key);
     get().removeGhosts([login]);
-    return () => set(previous);
+
+    return () => {
+      const { ghosts, removedGhostLogins } = get();
+      const nextGhosts = [...ghosts];
+      if (removed && !ghosts.some((g) => g.login.toLowerCase() === key)) {
+        nextGhosts.splice(Math.min(index, nextGhosts.length), 0, removed);
+      }
+      const tombstone = new Set(removedGhostLogins);
+      if (!wasTombstoned) tombstone.delete(key);
+      set({
+        ghosts: nextGhosts,
+        ghostsSet: new Set(nextGhosts.map((g) => g.login)),
+        removedGhostLogins: tombstone,
+      });
+    };
   },
   setRemovedGhostLogins: (logins) => {
     set({ removedGhostLogins: new Set(logins.map((l) => l.toLowerCase())) });

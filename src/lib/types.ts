@@ -37,10 +37,18 @@ export interface CacheGistFile {
 export interface CacheGist {
   id: string;
   name?: string | null;
+  /** GitHub login of the account that owns the gist, when the API returned it. */
+  ownerLogin?: string | null;
   description?: string | null;
   updatedAt?: string | null;
   files: CacheGistFile[];
 }
+
+/** The subset of settings that is saved to the cache gist. */
+export type CachedSettings = Pick<
+  SettingsState,
+  'showAvatars' | 'paginationPageSize' | 'customStaleTime'
+>;
 
 export interface CachedData {
   network: {
@@ -56,7 +64,8 @@ export interface CachedData {
    * list on each fetch.
    */
   removedGhosts?: string[];
-  settings: SettingsState;
+  /** Optional: caches written before settings were persisted omit it. */
+  settings?: CachedSettings;
   timestamp: number;
   metadata: {
     totalConnections: number;

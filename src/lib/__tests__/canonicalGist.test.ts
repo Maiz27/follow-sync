@@ -85,7 +85,29 @@ describe('scoreCacheGist', () => {
 });
 
 describe('findCanonicalCacheGist', () => {
-  it('selects the owner-matching gist as canonical and the rest as duplicates', async () => {
+  it('selects the newest owner-matching gist as canonical and the rest as duplicates', async () => {
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path.startsWith('/gists?')) {
+        return [summary('A', OWNER), summary('C', OWNER)] as never;
+      }
+      if (path === '/gists/A') return detail('A', OWNER) as never;
+      if (path === '/gists/C')
+        return {
+          ...detail('C', OWNER),
+          updated_at: '2023-01-01T00:00:00Z',
+        } as never;
+      return null;
+    });
+
+    const { canonicalGist, duplicateGists } = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+    });
+
+    expect(canonicalGist?.id).toBe('A');
+    expect(duplicateGists.map((g) => g.id)).toEqual(['C']);
+  });
+
+  it('rejects caches whose recorded owner is a different login', async () => {
     mockedGhRest.mockImplementation(async (path: string) => {
       if (path.startsWith('/gists?')) {
         return [summary('A', OWNER), summary('B', 'someoneelse')] as never;
@@ -100,7 +122,44 @@ describe('findCanonicalCacheGist', () => {
     });
 
     expect(canonicalGist?.id).toBe('A');
-    expect(duplicateGists.map((g) => g.id)).toEqual(['B']);
+    expect(duplicateGists).toEqual([]);
+  });
+
+  it('never uses a remembered gist id that belongs to another account', async () => {
+    // Secret gists are readable by id, so a gist id left in localStorage by a
+    // previous user of this browser must not be accepted.
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path.startsWith('/gists?')) return [] as never;
+      if (path === '/gists/PREV')
+        return {
+          ...detail('PREV', 'previoususer'),
+          owner: { login: 'previoususer' },
+        } as never;
+      return null;
+    });
+
+    const result = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+      preferredGistId: 'PREV',
+    });
+
+    expect(result.canonicalGist).toBeNull();
+  });
+
+  it('rejects a gist owned by another account even if its metadata claims this owner', async () => {
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path.startsWith('/gists?')) return [] as never;
+      if (path === '/gists/X')
+        return { ...detail('X', OWNER), owner: { login: 'mallory' } } as never;
+      return null;
+    });
+
+    const result = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+      preferredGistId: 'X',
+    });
+
+    expect(result.canonicalGist).toBeNull();
   });
 
   it('returns no canonical gist when none score above zero', async () => {

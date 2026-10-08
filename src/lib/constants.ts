@@ -12,7 +12,16 @@ export const GH_REST_PROXY = '/api/gh/rest';
 export const GIST_DESCRIPTION_PREFIX = 'Follow Sync Cache';
 export const GIST_CACHE_VERSION = '3.0';
 export const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
-export const GIST_ID_STORAGE_KEY = 'Follow Sync_gist_id';
+/**
+ * localStorage keys. Anything tied to a GitHub account lives under
+ * `USER_STORAGE_PREFIX` and is keyed by login, so a second account on the same
+ * browser never picks up the first one's cache gist; sign-out clears the whole
+ * prefix. `LEGACY_GIST_ID_STORAGE_KEY` is the old global key, removed on sight.
+ */
+export const USER_STORAGE_PREFIX = 'follow-sync:user:';
+export const LEGACY_GIST_ID_STORAGE_KEY = 'Follow Sync_gist_id';
+export const gistIdStorageKey = (login: string) =>
+  `${USER_STORAGE_PREFIX}${login.toLowerCase()}:gist-id`;
 
 // Adaptive Stale Times (in milliseconds)
 export const STALE_TIME_SMALL = 1000 * 60 * 15; // 15 minutes

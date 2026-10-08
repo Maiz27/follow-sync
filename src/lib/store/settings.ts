@@ -32,3 +32,18 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
     await persistChanges();
   },
 }));
+
+/**
+ * Extracts the user-facing settings that are persisted to the cache gist —
+ * never UI state such as whether the settings modal is open.
+ */
+export const pickPersistedSettings = (
+  state: SettingsState
+): Pick<
+  SettingsState,
+  'showAvatars' | 'paginationPageSize' | 'customStaleTime'
+> => ({
+  showAvatars: state.showAvatars,
+  paginationPageSize: state.paginationPageSize,
+  customStaleTime: state.customStaleTime,
+});

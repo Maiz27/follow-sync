@@ -19,6 +19,7 @@ type GitHubGistSummary = {
   description: string | null;
   public: boolean;
   updated_at: string;
+  owner?: { login?: string | null } | null;
   files?: Record<string, { filename?: string | null }>;
 };
 
@@ -68,6 +69,7 @@ const hasCacheFilename = (gist: Pick<CacheGist, 'files'>) =>
 const toCacheGist = (gist: GitHubGistDetail): CacheGist => ({
   id: gist.id,
   name: gist.id,
+  ownerLogin: gist.owner?.login ?? null,
   description: gist.description,
   updatedAt: gist.updated_at,
   files: Object.values(gist.files ?? {}).map((file) => ({
@@ -135,6 +137,34 @@ const mapWithConcurrency = async <TInput, TOutput>(
 
 const getExpectedCacheKey = (ownerLogin: string) =>
   buildCacheKey(normalizeOwnerLogin(ownerLogin));
+
+/**
+ * Whether a candidate may be used as this account's cache at all. Secret gists
+ * are readable by anyone who knows the id, so a gist id remembered from a
+ * previous account on this browser would otherwise load (and relabel) someone
+ * else's network. Reject gists owned by a different GitHub account, and caches
+ * whose recorded owner is a different login.
+ */
+export const isCacheGistOwnedBy = (gist: CacheGist, ownerLogin: string) => {
+  const normalizedOwnerLogin = normalizeOwnerLogin(ownerLogin);
+
+  if (
+    gist.ownerLogin &&
+    normalizeOwnerLogin(gist.ownerLogin) !== normalizedOwnerLogin
+  ) {
+    return false;
+  }
+
+  const parsedOwnerLogin = parseCache(gist)?.metadata?.ownerLogin;
+  if (
+    parsedOwnerLogin &&
+    normalizeOwnerLogin(parsedOwnerLogin) !== normalizedOwnerLogin
+  ) {
+    return false;
+  }
+
+  return true;
+};
 
 export const scoreCacheGist = (gist: CacheGist, ownerLogin: string) => {
   const parsed = parseCache(gist);
@@ -280,7 +310,9 @@ export const findCanonicalCacheGist = async ({
   }
 
   const validCandidates = Array.from(candidateMap.values()).filter(
-    (gist) => scoreCacheGist(gist, ownerLogin) > 0
+    (gist) =>
+      isCacheGistOwnedBy(gist, ownerLogin) &&
+      scoreCacheGist(gist, ownerLogin) > 0
   );
 
   if (validCandidates.length === 0) {
