@@ -15,34 +15,51 @@ const normalizeHost = (host: string, protocol: string) => {
     : value;
 };
 
-const hostOf = (url: string | undefined) => {
+/** `scheme://host[:port]`, lowercased and without the default port. */
+const toOrigin = (protocol: string, host: string) =>
+  `${protocol}//${normalizeHost(host, protocol)}`;
+
+const originOf = (url: string | undefined) => {
   if (!url) return null;
   try {
     const parsed = new URL(url);
-    return normalizeHost(parsed.host, parsed.protocol);
+    return toOrigin(parsed.protocol, parsed.host);
   } catch {
     return null;
   }
 };
 
+/** First value of a forwarded header list (later ones come from inner proxies). */
+const firstForwarded = (req: NextRequest, name: string) =>
+  req.headers.get(name)?.split(',')[0]?.trim() || null;
+
+const forwardedProtocol = (req: NextRequest) => {
+  const proto = firstForwarded(req, 'x-forwarded-proto')?.toLowerCase();
+  return proto === 'https' || proto === 'http' ? `${proto}:` : null;
+};
+
 /**
- * Hosts this app is served from, for this request: the URL Next resolved,
- * the client-facing host a proxy forwarded (only the first entry of a list —
- * later ones are added by intermediate proxies), the Host header, and the
- * configured public URL.
+ * Origins (scheme, host and port) this app is served from, for this request:
+ * the URL Next resolved and the Host header (with the scheme a proxy forwarded,
+ * if any), the client-facing host a proxy forwarded, and the configured public
+ * URL. A forwarded host without a forwarded scheme is taken to be https: a
+ * proxy that rewrites the host is the public, TLS-terminating edge.
  */
-const getAllowedHosts = (req: NextRequest, protocol: string) => {
-  const forwardedHost = req.headers.get('x-forwarded-host')?.split(',')[0];
+const getAllowedOrigins = (req: NextRequest) => {
+  const proxyProtocol = forwardedProtocol(req);
+  const requestProtocol = proxyProtocol ?? req.nextUrl.protocol;
+  const forwardedHost = firstForwarded(req, 'x-forwarded-host');
+  const host = req.headers.get('host');
   const candidates = [
-    hostOf(req.nextUrl.origin),
-    forwardedHost ? normalizeHost(forwardedHost, protocol) : null,
-    req.headers.get('host')
-      ? normalizeHost(req.headers.get('host') as string, protocol)
-      : null,
-    hostOf(process.env.AUTH_URL),
-    hostOf(process.env.NEXTAUTH_URL),
+    toOrigin(requestProtocol, req.nextUrl.host),
+    host ? toOrigin(requestProtocol, host) : null,
+    forwardedHost ? toOrigin(proxyProtocol ?? 'https:', forwardedHost) : null,
+    originOf(process.env.AUTH_URL),
+    originOf(process.env.NEXTAUTH_URL),
   ];
-  return new Set(candidates.filter((host): host is string => Boolean(host)));
+  return new Set(
+    candidates.filter((origin): origin is string => Boolean(origin))
+  );
 };
 
 /**
@@ -57,7 +74,7 @@ export const isSameOriginRequest = (req: NextRequest) => {
     return false;
   }
   // The browser computed this itself, which is more reliable than comparing
-  // hosts that proxies may have rewritten.
+  // origins that proxies may have rewritten.
   if (fetchSite === 'same-origin') return true;
 
   const origin = req.headers.get('origin');
@@ -70,7 +87,7 @@ export const isSameOriginRequest = (req: NextRequest) => {
     return false;
   }
 
-  return getAllowedHosts(req, originUrl.protocol).has(
-    normalizeHost(originUrl.host, originUrl.protocol)
+  return getAllowedOrigins(req).has(
+    toOrigin(originUrl.protocol, originUrl.host)
   );
 };

@@ -33,6 +33,12 @@ describe('isSameOriginRequest', () => {
     ).toBe(false);
   });
 
+  it('rejects an Origin with the same host but another scheme', () => {
+    expect(isSameOriginRequest(request({ origin: 'http://app.example' }))).toBe(
+      false
+    );
+  });
+
   it('rejects cross-site fetch metadata', () => {
     expect(
       isSameOriginRequest(request({ 'sec-fetch-site': 'cross-site' }))
@@ -105,6 +111,58 @@ describe('isSameOriginRequest', () => {
       ).toBe(true);
       expect(
         isSameOriginRequest(proxied({ origin: 'https://evil.example' }))
+      ).toBe(false);
+    });
+
+    it('compares the scheme the proxy forwarded', () => {
+      expect(
+        isSameOriginRequest(
+          proxied({
+            origin: 'https://app.example',
+            'x-forwarded-host': 'app.example',
+            'x-forwarded-proto': 'https',
+          })
+        )
+      ).toBe(true);
+      expect(
+        isSameOriginRequest(
+          proxied({
+            origin: 'http://app.example',
+            'x-forwarded-host': 'app.example',
+            'x-forwarded-proto': 'https',
+          })
+        )
+      ).toBe(false);
+      // A proxy that preserves the Host header and forwards only the scheme.
+      expect(
+        isSameOriginRequest(
+          new NextRequest('http://app.example/api/gh/graphql', {
+            method: 'POST',
+            headers: {
+              host: 'app.example',
+              origin: 'https://app.example',
+              'x-forwarded-proto': 'https, http',
+            },
+          })
+        )
+      ).toBe(true);
+    });
+
+    it('assumes https for a forwarded host without a forwarded scheme', () => {
+      expect(
+        isSameOriginRequest(
+          proxied({
+            origin: 'http://app.example',
+            'x-forwarded-host': 'app.example',
+          })
+        )
+      ).toBe(false);
+    });
+
+    it('rejects the configured AUTH_URL host under another scheme', () => {
+      vi.stubEnv('AUTH_URL', 'https://app.example/api/auth');
+      expect(
+        isSameOriginRequest(proxied({ origin: 'http://app.example' }))
       ).toBe(false);
     });
 
