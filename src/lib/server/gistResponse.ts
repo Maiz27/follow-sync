@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { GIST_FILENAME } from '@/lib/constants';
+import { DatedRevision, sortRevisionsNewestFirst } from '@/lib/revisionOrder';
 
 type GistFileJson = {
   content?: string | null;
@@ -48,8 +49,9 @@ export const byteLength = (text: string) => Buffer.byteLength(text, 'utf8');
  * Shrinks a single-gist response (GET/PATCH /gists/{id}, POST /gists) so the
  * proxy can return it under the host's response limit:
  *
- * - `history` is cut to its latest MAX_HISTORY_ENTRIES entries, each to its
- *   version and time (the app reads the revisions since its last check);
+ * - `history` is put newest first (see sortRevisionsNewestFirst) and cut to
+ *   its latest MAX_HISTORY_ENTRIES entries, each to its version and time
+ *   (the app reads the revisions since its last check);
  * - with `omitContent`, every file's inline content is dropped (the caller
  *   asked for file names and the revision only), except a small cache
  *   manifest, which identifies the cache the gist holds;
@@ -73,7 +75,10 @@ export const shapeGistResponse = (
   if (!isGistJson(gist)) return body;
 
   if (Array.isArray(gist.history)) {
-    gist.history = gist.history
+    // Newest first before cutting, whatever order GitHub listed them in.
+    gist.history = sortRevisionsNewestFirst(
+      gist.history as Array<DatedRevision | null>
+    )
       .slice(0, MAX_HISTORY_ENTRIES)
       .map(slimHistoryEntry);
   }

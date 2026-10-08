@@ -26,6 +26,7 @@ import {
   buildShardedCache,
   findCanonicalCacheGist,
   CacheUnreadableError,
+  ORPHAN_CHUNK_MAX_AGE_MS,
   forgetCacheBases,
   newGeneration,
   parseCache,
@@ -375,6 +376,32 @@ const fakeGitHub = ({
       ]);
       commit(id);
     },
+    /**
+     * Another device's write of `data`, in two steps like a multi-request
+     * write: its chunks now, its manifest (deleting the chunks of the
+     * manifest it then replaces) when `finish` is called.
+     */
+    startWriteElsewhere: (id: string, data: CachedData) => {
+      const generation = newGeneration();
+      const { manifest, chunks } = buildShardedCache(
+        data,
+        generation,
+        currentManifest(id)?.generation ?? null
+      );
+      const gist = gists.get(id)!;
+      for (const { file, content } of chunks) gist.files.set(file, content);
+      commit(id);
+      return {
+        chunks: chunks.map(({ file }) => file),
+        finish: () => {
+          for (const ref of currentManifest(id)?.chunks ?? []) {
+            gist.files.delete(ref.file);
+          }
+          gist.files.set(GIST_FILENAME, manifest);
+          commit(id);
+        },
+      };
+    },
     /** Another device uploads a chunk file without its manifest (yet). */
     uploadChunkElsewhere: (id: string) => {
       const name = `${GIST_CHUNK_PREFIX}${newGeneration()}.1`;
@@ -413,6 +440,15 @@ const fakeGitHub = ({
       beforeRequest = fn;
     },
     fileNames: (id: string) => [...gists.get(id)!.files.keys()].sort(),
+    /** The cache the gist holds now, as any reader would parse it. */
+    liveData: (id: string) =>
+      parseCache({
+        id,
+        files: [...gists.get(id)!.files].map(([name, text]) => ({
+          name,
+          text,
+        })),
+      }),
     /** The live manifest's chunk files missing from the gist. */
     missingChunks: (id: string) =>
       (currentManifest(id)?.chunks ?? [])
@@ -431,6 +467,7 @@ const readBack = async (gistId: string) => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.useRealTimers();
   forgetCacheBases();
 });
 
@@ -1197,5 +1234,387 @@ describe('a cache that exists but cannot be read', () => {
       writeCache(cache(20), null, { discoverCanonicalFallback: true })
     ).rejects.toThrow('(503)');
     expect(github.gists.size).toBe(1);
+  });
+});
+
+describe('chunk files of other writers', () => {
+  const ignoredOf = async (gistId: string) =>
+    [...((await readBack(gistId))?.ignoredLogins ?? [])].sort();
+
+  /** A chunk file name of a write that started `ageMs` ago. */
+  const chunkAged = (ageMs: number, n = 1) =>
+    `${GIST_CHUNK_PREFIX}${(Date.now() - ageMs).toString(36)}orphan.${n}`;
+
+  const patchBodies = () =>
+    vi
+      .mocked(ghRest)
+      .mock.calls.filter(([, init]) => init?.method === 'PATCH')
+      .map(
+        ([, init]) =>
+          JSON.parse(init!.body as string) as {
+            files: Record<string, unknown>;
+          }
+      );
+
+  it("keeps another device's chunks while its write is still uploading", async () => {
+    const github = fakeGitHub();
+    const base = { ...cache(20), ignoredLogins: ['old'] };
+    const gist = await writeCache(base, null);
+    // Another device starts a multi-request write: chunks first...
+    const elsewhere = github.startWriteElsewhere(gist.id, {
+      ...base,
+      ignoredLogins: ['old', 'theirs'],
+    });
+
+    // ...while this session writes.
+    await writeCache(
+      { ...base, ignoredLogins: ['old', 'mine'], timestamp: 5 },
+      gist.id
+    );
+    for (const chunk of elsewhere.chunks) {
+      expect(github.fileNames(gist.id)).toContain(chunk);
+    }
+
+    // Its manifest lands: the cache it names is complete and readable.
+    elsewhere.finish();
+    expect(github.missingChunks(gist.id)).toEqual([]);
+    expect(await ignoredOf(gist.id)).toEqual(['old', 'theirs']);
+  });
+
+  it('deletes orphaned chunks once they are old enough, and only those', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const github = fakeGitHub();
+    const gist = await writeCache(cache(20), null);
+    const old = chunkAged(ORPHAN_CHUNK_MAX_AGE_MS + 60_000);
+    const young = chunkAged(ORPHAN_CHUNK_MAX_AGE_MS - 60_000);
+    github.edit(gist.id, { [old]: '{', [young]: '{' });
+
+    await writeCache({ ...cache(21), timestamp: 5 }, gist.id);
+
+    expect(github.fileNames(gist.id)).not.toContain(old);
+    expect(github.fileNames(gist.id)).toContain(young);
+
+    // Later, the young one has aged too.
+    vi.setSystemTime(Date.now() + 2 * 60_000);
+    await writeCache({ ...cache(22), timestamp: 6 }, gist.id);
+    expect(github.fileNames(gist.id)).not.toContain(young);
+    expect(github.missingChunks(gist.id)).toEqual([]);
+  });
+
+  describe("a writer from an older version deleting this write's chunks", () => {
+    /** Lands right before this session's manifest, deleting every other chunk. */
+    const overtakeBeforeManifest = (
+      github: ReturnType<typeof fakeGitHub>,
+      id: string,
+      data: CachedData,
+      times = 1
+    ) => {
+      let n = 0;
+      github.beforeRequest(({ method, files }) => {
+        if (n >= times || method !== 'PATCH' || !files.includes(GIST_FILENAME))
+          return;
+        n += 1;
+        // Based on what it read: the cache as it is now.
+        const live = github.liveData(id) ?? data;
+        github.writeElsewhere(
+          id,
+          {
+            ...live,
+            ignoredLogins: [...(live.ignoredLogins ?? []), `theirs${n}`],
+          },
+          { sweep: 'all' }
+        );
+      });
+    };
+
+    it('does not write at all when the revisions to verify against cannot be listed', async () => {
+      const github = fakeGitHub({ history: false });
+      const base = { ...cache(60_000, 5_000), ignoredLogins: ['old'] };
+      const gist = await writeCache(base, null);
+      overtakeBeforeManifest(github, gist.id, base);
+      github.failRead((request) =>
+        request.path.includes('/commits') ? 403 : null
+      );
+
+      await expect(
+        writeCache(
+          { ...base, ignoredLogins: ['old', 'mine'], timestamp: 5 },
+          gist.id
+        )
+      ).rejects.toThrow();
+
+      github.failRead(null);
+      github.beforeRequest(null);
+      expect(github.missingChunks(gist.id)).toEqual([]);
+      expect(await ignoredOf(gist.id)).toEqual(['old']);
+    }, 30_000);
+
+    it('uploads its deleted chunks again so the cache stays readable when the check after writing fails', async () => {
+      const github = fakeGitHub({ history: false });
+      const base = { ...cache(60_000, 5_000), ignoredLogins: ['old'] };
+      const gist = await writeCache(base, null);
+      overtakeBeforeManifest(github, gist.id, base);
+      // The commit list works for the check before writing, then fails.
+      let commitLists = 0;
+      github.failRead((request) =>
+        request.path.includes('/commits') && ++commitLists > 1 ? 403 : null
+      );
+
+      await writeCache(
+        { ...base, ignoredLogins: ['old', 'mine'], timestamp: 5 },
+        gist.id
+      );
+
+      github.failRead(null);
+      github.beforeRequest(null);
+      expect(github.missingChunks(gist.id)).toEqual([]);
+      expect(await ignoredOf(gist.id)).toEqual(['mine', 'old']);
+    }, 30_000);
+
+    it('repairs and stays readable when it overtakes every repair write', async () => {
+      const github = fakeGitHub();
+      const base = { ...cache(60_000, 5_000), ignoredLogins: ['old'] };
+      const gist = await writeCache(base, null);
+      overtakeBeforeManifest(github, gist.id, base, Infinity);
+      const onWarning = vi.fn();
+
+      await writeCache(
+        { ...base, ignoredLogins: ['old', 'mine'], timestamp: 5 },
+        gist.id,
+        { onWarning }
+      );
+
+      github.beforeRequest(null);
+      expect(onWarning).toHaveBeenCalledTimes(1);
+      expect(github.missingChunks(gist.id)).toEqual([]);
+      const stored = await readBack(gist.id);
+      expect(stored?.network).toEqual(base.network);
+      expect(stored?.ignoredLogins).toEqual(
+        expect.arrayContaining(['old', 'mine', 'theirs1', 'theirs2'])
+      );
+    }, 60_000);
+  });
+
+  it('points the gist back at this write when it is left broken and the check fails', async () => {
+    const github = fakeGitHub({ history: false });
+    const gist = await writeCache(
+      { ...cache(20), ignoredLogins: ['old'] },
+      null
+    );
+    // After this write lands, a broken cache replaces it (a manifest whose
+    // chunks are gone) and the commit list fails, so nothing can be merged.
+    let commitLists = 0;
+    github.failRead((request) => {
+      if (!request.path.includes('/commits') || ++commitLists === 1) {
+        return null;
+      }
+      if (commitLists === 2) {
+        github.writeElsewhere(gist.id, cache(20));
+        const live = JSON.parse(
+          github.gists.get(gist.id)!.files.get(GIST_FILENAME)!
+        ) as { chunks: Array<{ file: string }> };
+        github.edit(
+          gist.id,
+          Object.fromEntries(live.chunks.map((ref) => [ref.file, null]))
+        );
+      }
+      return 403;
+    });
+    const onWarning = vi.fn();
+
+    await writeCache(
+      { ...cache(20), ignoredLogins: ['old', 'mine'], timestamp: 5 },
+      gist.id,
+      { onWarning }
+    );
+
+    github.failRead(null);
+    expect(onWarning).toHaveBeenCalledTimes(1);
+    expect(github.missingChunks(gist.id)).toEqual([]);
+    expect(await ignoredOf(gist.id)).toEqual(['mine', 'old']);
+  });
+
+  it('verifies the last repair write and warns when another writer is still found', async () => {
+    const github = fakeGitHub();
+    const gist = await writeCache({ ...cache(20), ignoredLogins: [] }, null);
+    let n = 0;
+    github.beforeRequest(({ method }) => {
+      if (method === 'PATCH') {
+        const live = github.liveData(gist.id)!;
+        github.writeElsewhere(gist.id, {
+          ...live,
+          ignoredLogins: [...(live.ignoredLogins ?? []), `theirs${++n}`],
+        });
+      }
+    });
+    const onWarning = vi.fn();
+
+    await writeCache({ ...cache(20), ignoredLogins: ['mine'] }, gist.id, {
+      onWarning,
+    });
+
+    github.beforeRequest(null);
+    expect(patchBodies()).toHaveLength(3);
+    expect(onWarning).toHaveBeenCalledTimes(1);
+    expect(github.missingChunks(gist.id)).toEqual([]);
+    expect(await ignoredOf(gist.id)).toEqual(
+      expect.arrayContaining(['mine', 'theirs1', 'theirs2'])
+    );
+  });
+
+  describe('deleting a file that is already gone', () => {
+    it('retries without the deletions when GitHub refuses them', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const github = fakeGitHub({ deleteAbsent: '422' });
+      const gist = await writeCache(cache(20), null);
+      const old = chunkAged(ORPHAN_CHUNK_MAX_AGE_MS + 60_000);
+      github.edit(gist.id, { [old]: '{' });
+      // Someone else deletes it between the check and this write.
+      let done = false;
+      github.beforeRequest(({ method }) => {
+        if (done || method !== 'PATCH') return;
+        done = true;
+        github.edit(gist.id, { [old]: null });
+      });
+      vi.mocked(ghRest).mockClear();
+
+      await writeCache({ ...cache(21), timestamp: 5 }, gist.id);
+
+      const bodies = patchBodies();
+      expect(bodies).toHaveLength(2);
+      expect(bodies[0].files[old]).toBeNull();
+      expect(old in bodies[1].files).toBe(false);
+      expect(await readBack(gist.id)).toEqual({ ...cache(21), timestamp: 5 });
+    });
+
+    it('takes the deletions from the last chunk upload of a multi-request write', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const github = fakeGitHub({ deleteAbsent: '422' });
+      const original = cache(60_000, 5_000);
+      const gist = await writeCache(original, null);
+      const old = chunkAged(ORPHAN_CHUNK_MAX_AGE_MS + 60_000);
+      github.edit(gist.id, { [old]: '{' });
+      // Gone after the check, before this write's first chunk upload.
+      let done = false;
+      github.beforeRequest(({ method }) => {
+        if (done || method !== 'PATCH') return;
+        done = true;
+        github.edit(gist.id, { [old]: null });
+      });
+      vi.mocked(ghRest).mockClear();
+      const updated = { ...cache(60_000, 5_001), timestamp: 5 };
+
+      await writeCache(updated, gist.id);
+
+      const bodies = patchBodies();
+      expect(bodies.some((body) => old in body.files)).toBe(false);
+      // No refused request was sent again.
+      expect(bodies.filter((body) => GIST_FILENAME in body.files)).toHaveLength(
+        1
+      );
+      expect(await readBack(gist.id)).toEqual(updated);
+    }, 30_000);
+  });
+
+  describe('a gist with more files than GitHub lists', () => {
+    it('reads the chunks the listing leaves out and sweeps stale files', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const github = fakeGitHub({ fileListLimit: 5 });
+      const gist = await writeCache(
+        { ...cache(20), ignoredLogins: ['old'] },
+        null
+      );
+      forgetCacheBases();
+      github.writeElsewhere(gist.id, {
+        ...cache(20),
+        ignoredLogins: ['old', 'theirs'],
+      });
+      // Old orphans sort before the live chunk, pushing it out of the list.
+      const orphans = Array.from({ length: 6 }, (_, i) =>
+        chunkAged(ORPHAN_CHUNK_MAX_AGE_MS + 60_000, i + 1)
+      );
+      github.edit(
+        gist.id,
+        Object.fromEntries(orphans.map((name) => [name, '{']))
+      );
+
+      await writeCache(
+        { ...cache(20), ignoredLogins: ['mine'], timestamp: 5 },
+        gist.id
+      );
+
+      // Merged, not mistaken for a broken cache and written over.
+      expect(await ignoredOf(gist.id)).toEqual(['mine', 'old', 'theirs']);
+      const left = () =>
+        orphans.filter((name) => github.fileNames(gist.id).includes(name));
+      expect(left().length).toBeLessThan(orphans.length);
+
+      // Each write sweeps what it can see, until none are left.
+      for (let i = 0; i < 3 && left().length > 0; i++) {
+        await writeCache(
+          { ...cache(20), ignoredLogins: ['mine'], timestamp: 6 + i },
+          gist.id
+        );
+      }
+      expect(left()).toEqual([]);
+      expect(github.missingChunks(gist.id)).toEqual([]);
+    });
+  });
+});
+
+describe('revision order', () => {
+  it.each([
+    ['with history', { history: true }],
+    ['without history', { history: false }],
+  ])(
+    'merges an interleaved write when revisions are listed oldest first (%s)',
+    async (_label, options) => {
+      const github = fakeGitHub({ ...options, order: 'oldest-first' });
+      const base = { ...cache(20), ignoredLogins: ['old'] };
+      const gist = await writeCache(base, null);
+      let done = false;
+      github.beforeRequest(({ method }) => {
+        if (done || method !== 'PATCH') return;
+        done = true;
+        github.writeElsewhere(gist.id, {
+          ...base,
+          ignoredLogins: ['old', 'theirs'],
+        });
+      });
+
+      await writeCache(
+        { ...base, ignoredLogins: ['old', 'mine'], timestamp: 5 },
+        gist.id
+      );
+
+      expect(
+        [...((await readBack(gist.id))?.ignoredLogins ?? [])].sort()
+      ).toEqual(['mine', 'old', 'theirs']);
+    }
+  );
+
+  it('notices a write landing right after the check when there is no history', async () => {
+    const github = fakeGitHub({ history: false });
+    const base = { ...cache(20), ignoredLogins: ['old'] };
+    const gist = await writeCache(base, null);
+    // Lands between the revision check and the commit listing.
+    let done = false;
+    github.beforeRequest(({ method, path }) => {
+      if (done || method !== 'GET' || !path.includes('/commits')) return;
+      done = true;
+      github.writeElsewhere(gist.id, {
+        ...base,
+        ignoredLogins: ['old', 'theirs'],
+      });
+    });
+
+    await writeCache(
+      { ...base, ignoredLogins: ['old', 'mine'], timestamp: 5 },
+      gist.id
+    );
+
+    expect(
+      [...((await readBack(gist.id))?.ignoredLogins ?? [])].sort()
+    ).toEqual(['mine', 'old', 'theirs']);
   });
 });

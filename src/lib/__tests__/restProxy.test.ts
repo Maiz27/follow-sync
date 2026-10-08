@@ -211,6 +211,30 @@ describe('/api/gh/rest body limits', () => {
     });
   });
 
+  it('keeps the newest history entries when GitHub lists them oldest first', async () => {
+    const history = Array.from({ length: 40 }, (_, i) => ({
+      version: `v${i + 1}`,
+      committed_at: new Date(Date.UTC(2024, 0, 1) + i * 1000).toISOString(),
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: GIST_ID, history, files: {} }))
+      )
+    );
+
+    const response = await GET(
+      request(`gists/${GIST_ID}`),
+      ctx(['gists', GIST_ID])
+    );
+    const gist = JSON.parse(await response.text());
+
+    expect(gist.history).toHaveLength(30);
+    expect(gist.history[0].version).toBe('v40');
+    expect(gist.history.at(-1).version).toBe('v11');
+  });
+
   it('drops every content but a small cache manifest when only the file list is asked for', async () => {
     vi.stubGlobal(
       'fetch',

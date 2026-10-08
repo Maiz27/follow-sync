@@ -10,6 +10,7 @@ import {
 } from './constants';
 import { GitHubRestError, ghGistRaw, ghRest, ghRestOk } from './ghRest';
 import { decodeCache, encodeCache } from './cacheCodec';
+import { DatedRevision, sortRevisionsNewestFirst } from './revisionOrder';
 import {
   CacheBase,
   isSameRevision,
@@ -36,10 +37,16 @@ type GitHubGistSummary = {
 
 type GitHubGistDetail = GitHubGistSummary & {
   /**
-   * Revisions, newest first (the proxy keeps the latest few). Documented as
-   * deprecated and optional, so everything here works without it.
+   * Revisions (the proxy keeps the latest few). Documented as deprecated and
+   * optional, so everything here works without it. Put in order with
+   * sortRevisionsNewestFirst rather than trusting the order given.
    */
-  history?: Array<{ version?: string | null } | null> | null;
+  history?: Array<DatedRevision | null> | null;
+  /**
+   * Set when the gist has more files than GitHub lists in one response
+   * (300): `files` is then only part of them.
+   */
+  truncated?: boolean;
   files?: Record<
     string,
     {
@@ -135,9 +142,9 @@ const hasCacheFilename = (gist: Pick<CacheGist, 'files'>) =>
 /** The history versions a gist response listed, newest first, if any. */
 const historyVersions = (gist: GitHubGistDetail): string[] | null => {
   if (!Array.isArray(gist.history) || gist.history.length === 0) return null;
-  return gist.history
-    .map((entry) => entry?.version)
-    .filter((version): version is string => typeof version === 'string');
+  return sortRevisionsNewestFirst(gist.history).map(
+    (entry) => entry.version as string
+  );
 };
 
 /** The cache manifest a gist response carries inline, if any. */
@@ -160,6 +167,7 @@ const toCacheGist = (gist: GitHubGistDetail): CacheGist => ({
   description: gist.description,
   updatedAt: gist.updated_at,
   revision: gistRevision(gist),
+  ...(gist.truncated ? { filesTruncated: true } : {}),
   files: Object.values(gist.files ?? {}).map((file) => ({
     name: file.filename ?? '',
     text: file.content ?? null,
@@ -192,6 +200,7 @@ const fetchGistById = async (gistId: string, version?: string | null) => {
   // A sharded cache: load the chunks its manifest names the same way.
   const manifest = readManifest(cacheFile?.text);
   if (manifest) {
+    if (cacheGist.filesTruncated) listUnlistedChunks(cacheGist, manifest);
     const chunkFiles = manifest.chunks
       .map((ref) => cacheGist.files.find((file) => file.name === ref.file))
       .filter((file): file is CacheGistFile => Boolean(file));
@@ -199,6 +208,34 @@ const fetchGistById = async (gistId: string, version?: string | null) => {
   }
 
   return cacheGist;
+};
+
+/**
+ * A gist with more files than GitHub lists (300; orphaned chunk files of
+ * failed writes pile up until they are old enough to sweep, see
+ * staleChunkFiles) may leave out chunks its manifest needs. They are read
+ * from raw URLs next to the manifest's: same gist and revision, their own
+ * file name. If that doesn't work, the read fails rather than the cache
+ * looking broken.
+ */
+const listUnlistedChunks = (gist: CacheGist, manifest: ShardedManifest) => {
+  const manifestUrl = gist.files.find(
+    (file) => file.name === GIST_FILENAME
+  )?.rawUrl;
+  console.warn(
+    'The cache gist has more files than GitHub lists; reading unlisted chunks by URL.'
+  );
+  if (!manifestUrl) return;
+  const base = manifestUrl.slice(0, manifestUrl.lastIndexOf('/') + 1);
+  for (const ref of manifest.chunks) {
+    if (gist.files.some((file) => file.name === ref.file)) continue;
+    gist.files.push({
+      name: ref.file,
+      text: null,
+      truncated: true,
+      rawUrl: `${base}${encodeURIComponent(ref.file)}`,
+    });
+  }
 };
 
 const loadFullText = async (file: CacheGistFile) => {
@@ -445,7 +482,11 @@ const chunkFileName = (generation: string, index: number) =>
 export const isCacheChunkFile = (name: string) =>
   name.startsWith(GIST_CHUNK_PREFIX);
 
-/** A fresh id for one cache write; names that write's chunk files. */
+/**
+ * A fresh id for one cache write; names that write's chunk files. Starts
+ * with the time the write started (`Date.now()` in base 36), which tells how
+ * old an orphaned chunk is (see generationStartedAt), then a random part.
+ */
 export const newGeneration = () =>
   `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
@@ -790,26 +831,28 @@ const fetchGistMeta = async (gistId: string, version?: string | null) => {
     files: Object.values(gist.files ?? {})
       .map((file) => file.filename ?? '')
       .filter(Boolean),
+    filesTruncated: Boolean(gist.truncated),
   };
 };
 
-type GistCommit = { version?: string | null };
-
 /** Gist commits per page when the history has to be listed separately. */
 const COMMITS_PER_PAGE = 100;
+/** Commits listed to find the newest one (see writeCacheTo). */
+const ANCHOR_COMMITS = 10;
 
 /**
  * The gist's revisions, newest first, from `GET /gists/{id}/commits` (the
- * documented, non-deprecated list). Null when it can't be listed.
+ * documented, non-deprecated list; put in order by sortRevisionsNewestFirst
+ * rather than trusting the order given). Null when it can't be listed.
  */
 const listGistVersions = async (gistId: string, perPage: number) => {
   try {
-    const commits = await ghRest<GistCommit[]>(
+    const commits = await ghRest<DatedRevision[]>(
       `/gists/${gistId}/commits?per_page=${perPage}`
     );
-    return (commits ?? [])
-      .map((commit) => commit.version)
-      .filter((version): version is string => typeof version === 'string');
+    return sortRevisionsNewestFirst(commits ?? []).map(
+      (commit) => commit.version as string
+    );
   } catch (error) {
     console.warn('Failed to list the cache gist revisions.', error);
     return null;
@@ -824,6 +867,14 @@ const listGistVersions = async (gistId: string, perPage: number) => {
 const cacheBases = new Map<string, CacheBase>();
 
 /**
+ * Per cache gist: generations of this session's writes that failed after
+ * uploading some chunks. No manifest will ever reference those chunks, so
+ * the next write deletes them without waiting for them to age (see
+ * staleChunkFiles).
+ */
+const abandonedGenerations = new Map<string, Set<string>>();
+
+/**
  * Records that this session's state is based on `data`, read from `gist`.
  * Call it when a cache is loaded into the stores; writes record their own.
  */
@@ -832,7 +883,77 @@ export const rememberCacheBase = (gist: CacheGist, data: CachedData) => {
 };
 
 /** Forgets every recorded base (e.g. on sign-out). */
-export const forgetCacheBases = () => cacheBases.clear();
+export const forgetCacheBases = () => {
+  cacheBases.clear();
+  abandonedGenerations.clear();
+};
+
+/**
+ * Chunk files younger than this are never deleted unless this write knows
+ * whose they are: they may belong to another device's write that is still
+ * uploading them (its manifest lands after its last chunk). A write of the
+ * largest caches takes well under a minute; the margin covers slow
+ * connections and clocks that disagree by a few minutes.
+ */
+export const ORPHAN_CHUNK_MAX_AGE_MS = 15 * 60 * 1000;
+
+/**
+ * Characters of a generation that encode when its write started:
+ * `Date.now()` in base 36 (see newGeneration) is 8 characters until 2059.
+ */
+const GENERATION_TIME_CHARS = 8;
+/** Generations decoding to earlier times aren't timestamps (sharding is newer). */
+const EARLIEST_GENERATION_TIME = Date.UTC(2020, 0, 1);
+
+/** The generation a chunk file belongs to (see chunkFileName), if any. */
+const chunkGeneration = (name: string) => {
+  if (!isCacheChunkFile(name)) return null;
+  const rest = name.slice(GIST_CHUNK_PREFIX.length);
+  const dot = rest.lastIndexOf('.');
+  return dot > 0 ? rest.slice(0, dot) : null;
+};
+
+/** When the write that created `generation` started, if it encodes that. */
+export const generationStartedAt = (generation: string): number | null => {
+  const head = generation.slice(0, GENERATION_TIME_CHARS);
+  if (!/^[0-9a-z]{8}$/.test(head)) return null;
+  const time = parseInt(head, 36);
+  return time >= EARLIEST_GENERATION_TIME ? time : null;
+};
+
+/**
+ * The chunk files in `listing` a write deletes along with its manifest:
+ *
+ * - those of `superseded` generations: caches this write read and merged or
+ *   replaced (the manifest it checked, another writer's cache it merged in
+ *   after the fact, its own earlier repair rounds and abandoned writes).
+ *   Each of those manifests has already landed, so no write still needs
+ *   them once this one's manifest replaces whatever is current;
+ * - those whose generation started more than ORPHAN_CHUNK_MAX_AGE_MS ago:
+ *   orphans of a write that failed half-way.
+ *
+ * Never the files this write is writing, and never a younger chunk this
+ * write knows nothing about, which may be another device's write in
+ * progress (deleting those made its manifest land pointing at missing
+ * chunks). A file whose name doesn't encode a time is left alone.
+ *
+ * Deletions go in the same request as this write's manifest, so whichever
+ * manifest is current at that moment is replaced along with them.
+ */
+const staleChunkFiles = (
+  listing: readonly string[],
+  keep: ReadonlySet<string>,
+  superseded: ReadonlySet<string>,
+  now: number
+) =>
+  listing.filter((name) => {
+    if (keep.has(name)) return false;
+    const generation = chunkGeneration(name);
+    if (!generation) return false;
+    if (superseded.has(generation)) return true;
+    const startedAt = generationStartedAt(generation);
+    return startedAt !== null && now - startedAt > ORPHAN_CHUNK_MAX_AGE_MS;
+  });
 
 /** What one sharded write produced. */
 type ShardedWriteResult = {
@@ -843,32 +964,50 @@ type ShardedWriteResult = {
   requests: number;
   /** The final response's history, newest first; null without one. */
   history: string[] | null;
+  /** The gist's files after the write (all of them unless `filesTruncated`). */
+  files: string[];
+  filesTruncated: boolean;
 };
+
+const isUnprocessable = (error: unknown) =>
+  error instanceof GitHubRestError && error.status === 422;
 
 /**
  * Writes a sharded cache to `gistId` (or a new gist when null). Small caches
  * go out in one request. Larger ones are split so no request body exceeds
  * `MAX_GIST_WRITE_BYTES`: chunk files first, then the manifest, which is what
- * makes the new chunks the cache. Chunk files no manifest will reference any
- * more (the previous write's, or orphans of a failed one) are deleted with
- * the manifest. Null when the gist disappeared.
+ * makes the new chunks the cache. Null when the gist disappeared.
+ *
+ * `deletions` picks the chunk files to delete with the manifest from the
+ * freshest file list at hand: the last chunk upload's response, or `listing`
+ * (what the caller last saw) for a single request. Should GitHub refuse the
+ * request anyway (422, e.g. a file deleted meanwhile), it is sent once more
+ * without deletions; those files go with a later write.
+ *
+ * Every chunk the manifest names is checked against the final response: one
+ * that is missing (deleted meanwhile by an older version of this code, which
+ * removed every chunk but its own) is uploaded again, so this write never
+ * leaves its manifest pointing at missing chunks.
  */
 const writeShardedCache = async (
   gistId: string | null,
   plan: CacheWritePlan,
-  existingFiles: string[]
+  listing: readonly string[],
+  deletions: (listing: readonly string[]) => string[]
 ): Promise<ShardedWriteResult | null> => {
   const chunkFiles: GistFiles = Object.fromEntries(
     plan.chunks.map(({ file, content }) => [file, { content }])
   );
-  const finalFiles: GistFiles = {
+  const manifestFile: GistFiles = {
     [GIST_FILENAME]: { content: plan.manifest },
   };
-  for (const name of existingFiles) {
-    if (isCacheChunkFile(name) && !(name in chunkFiles)) {
-      finalFiles[name] = null;
+  const withDeletions = (files: GistFiles, from: readonly string[]) => {
+    const result = { ...files };
+    for (const name of deletions(from)) {
+      if (!(name in result)) result[name] = null;
     }
-  }
+    return result;
+  };
 
   const ownVersions: string[] = [];
   let requests = 0;
@@ -879,60 +1018,103 @@ const writeShardedCache = async (
     if (version) ownVersions.push(version);
     return response;
   };
-  const finish = (response: GistWriteResponse | null) =>
-    response
-      ? {
-          gist: response.gist,
-          ownVersions,
-          requests,
-          history: response.history,
-        }
-      : null;
+  /** PATCH `files`, then once more without its deletions on a 422. */
+  const patchFiles = async (
+    targetId: string,
+    files: GistFiles,
+    description?: string
+  ) => {
+    const body = (entries: GistFiles) =>
+      description ? { description, files: entries } : { files: entries };
+    try {
+      return track(await patchGist(targetId, body(files)));
+    } catch (error) {
+      const kept = Object.fromEntries(
+        Object.entries(files).filter(([, entry]) => entry !== null)
+      );
+      if (
+        !isUnprocessable(error) ||
+        Object.keys(kept).length === Object.keys(files).length
+      ) {
+        throw error;
+      }
+      console.warn('Retrying a cache write without its deletions.', error);
+      return track(await patchGist(targetId, body(kept)));
+    }
+  };
 
-  const allFiles = { ...chunkFiles, ...finalFiles };
+  let final: GistWriteResponse | null;
+  let targetId = gistId;
+  const allFiles = { ...chunkFiles, ...manifestFile };
   if (filesBytes(allFiles) + BODY_OVERHEAD_BYTES <= MAX_GIST_WRITE_BYTES) {
-    return finish(
-      track(
-        gistId
-          ? await patchGist(gistId, {
-              description: plan.description,
-              files: allFiles,
-            })
-          : await postGist({
-              description: plan.description,
-              public: false,
-              files: allFiles,
-            })
-      )
+    final = targetId
+      ? await patchFiles(
+          targetId,
+          withDeletions(allFiles, listing),
+          plan.description
+        )
+      : track(
+          await postGist({
+            description: plan.description,
+            public: false,
+            files: allFiles,
+          })
+        );
+  } else {
+    let latest: readonly string[] = listing;
+    for (const files of batchFiles(chunkFiles)) {
+      if (!targetId) {
+        // Created without a manifest, so it isn't a readable cache until the
+        // last request below lands.
+        const created = track(
+          await postGist({
+            description: plan.description,
+            public: false,
+            files,
+          })
+        )!;
+        targetId = created.gist.id;
+        latest = [];
+        continue;
+      }
+      const response = track(await patchGist(targetId, { files }));
+      if (!response) return null;
+      latest = response.gist.files.map((file) => file.name);
+    }
+    final = await patchFiles(
+      targetId!,
+      withDeletions(manifestFile, latest),
+      plan.description
     );
   }
+  if (!final) return null;
 
-  let targetId = gistId;
-  for (const files of batchFiles(chunkFiles)) {
-    if (!targetId) {
-      // Created without a manifest, so it isn't a readable cache until the
-      // last request below lands.
-      const created = track(
-        await postGist({
-          description: plan.description,
-          public: false,
-          files,
-        })
-      )!;
-      targetId = created.gist.id;
-      continue;
+  // Chunks missing from the final response are uploaded again (see above).
+  // A truncated file list can't tell; its unlisted chunks were just written.
+  let response: GistWriteResponse = final;
+  if (!response.gist.filesTruncated) {
+    const present = new Set(response.gist.files.map((file) => file.name));
+    const missing = Object.fromEntries(
+      Object.entries(chunkFiles).filter(([name]) => !present.has(name))
+    );
+    if (Object.keys(missing).length > 0) {
+      console.warn('Uploading cache chunks deleted during the write again.');
+      for (const files of batchFiles(missing)) {
+        const reuploaded = track(await patchGist(targetId!, { files }));
+        if (!reuploaded) return null;
+        response = reuploaded;
+      }
     }
-    if (!track(await patchGist(targetId, { files }))) return null;
   }
 
-  return finish(
-    track(
-      await patchGist(targetId!, {
-        description: plan.description,
-        files: finalFiles,
-      })
-    )
-  );
+  return {
+    gist: response.gist,
+    ownVersions,
+    requests,
+    history: response.history,
+    files: response.gist.files.map((file) => file.name),
+    filesTruncated: Boolean(response.gist.filesTruncated),
+  };
 };
 
 /**
@@ -1030,16 +1212,22 @@ const MAX_REPAIR_ROUNDS = 2;
 /** Earlier revisions inspected per round to find another writer's cache. */
 const MAX_REVISION_PROBES = 5;
 
-type InterleavedWrite = {
-  generation: string;
-  parent: string | null;
-  data: CachedData;
-};
+type InterleavedCheck =
+  /** No other writer completed a cache since `since`. */
+  | { kind: 'none' }
+  /** Another writer's cache landed and this write replaced it. */
+  | {
+      kind: 'found';
+      generation: string;
+      parent: string | null;
+      data: CachedData;
+    }
+  /** The revisions couldn't all be listed or read, so it is unknown. */
+  | { kind: 'unverified' };
 
 /**
- * The newest cache another writer completed in the revisions after `since`
- * (which this write already accounted for), or null when there is none —
- * or none that can be found and read.
+ * Whether another writer completed a cache in the revisions after `since`
+ * (which this write already accounted for), and the newest such cache.
  *
  * The revisions come from the final write response's history when it reaches
  * back to `since`, else from the gist's commit list. Revisions this write
@@ -1047,7 +1235,8 @@ type InterleavedWrite = {
  * a generation that is neither this write's nor already merged is another
  * writer's completed cache. (A revision still holding a known generation is
  * another writer's chunk upload in progress: that writer checks for this
- * write when its own manifest lands.)
+ * write when its own manifest lands.) A revision that can't be listed or
+ * read makes the answer `unverified`.
  */
 const findInterleavedWrite = async ({
   gistId,
@@ -1067,7 +1256,7 @@ const findInterleavedWrite = async ({
   knownGenerations: ReadonlySet<string>;
   /** Revisions already inspected (shared across rounds). */
   probed: Set<string>;
-}): Promise<InterleavedWrite | null> => {
+}): Promise<InterleavedCheck> => {
   let window: string[] | null = null;
   const start = result.history?.indexOf(since) ?? -1;
   if (result.history && start >= 0) {
@@ -1082,37 +1271,105 @@ const findInterleavedWrite = async ({
     console.warn(
       'Could not list the cache gist revisions to check for a concurrent write.'
     );
-    return null;
+    return { kind: 'unverified' };
   }
   // Without the versions of its own requests, a window no longer than the
   // requests this write made holds nothing else.
-  if (ownVersions.size === 0 && window.length <= requests) return null;
+  if (ownVersions.size === 0 && window.length <= requests) {
+    return { kind: 'none' };
+  }
 
-  const candidates = window
-    .filter((version) => !ownVersions.has(version) && !probed.has(version))
-    .slice(0, MAX_REVISION_PROBES);
-  for (const version of candidates) {
+  const unprobed = window.filter(
+    (version) => !ownVersions.has(version) && !probed.has(version)
+  );
+  let complete = unprobed.length <= MAX_REVISION_PROBES;
+  for (const version of unprobed.slice(0, MAX_REVISION_PROBES)) {
     probed.add(version);
     const meta = await fetchGistMeta(gistId, version).catch((error) => {
       console.warn('Failed to read a cache gist revision.', error);
-      return null;
+      return undefined;
     });
+    if (meta === undefined) {
+      complete = false;
+      continue;
+    }
     const generation = meta?.revision.generation;
     if (!generation || knownGenerations.has(generation)) continue;
 
     const gist = await fetchGistById(gistId, version).catch((error) => {
       console.warn('Failed to read a cache gist revision.', error);
-      return null;
+      return undefined;
     });
+    if (gist === undefined) {
+      complete = false;
+      continue;
+    }
     const data = gist ? parseCache(gist) : null;
+    // A cache that can't be read holds nothing to merge.
     if (!data) continue;
     return {
+      kind: 'found',
       generation,
-      parent: meta.manifest?.parent ?? null,
+      parent: meta?.manifest?.parent ?? null,
       data,
     };
   }
-  return null;
+  return complete ? { kind: 'none' } : { kind: 'unverified' };
+};
+
+/**
+ * Makes sure the gist's current manifest can be read once this write is
+ * done: every chunk it names is there. Called when the write ends without
+ * having verified that nobody wrote after it. A manifest of this write's own
+ * gets its missing chunks again; another writer's that is missing chunks
+ * (one that can't be read at all) is pointed back at this write's cache.
+ * False only when the gist disappeared.
+ */
+const ensureReadableManifest = async (
+  gistId: string,
+  plan: CacheWritePlan,
+  generation: string,
+  warn?: (message: string) => void
+) => {
+  // This write went through: a failure here (e.g. still rate limited) only
+  // means the gist can't be checked now.
+  const meta = await fetchGistMeta(gistId).catch((error) => {
+    console.warn('Could not check the cache gist after writing.', error);
+    return null;
+  });
+  if (!meta || meta.filesTruncated || !meta.manifest) return true;
+  const present = new Set(meta.files);
+  if (meta.manifest.chunks.every((ref) => present.has(ref.file))) return true;
+
+  const files: GistFiles = Object.fromEntries(
+    plan.chunks
+      .filter(({ file }) => !present.has(file))
+      .map(({ file, content }) => [file, { content }])
+  );
+  const repointed = meta.manifest.generation !== generation;
+  console.warn(
+    repointed
+      ? 'Pointing the cache gist back at this write: the current manifest is missing chunks.'
+      : 'Uploading cache chunks deleted after the write again.'
+  );
+  try {
+    // Chunks first, then (to point the gist back at them) the manifest.
+    for (const batch of batchFiles(files)) {
+      if (!(await patchGist(gistId, { files: batch }))) return false;
+    }
+    if (repointed) {
+      const response = await patchGist(gistId, {
+        files: { [GIST_FILENAME]: { content: plan.manifest } },
+      });
+      if (!response) return false;
+      warn?.(
+        'Your cache on GitHub had been left incomplete by another device and was restored from this one.'
+      );
+    }
+  } catch (error) {
+    console.warn('Could not repair the cache gist after writing.', error);
+  }
+  return true;
 };
 
 /**
@@ -1128,13 +1385,21 @@ const findInterleavedWrite = async ({
  *    read and merged in first (see mergeCacheData; without a base the merge
  *    only ever keeps things). A gist without a cache needs no read, and
  *    `known` (a cache discovery just read) saves one when it is still
- *    current.
+ *    current. A read that fails abandons the write (see readCacheToMerge).
  * 2. After writing, the revisions made since the check are listed. If
  *    another writer completed a cache in between (its write landed between
  *    the check and this write's manifest, and this write replaced it), that
  *    revision is read back from the gist history, merged in, and written
  *    again — at most MAX_REPAIR_ROUNDS times, so two writers can't keep
- *    rewriting each other.
+ *    rewriting each other. The last write is checked the same way: if
+ *    another writer is still found (or the check can't be made), the user
+ *    is warned when it matters, and the gist's current manifest is made
+ *    readable (see ensureReadableManifest).
+ *
+ * The revisions "since the check" start at the revision the check (or the
+ * read) returned. Without `history` in responses (deprecated), the newest
+ * commit is listed first and the check made after it, so no write can land
+ * between the two unobserved.
  *
  * A new gist (`gistId` null) skips both: nobody else can have written it.
  */
@@ -1151,7 +1416,8 @@ const writeCacheTo = async (
     const created = await writeShardedCache(
       null,
       { description, ...buildShardedCache(data, generation) },
-      []
+      [],
+      () => []
     );
     if (!created) return null;
     cacheBases.set(
@@ -1164,8 +1430,29 @@ const writeCacheTo = async (
     return created.gist;
   }
 
-  const meta = await fetchGistMeta(gistId);
+  let meta = await fetchGistMeta(gistId);
   if (!meta) return null;
+  // Where verification starts when no response carries a history version:
+  // the newest commit, listed before the check it anchors.
+  let anchor: string | null = null;
+  if (!meta.revision.version) {
+    // A few, in case GitHub ever lists them oldest first within a page.
+    const versions = await listGistVersions(gistId, ANCHOR_COMMITS);
+    if (!versions) {
+      // Without it, a write landing meanwhile would go unnoticed.
+      throw new Error(
+        'Could not list the cache gist revisions to check for other writers.'
+      );
+    }
+    anchor = versions[0] ?? null;
+    meta = await fetchGistMeta(gistId);
+    if (!meta) return null;
+  }
+  if (meta.filesTruncated) {
+    console.warn(
+      'The cache gist has more files than GitHub lists; stale chunk files are deleted as they show up.'
+    );
+  }
 
   const base = cacheBases.get(gistId) ?? null;
   let toWrite = data;
@@ -1180,7 +1467,7 @@ const writeCacheTo = async (
 
   if (!base || !isSameRevision(meta.revision, base.revision)) {
     let remote: RemoteCache | null = null;
-    if (meta.files.includes(GIST_FILENAME)) {
+    if (meta.files.includes(GIST_FILENAME) || meta.filesTruncated) {
       const knownData = known ? parseCache(known) : null;
       remote =
         known &&
@@ -1228,39 +1515,56 @@ const writeCacheTo = async (
     basesByGeneration.set(checked.revision.generation, checked.base);
   }
   const knownGenerations = new Set(basesByGeneration.keys());
+  // Generations whose chunks this write may delete (see staleChunkFiles).
+  const superseded = new Set([
+    ...knownGenerations,
+    ...(abandonedGenerations.get(gistId) ?? []),
+  ]);
   const ownVersions = new Set<string>();
   const probed = new Set<string>();
   let requests = 0;
-  // Where verification starts: the revision this write checked. Without a
-  // history version (deprecated), the newest commit.
-  const since =
-    checked.revision.version ??
-    (await listGistVersions(gistId, 1))?.[0] ??
-    null;
+  const since = checked.revision.version ?? anchor ?? meta.revision.version;
 
   let parent = checked.revision.generation;
-  let existingFiles = checked.files;
+  let listing = checked.files;
   let written: ShardedWriteResult;
   let generation: string;
+  let plan: CacheWritePlan;
+  let outcome: InterleavedCheck['kind'] = 'none';
   for (let round = 0; ; round++) {
-    generation = newGeneration();
-    const result = await writeShardedCache(
-      gistId,
-      { description, ...buildShardedCache(toWrite, generation, parent) },
-      existingFiles
-    );
+    const roundGeneration = newGeneration();
+    generation = roundGeneration;
+    const roundPlan: CacheWritePlan = {
+      description,
+      ...buildShardedCache(toWrite, roundGeneration, parent),
+    };
+    plan = roundPlan;
+    const keep = new Set(roundPlan.chunks.map(({ file }) => file));
+    let result: ShardedWriteResult | null;
+    try {
+      result = await writeShardedCache(gistId, roundPlan, listing, (from) =>
+        staleChunkFiles(from, keep, superseded, Date.now())
+      );
+    } catch (error) {
+      // Some of its chunks may have landed; no manifest will name them.
+      const abandoned = abandonedGenerations.get(gistId) ?? new Set();
+      abandoned.add(roundGeneration);
+      abandonedGenerations.set(gistId, abandoned);
+      throw error;
+    }
     if (!result) return null;
+    if (round === 0) abandonedGenerations.delete(gistId);
     written = result;
     requests += result.requests;
     result.ownVersions.forEach((version) => ownVersions.add(version));
-    knownGenerations.add(generation);
+    knownGenerations.add(roundGeneration);
     basesByGeneration.set(
-      generation,
-      toCacheBase({ version: null, generation }, toWrite)
+      roundGeneration,
+      toCacheBase({ version: null, generation: roundGeneration }, toWrite)
     );
 
-    if (round === MAX_REPAIR_ROUNDS || !since) break;
-    const interleaved = await findInterleavedWrite({
+    if (!since) break;
+    const check = await findInterleavedWrite({
       gistId,
       since,
       result,
@@ -1269,30 +1573,47 @@ const writeCacheTo = async (
       knownGenerations,
       probed,
     });
-    if (!interleaved) break;
+    outcome = check.kind;
+    if (check.kind !== 'found') break;
+    if (round === MAX_REPAIR_ROUNDS) break;
 
     // Another writer's cache landed in between and this write replaced it:
     // merge it in (against what it was based on, when that is known) and
-    // write again.
-    knownGenerations.add(interleaved.generation);
-    const interleavedBase = interleaved.parent
-      ? (basesByGeneration.get(interleaved.parent) ?? null)
+    // write again. Its chunks and this round's are replaced by the next.
+    knownGenerations.add(check.generation);
+    superseded.add(check.generation);
+    superseded.add(roundGeneration);
+    const interleavedBase = check.parent
+      ? (basesByGeneration.get(check.parent) ?? null)
       : null;
-    toWrite = mergeCacheData(interleavedBase, interleaved.data, toWrite);
+    toWrite = mergeCacheData(interleavedBase, check.data, toWrite);
     merged = true;
-    parent = generation;
-    existingFiles = result.gist.files.map((file) => file.name);
+    parent = roundGeneration;
+    listing = result.files;
+  }
+
+  if (outcome !== 'none') {
+    // The last write isn't known to be the last one: another writer's cache
+    // is still being replaced (its device merges this one back in on its
+    // next write), or the revisions couldn't be checked.
+    if (outcome === 'found') {
+      warn?.(
+        'Your cache was saved while another device or tab kept saving it too. Changes made there may not show here until it saves again.'
+      );
+    }
+    const exists = await ensureReadableManifest(gistId, plan, generation, warn);
+    if (!exists) return null;
   }
 
   cacheBases.set(
     gistId,
     toCacheBase(
-      { version: written.gist.revision?.version ?? null, generation },
+      { version: written!.gist.revision?.version ?? null, generation },
       toWrite
     )
   );
   if (merged) onMerged?.(toWrite);
-  return written.gist;
+  return written!.gist;
 };
 
 const deleteGist = (gistId: string) =>

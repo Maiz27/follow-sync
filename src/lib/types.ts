@@ -67,6 +67,11 @@ export interface CacheGist {
    * this session read it.
    */
   revision?: GistRevision | null;
+  /**
+   * The gist has more files than GitHub lists in one response (300), so
+   * `files` is only part of them.
+   */
+  filesTruncated?: boolean;
   files: CacheGistFile[];
 }
 
