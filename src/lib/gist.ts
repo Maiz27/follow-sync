@@ -82,8 +82,17 @@ type WriteCacheOptions = {
    * Called with the merged cache when the gist had changed elsewhere and the
    * write merged those changes in (see writeCacheTo), so the caller can show
    * them.
+   *
+   * The write records what it wrote as this session's base for the next
+   * write, which is only right if the caller's state (the stores) now holds
+   * it too: the next write takes anything the base has and the state lacks
+   * for a removal made here. So the caller loads the merged cache and
+   * returns true, or returns false when it can't (its state belongs to
+   * someone else now); without an `onMerged` that adopts it, the write
+   * records no base, and the next one merges without one (keeping
+   * everything).
    */
-  onMerged?: (merged: CachedData) => void;
+  onMerged?: (merged: CachedData) => boolean;
   /**
    * Called when the write went through but left something the user should
    * know about (e.g. it replaced a cache that couldn't be read).
@@ -1407,7 +1416,7 @@ const writeCacheTo = async (
   gistId: string | null,
   data: CachedData,
   description: string,
-  onMerged?: (merged: CachedData) => void,
+  onMerged?: (merged: CachedData) => boolean,
   known?: CacheGist | null,
   warn?: (message: string) => void
 ): Promise<CacheGist | null> => {
@@ -1605,14 +1614,19 @@ const writeCacheTo = async (
     if (!exists) return null;
   }
 
-  cacheBases.set(
-    gistId,
-    toCacheBase(
-      { version: written!.gist.revision?.version ?? null, generation },
-      toWrite
-    )
-  );
-  if (merged) onMerged?.(toWrite);
+  // The base must be what the caller's state holds (see onMerged).
+  const adopted = !merged || onMerged?.(toWrite) === true;
+  if (adopted) {
+    cacheBases.set(
+      gistId,
+      toCacheBase(
+        { version: written!.gist.revision?.version ?? null, generation },
+        toWrite
+      )
+    );
+  } else {
+    cacheBases.delete(gistId);
+  }
   return written!.gist;
 };
 

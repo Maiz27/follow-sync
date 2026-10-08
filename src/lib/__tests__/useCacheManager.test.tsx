@@ -218,8 +218,55 @@ describe('useCacheManager: renamed accounts', () => {
       expect.objectContaining({
         metadata: expect.objectContaining({ ownerLogin: 'newname' }),
       }),
-      'G1'
+      'G1',
+      expect.objectContaining({ onMerged: expect.any(Function) })
     );
+  });
+
+  it('serves what the migration write merged, so the stores match the base it recorded', async () => {
+    const data = cacheData('oldname', { ignoredLogins: ['mine'] });
+    mocks.findCanonicalCacheGist.mockResolvedValue(
+      discovery(gistFor(data, 'newname'), 'newname')
+    );
+    // The gist changed since discovery read it: another device ignored
+    // "theirs", and the migration write merged that in.
+    let adopted: boolean | undefined;
+    mocks.writeCache.mockImplementationOnce(
+      async (
+        written: CachedData,
+        _gistId: string,
+        options?: { onMerged?: (merged: CachedData) => boolean }
+      ) => {
+        adopted = options?.onMerged?.({
+          ...written,
+          ignoredLogins: ['mine', 'theirs'],
+        });
+        return { id: 'G1', name: 'G1', files: [] };
+      }
+    );
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(
+        client,
+        'newname',
+        progress()
+      );
+    });
+
+    expect(adopted).toBe(true);
+    expect([...useIgnoreStore.getState().ignoredLogins].sort()).toEqual([
+      'mine',
+      'theirs',
+    ]);
+    // The next write carries it too, instead of dropping it as a removal.
+    await act(async () => {
+      await result.current.persistChanges();
+    });
+    expect([...(lastWrite().ignoredLogins ?? [])].sort()).toEqual([
+      'mine',
+      'theirs',
+    ]);
   });
 });
 

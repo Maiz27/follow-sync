@@ -262,6 +262,12 @@ export const useCacheManager = () => {
               );
             }
 
+            // What the stores are loaded with: the cache as read, or what the
+            // migration write merged it into when the gist had changed since
+            // (that write records the merged cache as the base, so the stores
+            // must hold it too, or the next write would take the other
+            // device's changes for removals made here).
+            let served = normalizedCachedData;
             if (
               !policy.isOutdatedVersion &&
               shouldMigrateCanonicalCache(
@@ -274,7 +280,16 @@ export const useCacheManager = () => {
                 const migratedGist = await enqueuePersist(() => {
                   // Superseded while queued: leave the gist to the newer sync.
                   signal.throwIfAborted();
-                  return writeCache(normalizedCachedData, canonicalGist.id);
+                  return writeCache(normalizedCachedData, canonicalGist.id, {
+                    onMerged: (merged) => {
+                      if (signal.aborted || !policy.shouldHydrate) {
+                        return false;
+                      }
+                      served = merged;
+                      return true;
+                    },
+                    onWarning: (message) => toast.warning(message),
+                  });
                 });
                 signal.throwIfAborted();
                 activeGistName = migratedGist.id;
@@ -289,18 +304,18 @@ export const useCacheManager = () => {
 
             // Only serve the cache when it matches the current schema.
             if (policy.shouldHydrate) {
-              loadFromCache(normalizedCachedData);
+              loadFromCache(served);
 
               if (policy.decision === 'serve-fresh') {
                 toast.info('Loaded fresh data from cache.');
-                return normalizedCachedData.network;
+                return served.network;
               }
 
               if (policy.decision === 'serve-manual') {
                 toast.info(
                   'Data loaded from cache. Refresh manually for the latest update.'
                 );
-                return normalizedCachedData.network;
+                return served.network;
               }
             }
           }
@@ -456,8 +471,12 @@ export const useCacheManager = () => {
                 discoverCanonicalFallback: isForced || !gistId,
                 // The gist changed elsewhere since it was read: show the
                 // merged result.
+                // The stores now belong to a newer sync: not adopted, so the
+                // write records no base (see writeCache's onMerged).
                 onMerged: (merged) => {
-                  if (!signal.aborted) loadFromCache(merged);
+                  if (signal.aborted) return false;
+                  loadFromCache(merged);
+                  return true;
                 },
                 onWarning: (message) => toast.warning(message),
               }
@@ -547,9 +566,10 @@ export const useCacheManager = () => {
         // Another device or tab wrote the gist since: show what was merged.
         onMerged: (merged) => {
           written = merged;
-          if (useGistStore.getState().ownerLogin === accountLogin) {
-            loadFromCache(merged);
-          }
+          // The account changed: its stores don't hold this cache.
+          if (useGistStore.getState().ownerLogin !== accountLogin) return false;
+          loadFromCache(merged);
+          return true;
         },
         onWarning: (message) => toast.warning(message),
       });

@@ -1618,3 +1618,61 @@ describe('revision order', () => {
     ).toEqual(['mine', 'old', 'theirs']);
   });
 });
+
+describe('the base a write records', () => {
+  const ignoredOf = async (gistId: string) =>
+    [...((await readBack(gistId))?.ignoredLogins ?? [])].sort();
+
+  /** This session reads the cache (as loading it into the stores does). */
+  const readAsBase = async (gistId: string) => {
+    const { canonicalGist } = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+      preferredGistId: gistId,
+    });
+    rememberCacheBase(canonicalGist!, parseCache(canonicalGist!)!);
+  };
+
+  it.each([
+    ['without onMerged', undefined],
+    ['when the caller does not adopt the merge', () => false],
+  ])(
+    'keeps a merged-in change the caller never loaded (%s)',
+    async (_label, onMerged) => {
+      const github = fakeGitHub();
+      const gist = await writeCache({ ...cache(20), ignoredLogins: [] }, null);
+      forgetCacheBases();
+      await readAsBase(gist.id);
+      github.writeElsewhere(gist.id, { ...cache(20), ignoredLogins: ['x'] });
+
+      // This write merges "x" in, but the caller's state still lacks it...
+      await writeCache({ ...cache(20), ignoredLogins: [] }, gist.id, {
+        onMerged,
+      });
+      expect(await ignoredOf(gist.id)).toEqual(['x']);
+
+      // ...so the next write from that state must not drop it as a removal.
+      await writeCache(
+        { ...cache(20), ignoredLogins: [], timestamp: 9 },
+        gist.id
+      );
+      expect(await ignoredOf(gist.id)).toEqual(['x']);
+    }
+  );
+
+  it('treats a missing entry as a removal once the caller adopted the merge', async () => {
+    const github = fakeGitHub();
+    const gist = await writeCache({ ...cache(20), ignoredLogins: [] }, null);
+    github.writeElsewhere(gist.id, { ...cache(20), ignoredLogins: ['x'] });
+    await writeCache({ ...cache(20), ignoredLogins: [] }, gist.id, {
+      onMerged: () => true,
+    });
+
+    // The user un-ignores "x" here.
+    await writeCache(
+      { ...cache(20), ignoredLogins: [], timestamp: 9 },
+      gist.id
+    );
+
+    expect(await ignoredOf(gist.id)).toEqual([]);
+  });
+});
