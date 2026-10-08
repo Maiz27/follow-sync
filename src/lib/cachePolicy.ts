@@ -58,20 +58,24 @@ export type CachePolicy = {
  */
 export const evaluateCachePolicy = ({
   metadata,
-  timestamp,
+  syncedAt,
   customStaleTime,
   currentCacheVersion,
   now,
 }: {
   metadata: CachedData['metadata'];
-  timestamp: number;
+  /**
+   * When the cached network was last fully synced from GitHub — not when the
+   * cache was last written (saving a follow or a setting doesn't refresh it).
+   */
+  syncedAt: number;
   customStaleTime: number | null;
   currentCacheVersion: string;
   now: number;
 }): CachePolicy => {
   const isOutdatedVersion = metadata.cacheVersion !== currentCacheVersion;
   const staleTime = getStaleTime(metadata.totalConnections, customStaleTime);
-  const isStale = now - timestamp > staleTime;
+  const isStale = now - syncedAt > staleTime;
   const shouldHydrate = !isOutdatedVersion;
 
   let decision: CachePolicyDecision = 'refetch';

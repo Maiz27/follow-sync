@@ -56,6 +56,8 @@ const snapshotStores = ({
     ignoredLogins: [...useIgnoreStore.getState().ignoredLogins],
     lastDiff: useGistStore.getState().lastDiff,
     timestamp,
+    // Carried over from the last full sync; writing doesn't refresh it.
+    syncedAt: useGistStore.getState().syncedAt ?? timestamp,
     metadata: {
       ...metadata,
       cacheVersion: GIST_CACHE_VERSION,
@@ -90,6 +92,7 @@ export const useCacheManager = () => {
       setRemovedGhostLogins(cachedData.removedGhosts ?? []);
       setGistData({
         timestamp: cachedData.timestamp,
+        syncedAt: cachedData.syncedAt ?? cachedData.timestamp,
         metadata: cachedData.metadata,
       });
       useIgnoreStore
@@ -174,7 +177,8 @@ export const useCacheManager = () => {
             // so the user gets the corrected data.
             const policy = evaluateCachePolicy({
               metadata: cachedData.metadata,
-              timestamp: cachedData.timestamp,
+              // Staleness is about the last full sync, not the last write.
+              syncedAt: cachedData.syncedAt ?? cachedData.timestamp,
               // The settings store isn't hydrated yet on first load (it only
               // lives in the cache), so the cached override wins.
               customStaleTime:
@@ -316,7 +320,7 @@ export const useCacheManager = () => {
         // "Changes since last sync": compare against the snapshot this session
         // already holds (the cache, plus any changes made in-app since), so
         // only changes made elsewhere — new/lost followers etc. — show up.
-        const previousTimestamp = useGistStore.getState().timestamp;
+        const previousTimestamp = useGistStore.getState().syncedAt;
         if (previousTimestamp !== null) {
           const diff = diffNetworks(
             useNetworkStore.getState().network,
@@ -345,7 +349,7 @@ export const useCacheManager = () => {
           ownerLogin: identityLogin,
           cacheKey: buildCacheKey(identityLogin),
         };
-        setGistData({ timestamp, metadata });
+        setGistData({ timestamp, syncedAt: timestamp, metadata });
         setDuplicateGistCount(duplicateCacheCount);
 
         try {

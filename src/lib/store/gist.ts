@@ -5,7 +5,10 @@ import { gistIdStorageKey } from '@/lib/constants';
 import { writeStorage } from '@/lib/storage';
 
 export type GistState = {
+  /** When the cache was last written. */
   timestamp: number | null;
+  /** When the network was last fully synced from GitHub. */
+  syncedAt: number | null;
   gistName: string | null;
   /**
    * Login the remembered gist id belongs to. The id is stored per account, so
@@ -34,6 +37,8 @@ export type GistActions = {
   setLastDiff: (diff: NetworkDiff | null) => void;
   setGistData: (data: {
     timestamp: number;
+    /** Omit to keep the current sync time (a plain write). */
+    syncedAt?: number;
     metadata: CachedData['metadata'];
   }) => void;
 };
@@ -42,6 +47,7 @@ export type GistStore = GistState & GistActions;
 
 const initialState: GistState = {
   timestamp: null,
+  syncedAt: null,
   gistName: null,
   ownerLogin: null,
   viewerLogin: null,
@@ -79,7 +85,11 @@ export const useGistStore = create<GistStore>((set, get) => ({
   setLastDiff: (lastDiff) => {
     set({ lastDiff });
   },
-  setGistData: (data) => {
-    set(data);
+  setGistData: ({ timestamp, syncedAt, metadata }) => {
+    set(
+      syncedAt === undefined
+        ? { timestamp, metadata }
+        : { timestamp, syncedAt, metadata }
+    );
   },
 }));

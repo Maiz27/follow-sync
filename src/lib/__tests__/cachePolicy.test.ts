@@ -55,7 +55,7 @@ describe('evaluateCachePolicy', () => {
     const policy = evaluateCachePolicy({
       ...base,
       metadata: metadata({ totalConnections: 100 }),
-      timestamp: base.now - 1000, // 1s old, well within the 15m small window
+      syncedAt: base.now - 1000, // 1s old, well within the 15m small window
     });
     expect(policy).toMatchObject({
       isOutdatedVersion: false,
@@ -69,21 +69,21 @@ describe('evaluateCachePolicy', () => {
     const policy = evaluateCachePolicy({
       ...base,
       metadata: metadata({ totalConnections: 100 }),
-      timestamp: base.now - (STALE_TIME_SMALL + 1),
+      syncedAt: base.now - (STALE_TIME_SMALL + 1),
     });
     expect(policy.isStale).toBe(true);
     expect(policy.decision).toBe('refetch');
   });
 
   it('keeps serving a huge-network cache (infinite window never goes stale)', () => {
-    // MANUAL_ONLY is Infinity, so `now - timestamp > Infinity` is always false:
+    // MANUAL_ONLY is Infinity, so `now - syncedAt > Infinity` is always false:
     // the cache is never stale and is served as-is, no auto-refetch. This is the
     // faithful behavior of the original inline logic (the "refresh manually"
     // branch it carried is unreachable with these constants).
     const policy = evaluateCachePolicy({
       ...base,
       metadata: metadata({ totalConnections: 60000 }),
-      timestamp: 0, // ancient, but the window is Infinity
+      syncedAt: 0, // ancient, but the window is Infinity
     });
     expect(policy.staleTime).toBe(STALE_TIME_MANUAL_ONLY);
     expect(policy.isStale).toBe(false);
@@ -94,7 +94,7 @@ describe('evaluateCachePolicy', () => {
     const policy = evaluateCachePolicy({
       ...base,
       metadata: metadata({ cacheVersion: '2.0', totalConnections: 100 }),
-      timestamp: base.now, // fresh by time, but schema is stale
+      syncedAt: base.now, // fresh by time, but schema is stale
     });
     expect(policy.isOutdatedVersion).toBe(true);
     expect(policy.shouldHydrate).toBe(false);

@@ -40,7 +40,7 @@ const Analyzer = ({
   nonMutualsFollowingYou,
 }: AnalyzerProps) => {
   const ghosts = useGhostStore((state) => state.ghosts);
-  const timestamp = useGistStore((state) => state.timestamp);
+  const syncedAt = useGistStore((state) => state.syncedAt);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -107,7 +107,7 @@ const Analyzer = ({
 
         <div className='mb-2 flex flex-col justify-between md:flex-row md:items-center'>
           <span className='flex items-center gap-2'>
-            <IoSync /> Last synced: {timestamp ? timeAgo(timestamp) : 'Never'}
+            <IoSync /> Last synced: {syncedAt ? timeAgo(syncedAt) : 'Never'}
           </span>
           <Button size='sm' onClick={() => refetch()} disabled={isFetching}>
             <IoSync className={isFetching ? 'animate-spin' : ''} />

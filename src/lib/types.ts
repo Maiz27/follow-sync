@@ -74,7 +74,14 @@ export interface CachedData {
   ignoredLogins?: string[];
   /** Changes found by the most recent sync that had something to compare. */
   lastDiff?: NetworkDiff | null;
+  /** When the cache was last written (any change: follows, settings...). */
   timestamp: number;
+  /**
+   * When the network was last fully synced from GitHub. Drives staleness and
+   * "Last synced". Absent in caches written before it existed, which fall
+   * back to `timestamp`.
+   */
+  syncedAt?: number;
   metadata: {
     totalConnections: number;
     fetchDuration: number;

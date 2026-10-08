@@ -126,6 +126,7 @@ beforeEach(() => {
   mocks.session.login = 'octocat';
   useGistStore.setState({
     timestamp: null,
+    syncedAt: null,
     gistName: null,
     ownerLogin: null,
     viewerLogin: null,
@@ -202,5 +203,87 @@ describe('useCacheManager: renamed accounts', () => {
       }),
       'G1'
     );
+  });
+});
+
+describe('useCacheManager: sync time vs write time', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it('does not mark a stale cache as freshly synced when saving during a failed refresh', async () => {
+    const syncedLongAgo = Date.now() - DAY;
+    const stale = cacheData('octocat', { timestamp: syncedLongAgo });
+    mocks.findCanonicalCacheGist.mockResolvedValue(
+      discovery(gistFor(stale, 'octocat'))
+    );
+    mocks.fetchAndClassifyNetwork.mockRejectedValue(new Error('offline'));
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      await expect(
+        result.current.initializeAndFetchNetwork(client, 'octocat', progress())
+      ).rejects.toThrow('offline');
+    });
+    // The stale cache is shown while the refresh runs...
+    expect(useGistStore.getState().syncedAt).toBe(syncedLongAgo);
+
+    // ...and a follow/ignore/settings save meanwhile is just a write.
+    await act(async () => {
+      await result.current.persistChanges();
+    });
+    const written = lastWrite();
+    expect(written.timestamp).toBeGreaterThan(syncedLongAgo);
+    expect(written.syncedAt).toBe(syncedLongAgo);
+    expect(useGistStore.getState().syncedAt).toBe(syncedLongAgo);
+
+    // Loading that write again still counts as stale and syncs.
+    mocks.findCanonicalCacheGist.mockResolvedValue(
+      discovery(gistFor(written, 'octocat'))
+    );
+    mocks.fetchAndClassifyNetwork.mockResolvedValue(fetched());
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(
+        client,
+        'octocat',
+        progress()
+      );
+    });
+    expect(mocks.fetchAndClassifyNetwork).toHaveBeenCalledTimes(2);
+  });
+
+  it('records the sync time only when a full sync completes', async () => {
+    mocks.findCanonicalCacheGist.mockResolvedValue(discovery(null));
+    mocks.fetchAndClassifyNetwork.mockResolvedValue(fetched());
+    const { result } = renderHook(() => useCacheManager());
+    const before = Date.now();
+
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(
+        client,
+        'octocat',
+        progress()
+      );
+    });
+
+    expect(useGistStore.getState().syncedAt).toBeGreaterThanOrEqual(before);
+    expect(lastWrite().syncedAt).toBe(useGistStore.getState().syncedAt);
+  });
+
+  it('falls back to the write timestamp for caches written before syncedAt', async () => {
+    const fresh = cacheData('octocat', { timestamp: Date.now() - 1000 });
+    mocks.findCanonicalCacheGist.mockResolvedValue(
+      discovery(gistFor(fresh, 'octocat'))
+    );
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(
+        client,
+        'octocat',
+        progress()
+      );
+    });
+
+    expect(mocks.fetchAndClassifyNetwork).not.toHaveBeenCalled();
+    expect(useGistStore.getState().syncedAt).toBe(fresh.timestamp);
   });
 });
