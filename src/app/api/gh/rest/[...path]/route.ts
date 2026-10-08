@@ -7,23 +7,45 @@ const GITHUB_REST_URL = 'https://api.github.com';
 const GITHUB_API_VERSION = '2022-11-28';
 const UPSTREAM_TIMEOUT_MS = 30_000;
 
+// Gist ids are hex (very old ones are decimal). Requiring that keeps the
+// sibling collection routes (`gists/public`, `gists/starred`) out.
+const GIST_ID = /^[0-9a-f]{1,64}$/i;
+// GitHub logins: letters, digits and hyphens (a few legacy ones differ, so
+// this is deliberately loose — it only has to be a single path segment).
+const LOGIN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
+
+type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+type Rule = { pattern: Array<string | RegExp>; methods: Method[] };
+
 /**
- * Only the REST endpoints this app actually needs are proxied — this is NOT an
- * open proxy to the GitHub API. Adding a path here is a deliberate decision.
+ * Only the REST endpoints (and methods) this app actually calls are proxied —
+ * this is NOT an open proxy to the GitHub API. Adding one here is a deliberate
+ * decision; see `src/lib/gist.ts` and `src/lib/gql/fetchers.ts`.
  */
-const isAllowedPath = (segments: string[]) => {
-  if (segments[0] === 'gists') return true; // gists, gists/{id}
-  if (
-    segments[0] === 'user' &&
-    (segments[1] === 'following' || segments[1] === 'followers')
-  ) {
-    return true; // user/following[/{login}], user/followers
-  }
-  return false;
-};
+const ALLOWED: Rule[] = [
+  // List the account's gists (cache discovery) / create the cache gist.
+  { pattern: ['gists'], methods: ['GET', 'POST'] },
+  // Read, write and delete (duplicate cleanup) a cache gist.
+  { pattern: ['gists', GIST_ID], methods: ['GET', 'PATCH', 'DELETE'] },
+  // REST follow lists (organizations and ghost detection).
+  { pattern: ['user', 'following'], methods: ['GET'] },
+  { pattern: ['user', 'followers'], methods: ['GET'] },
+  // Ghost removal, and confirming one that 404'd.
+  { pattern: ['user', 'following', LOGIN], methods: ['GET', 'DELETE'] },
+];
+
+const isAllowedRequest = (segments: string[], method: string) =>
+  ALLOWED.some(
+    (rule) =>
+      rule.methods.includes(method as Method) &&
+      rule.pattern.length === segments.length &&
+      rule.pattern.every((part, i) =>
+        typeof part === 'string' ? part === segments[i] : part.test(segments[i])
+      )
+  );
 
 const proxy = async (req: NextRequest, segments: string[], method: string) => {
-  if (!isAllowedPath(segments) || !isSameOriginRequest(req)) {
+  if (!isAllowedRequest(segments, method) || !isSameOriginRequest(req)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
