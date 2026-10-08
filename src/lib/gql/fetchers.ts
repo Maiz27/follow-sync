@@ -266,6 +266,20 @@ export const removeFollowingByLogin = ({
     method: 'DELETE',
   });
 
+/**
+ * Whether the signed-in user follows `login`, via REST
+ * `GET /user/following/{login}`: 204 means following, 404 means not. Used to
+ * confirm a ghost removal that 404'd (deleted/suspended accounts do).
+ */
+export const isFollowingLogin = ({
+  login,
+}: {
+  login: string;
+}): Promise<boolean> =>
+  ghRestOk(`${REST_FOLLOWING_PATH}/${encodeURIComponent(login)}`, {
+    method: 'GET',
+  });
+
 export const followUser = async ({
   client,
   userId,

@@ -11,6 +11,7 @@ vi.mock('@/lib/ghRest', () => restMocks);
 import {
   fetchAllUserFollowersAndFollowing,
   fetchRestFollowing,
+  isFollowingLogin,
 } from '@/lib/gql/fetchers';
 import type { GetUserFollowersAndFollowingQuery } from '@/lib/gql/types';
 
@@ -115,5 +116,19 @@ describe('paginated follow fetchers', () => {
     await rejection;
 
     expect(restMocks.ghRest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('isFollowingLogin', () => {
+  it('checks GET /user/following/{login} (204 following, 404 not)', async () => {
+    restMocks.ghRestOk.mockResolvedValueOnce(true);
+    await expect(isFollowingLogin({ login: 'a b' })).resolves.toBe(true);
+    expect(restMocks.ghRestOk).toHaveBeenCalledWith(
+      '/user/following/a%20b',
+      expect.objectContaining({ method: 'GET' })
+    );
+
+    restMocks.ghRestOk.mockResolvedValueOnce(false);
+    await expect(isFollowingLogin({ login: 'gone' })).resolves.toBe(false);
   });
 });

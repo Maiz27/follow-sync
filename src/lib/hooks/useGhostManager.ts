@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 
 import { useGhostStore } from '@/lib/store/ghost';
-import { removeFollowingByLogin } from '@/lib/gql/fetchers';
+import { isFollowingLogin, removeFollowingByLogin } from '@/lib/gql/fetchers';
 import { NetworkUser } from '@/lib/types';
 import { toUserMessage } from '@/lib/errors';
 import { useCacheManager } from './useCacheManager';
@@ -34,11 +34,12 @@ export const useGhostManager = () => {
     const rollback = optimisticRemoveGhost(user.login);
     try {
       const removed = await removeFollowingByLogin({ login: user.login });
-      if (!removed) {
-        // 404: GitHub couldn't resolve the account, so the follow wasn't
-        // removed. Treat it as a failure instead of silently hiding the ghost.
+      // 404 is what deleted/suspended accounts — most ghosts — return. Ask
+      // GitHub whether the follow still exists: if not, the ghost is gone and
+      // stays hidden (tombstoned); if it does, or the check fails, report it.
+      if (!removed && (await isFollowingLogin({ login: user.login }))) {
         throw new Error(
-          `GitHub could not find @${user.login} (404); the ghost was not removed.`
+          `GitHub could not remove @${user.login} (404); you still follow it.`
         );
       }
     } catch (error) {
