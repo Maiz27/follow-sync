@@ -757,3 +757,50 @@ describe('useCacheManager: superseded loads', () => {
     expect(lastWrite().metadata.ownerLogin).toBe('bob');
   });
 });
+
+describe('useCacheManager: plain writes', () => {
+  it('looks for an existing cache gist before creating one when no gist id is known', async () => {
+    // The sync's own cache write failed, so no gist id is known yet.
+    mocks.findCanonicalCacheGist.mockResolvedValue(discovery(null));
+    mocks.fetchAndClassifyNetwork.mockResolvedValue(fetched());
+    mocks.writeCache.mockRejectedValueOnce(new Error('gist API down'));
+    const { result } = renderHook(() => useCacheManager());
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(
+        client,
+        'octocat',
+        progress()
+      );
+    });
+    expect(useGistStore.getState().gistName).toBeNull();
+
+    await act(async () => {
+      await result.current.persistChanges();
+    });
+
+    expect(mocks.writeCache).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ ownerLogin: 'octocat' }),
+      }),
+      null,
+      { discoverCanonicalFallback: true }
+    );
+  });
+
+  it('updates the known gist directly', async () => {
+    useGistStore.setState({
+      ownerLogin: 'octocat',
+      gistName: 'G1',
+      metadata: cacheData('octocat').metadata,
+    });
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      await result.current.persistChanges();
+    });
+
+    expect(mocks.writeCache).toHaveBeenLastCalledWith(expect.anything(), 'G1', {
+      discoverCanonicalFallback: false,
+    });
+  });
+});

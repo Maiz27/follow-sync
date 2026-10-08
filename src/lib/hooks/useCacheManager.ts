@@ -501,7 +501,11 @@ export const useCacheManager = () => {
 
       // Only commit the timestamp/metadata to the store after the write
       // succeeds, so a failed write doesn't show a misleading "last synced".
-      const updatedGist = await writeCache(dataToCache, gistName);
+      // Without a known gist id (e.g. the sync's own write failed), look for
+      // the account's existing cache before creating a new gist.
+      const updatedGist = await writeCache(dataToCache, gistName, {
+        discoverCanonicalFallback: !gistName,
+      });
       setGistName(updatedGist.id, accountLogin);
       // The account changed during the write: its stores were reset and
       // aren't described by this write.
