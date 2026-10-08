@@ -4,7 +4,8 @@ import React from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { AvatarFallback, Avatar, AvatarImage } from '../ui/avatar';
-import { SignOutButton } from '../auth/buttons';
+import { Button } from '../ui/button';
+import { signOutAndReset } from '../auth/buttons';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
-import { LuLayoutDashboard } from 'react-icons/lu';
+import { LuLayoutDashboard, LuLogOut } from 'react-icons/lu';
 
 const UserDropDown = () => {
   const { data: session } = useSession();
@@ -22,23 +23,32 @@ const UserDropDown = () => {
   }
 
   const { user } = session;
+  const displayName = user.name || user.login || 'Your account';
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Avatar className='cursor-pointer'>
-          <AvatarImage
-            width={24}
-            height={24}
-            loading='lazy'
-            src={user.image!}
-            alt={user.name!}
-            title={user.name!}
-          />
-          <AvatarFallback>{(user.name || user.login)?.[0]}</AvatarFallback>
-        </Avatar>
+        {/* A real button so the menu is reachable and operable by keyboard. */}
+        <Button
+          variant='ghost'
+          size='icon'
+          aria-label='Account menu'
+          className='rounded-full'
+        >
+          <Avatar>
+            <AvatarImage
+              width={24}
+              height={24}
+              loading='lazy'
+              src={user.image ?? undefined}
+              alt=''
+              title={displayName}
+            />
+            <AvatarFallback>{displayName[0]}</AvatarFallback>
+          </Avatar>
+        </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className='mr-4' align='start'>
+      <DropdownMenuContent className='mr-4' align='end'>
         <div className='grid px-2 py-1.5'>
           <span className='font-semibold'>{user.name}</span>
           <span className='text-xs text-muted-foreground'>@{user.login}</span>
@@ -46,11 +56,10 @@ const UserDropDown = () => {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem>
-          <Link
-            href='/dashboard'
-            className='flex h-full w-full items-center gap-2'
-          >
+        {/* asChild makes the Link itself the menu item, so Enter/Space and
+            clicks anywhere on the row navigate. */}
+        <DropdownMenuItem asChild className='px-2 py-1.5'>
+          <Link href='/dashboard'>
             <LuLayoutDashboard />
             Dashboard
           </Link>
@@ -58,8 +67,13 @@ const UserDropDown = () => {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem>
-          <SignOutButton>Sign out</SignOutButton>
+        <DropdownMenuItem
+          variant='destructive'
+          className='px-2 py-1.5'
+          onSelect={() => signOutAndReset()}
+        >
+          <LuLogOut />
+          Sign out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

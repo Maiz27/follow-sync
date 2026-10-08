@@ -1,3 +1,4 @@
+import { auth } from '@/app/auth';
 import GetStarted from '@/components/auth/getStarted';
 import Stats from '@/components/dashboard/stats';
 import { Heading } from '@/components/utils/heading';
@@ -6,6 +7,7 @@ import { SubText } from '@/components/utils/subText';
 import { STATS_DATA } from '@/lib/constants';
 
 export default async function Home() {
+  const session = await auth();
   const dummyStats = [
     { ...STATS_DATA[0], value: 1234 },
     { ...STATS_DATA[1], value: 567 },
@@ -25,7 +27,7 @@ export default async function Home() {
           you're always in sync with your professional network.`}
         </SubText>
 
-        <GetStarted />
+        <GetStarted session={session} />
       </Section>
       <Section className='py-10'>
         <Stats list={dummyStats} />
