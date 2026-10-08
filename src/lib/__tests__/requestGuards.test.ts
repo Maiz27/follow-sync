@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
@@ -37,5 +37,95 @@ describe('isSameOriginRequest', () => {
     expect(
       isSameOriginRequest(request({ 'sec-fetch-site': 'cross-site' }))
     ).toBe(false);
+  });
+
+  describe('behind a proxy', () => {
+    // The app sees an internal URL/Host; the public host arrives forwarded.
+    const proxied = (headers: Record<string, string>) =>
+      new NextRequest('http://localhost:3000/api/gh/graphql', {
+        method: 'POST',
+        headers: { host: 'localhost:3000', ...headers },
+      });
+
+    afterEach(() => vi.unstubAllEnvs());
+
+    it('trusts Sec-Fetch-Site: same-origin', () => {
+      expect(
+        isSameOriginRequest(
+          proxied({
+            origin: 'https://app.example',
+            'sec-fetch-site': 'same-origin',
+          })
+        )
+      ).toBe(true);
+    });
+
+    it('uses only the first value of a forwarded host list', () => {
+      expect(
+        isSameOriginRequest(
+          proxied({
+            origin: 'https://app.example',
+            'x-forwarded-host': 'app.example, internal-lb.local',
+          })
+        )
+      ).toBe(true);
+      expect(
+        isSameOriginRequest(
+          proxied({
+            origin: 'https://evil.example',
+            'x-forwarded-host': 'app.example, evil.example',
+          })
+        )
+      ).toBe(false);
+    });
+
+    it('ignores default ports when comparing hosts', () => {
+      expect(
+        isSameOriginRequest(
+          proxied({
+            origin: 'https://app.example',
+            'x-forwarded-host': 'app.example:443',
+          })
+        )
+      ).toBe(true);
+      expect(
+        isSameOriginRequest(
+          proxied({
+            origin: 'https://app.example:8443',
+            'x-forwarded-host': 'app.example',
+          })
+        )
+      ).toBe(false);
+    });
+
+    it('accepts the configured AUTH_URL origin', () => {
+      vi.stubEnv('AUTH_URL', 'https://app.example/api/auth');
+      expect(
+        isSameOriginRequest(proxied({ origin: 'https://app.example' }))
+      ).toBe(true);
+      expect(
+        isSameOriginRequest(proxied({ origin: 'https://evil.example' }))
+      ).toBe(false);
+    });
+
+    it('still rejects cross-site and same-site requests', () => {
+      expect(
+        isSameOriginRequest(
+          proxied({
+            origin: 'https://app.example',
+            'x-forwarded-host': 'app.example',
+            'sec-fetch-site': 'cross-site',
+          })
+        )
+      ).toBe(false);
+      expect(
+        isSameOriginRequest(
+          proxied({
+            origin: 'https://sub.app.example',
+            'sec-fetch-site': 'same-site',
+          })
+        )
+      ).toBe(false);
+    });
   });
 });
