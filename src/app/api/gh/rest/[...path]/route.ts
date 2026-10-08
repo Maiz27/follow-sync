@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGitHubToken } from '@/lib/server/githubToken';
 import { isSameOriginRequest } from '@/lib/server/requestGuards';
+import { buildProxyHeaders } from '@/lib/server/proxyHeaders';
 
 const GITHUB_REST_URL = 'https://api.github.com';
 const GITHUB_API_VERSION = '2022-11-28';
@@ -57,7 +58,7 @@ const proxy = async (req: NextRequest, segments: string[], method: string) => {
 
     return new NextResponse(data || null, {
       status: response.status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildProxyHeaders(response),
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {

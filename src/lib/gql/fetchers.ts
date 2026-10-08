@@ -14,6 +14,7 @@ import type {
 } from '@/lib/gql/types';
 import { GraphQLClient } from 'graphql-request';
 import { ghRest, ghRestOk } from '@/lib/ghRest';
+import { RateLimitError, withRetry } from '@/lib/rateLimit';
 
 /**
  * Defines the shape of the progress update object.
@@ -34,36 +35,6 @@ type GraphQLErrorLike = {
       message?: string;
     }>;
   };
-};
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Retries a transient-failing async task with exponential backoff. GitHub's
- * GraphQL endpoint occasionally returns 5xx/secondary-rate-limit errors during
- * long paginated syncs; a few bounded retries make large-network fetches far
- * more resilient than the previous fail-on-first-error behaviour.
- */
-const withRetry = async <T>(
-  task: () => Promise<T>,
-  {
-    retries = 3,
-    baseDelayMs = 500,
-  }: { retries?: number; baseDelayMs?: number } = {}
-): Promise<T> => {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await task();
-    } catch (error) {
-      lastError = error;
-      if (attempt === retries) break;
-      // Exponential backoff with jitter.
-      const delay = baseDelayMs * 2 ** attempt + Math.floor(attempt * 137);
-      await sleep(delay);
-    }
-  }
-  throw lastError;
 };
 
 const getErrorMessage = (error: unknown, fallbackMessage: string) => {
@@ -200,8 +171,10 @@ export const fetchAllUserFollowersAndFollowing = async ({
       }
     } catch (error: unknown) {
       console.error('Error fetching paginated follow data:', error);
+      if (error instanceof RateLimitError) throw error;
       throw new Error(
-        getErrorMessage(error, 'Failed to fetch paginated follow data.')
+        getErrorMessage(error, 'Failed to fetch paginated follow data.'),
+        { cause: error }
       );
     }
   }
@@ -308,7 +281,10 @@ export const followUser = async ({
     return response;
   } catch (error: unknown) {
     console.error('Error following user:', error);
-    throw new Error(getErrorMessage(error, 'Failed to follow user.'));
+    // Keep the original as `cause` so rate limits stay detectable upstream.
+    throw new Error(getErrorMessage(error, 'Failed to follow user.'), {
+      cause: error,
+    });
   }
 };
 
@@ -327,6 +303,8 @@ export const unfollowUser = async ({
     return response;
   } catch (error: unknown) {
     console.error('Error unfollowing user:', error);
-    throw new Error(getErrorMessage(error, 'Failed to unfollow user.'));
+    throw new Error(getErrorMessage(error, 'Failed to unfollow user.'), {
+      cause: error,
+    });
   }
 };

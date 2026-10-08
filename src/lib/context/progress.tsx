@@ -1,6 +1,12 @@
 'use client';
 
-import React, { createContext, useState, useContext, ReactNode } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useState,
+  useContext,
+  ReactNode,
+} from 'react';
 
 export interface ProgressItem {
   label: string;
@@ -18,6 +24,10 @@ interface ProgressState {
   message?: string;
   items: ProgressItem[];
   status: ProgressStatus;
+  /** Extra lines shown on failure, e.g. the logins that failed. */
+  details?: string[];
+  /** When set, the toast offers a Cancel action while running. */
+  onCancel?: () => void;
 }
 
 interface ProgressContextType {
@@ -26,10 +36,11 @@ interface ProgressContextType {
     title: string;
     message?: string;
     items: ProgressItem[];
+    onCancel?: () => void;
   }) => void;
-  update: (items: ProgressItem[]) => void;
-  complete: () => void;
-  fail: (options?: { message: string }) => void;
+  update: (items: ProgressItem[], message?: string) => void;
+  complete: (options?: { message?: string }) => void;
+  fail: (options?: { message: string; details?: string[] }) => void;
   hide: () => void; // Will be used internally by the indicator
 }
 
@@ -51,36 +62,56 @@ export const ProgressProvider = ({ children }: { children: ReactNode }) => {
     title,
     message,
     items,
+    onCancel,
   }: {
     title: string;
     message?: string;
     items: ProgressItem[];
+    onCancel?: () => void;
   }) => {
     const newToastId = Date.now();
-    setState({ toastId: newToastId, title, message, items, status: 'running' });
+    setState({
+      toastId: newToastId,
+      title,
+      message,
+      items,
+      status: 'running',
+      onCancel,
+    });
   };
 
-  // Updates the progress bars
-  const update = (items: ProgressItem[]) => {
-    setState((prevState) => ({ ...prevState, items }));
+  // Updates the progress bars (and optionally the status line)
+  const update = (items: ProgressItem[], message?: string) => {
+    setState((prevState) => ({
+      ...prevState,
+      items,
+      message: message ?? prevState.message,
+    }));
   };
 
   // Marks the operation as successfully completed
-  const complete = () => {
-    setState((prevState) => ({ ...prevState, status: 'complete' }));
+  const complete = (options?: { message?: string }) => {
+    setState((prevState) => ({
+      ...prevState,
+      status: 'complete',
+      message: options?.message,
+      onCancel: undefined,
+    }));
   };
 
-  // Marks the operation as failed
-  const fail = (options?: { message: string }) => {
+  // Marks the operation as failed. Failures stay on screen until dismissed.
+  const fail = (options?: { message: string; details?: string[] }) => {
     setState((prevState) => ({
       ...prevState,
       status: 'error',
       message: options?.message || 'An unexpected error occurred.',
+      details: options?.details,
+      onCancel: undefined,
     }));
   };
 
   // Resets the context to its initial state
-  const hide = () => {
+  const hide = useCallback(() => {
     setState({
       toastId: null,
       title: '',
@@ -88,7 +119,7 @@ export const ProgressProvider = ({ children }: { children: ReactNode }) => {
       items: [],
       status: 'running',
     });
-  };
+  }, []);
 
   return (
     <ProgressContext.Provider

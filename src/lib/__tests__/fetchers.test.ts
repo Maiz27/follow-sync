@@ -63,7 +63,11 @@ describe('paginated follow fetchers', () => {
     const client = new GraphQLClient('https://example.test/graphql');
     const request = vi.spyOn(client, 'request');
     request.mockResolvedValueOnce(firstGraphqlPage);
-    request.mockRejectedValue(new Error('GraphQL page 2 failed'));
+    request.mockRejectedValue(
+      Object.assign(new Error('GraphQL page 2 failed'), {
+        response: { status: 502 },
+      })
+    );
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const fetchPromise = fetchAllUserFollowersAndFollowing({ client });
@@ -81,7 +85,9 @@ describe('paginated follow fetchers', () => {
     restMocks.ghRest.mockResolvedValueOnce(
       Array.from({ length: 100 }, (_, index) => makeRawRestUser(index))
     );
-    restMocks.ghRest.mockRejectedValue(new Error('REST page 2 failed'));
+    restMocks.ghRest.mockRejectedValue(
+      Object.assign(new Error('REST page 2 failed'), { status: 503 })
+    );
 
     const fetchPromise = fetchRestFollowing();
     const rejection =
@@ -95,5 +101,19 @@ describe('paginated follow fetchers', () => {
       2,
       '/user/following?per_page=100&page=2'
     );
+  });
+
+  it('does not retry client errors such as 404', async () => {
+    restMocks.ghRest.mockRejectedValue(
+      Object.assign(new Error('Not Found'), { status: 404 })
+    );
+
+    const fetchPromise = fetchRestFollowing();
+    const rejection = expect(fetchPromise).rejects.toThrow('Not Found');
+
+    await vi.runAllTimersAsync();
+    await rejection;
+
+    expect(restMocks.ghRest).toHaveBeenCalledTimes(1);
   });
 });

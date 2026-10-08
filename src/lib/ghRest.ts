@@ -1,4 +1,5 @@
-import { GH_REST_PROXY } from '@/lib/constants';
+import { GH_GIST_RAW_PROXY, GH_REST_PROXY } from '@/lib/constants';
+import { getRetryAfterMs } from '@/lib/rateLimit';
 
 /**
  * Thrown by the gateway for any non-2xx response that isn't a caller-tolerated
@@ -9,12 +10,23 @@ import { GH_REST_PROXY } from '@/lib/constants';
 export class GitHubRestError extends Error {
   readonly status: number;
   readonly body: unknown;
+  /** Wait GitHub asked for via `Retry-After` / `X-RateLimit-Reset`, if any. */
+  readonly retryAfterMs: number | null;
+  /** Primary (quota exhausted) or secondary rate limit. */
+  readonly isRateLimited: boolean;
 
-  constructor(status: number, body: unknown) {
+  constructor(status: number, body: unknown, headers?: Headers) {
     super(`GitHub request failed (${status}): ${JSON.stringify(body)}`);
     this.name = 'GitHubRestError';
     this.status = status;
     this.body = body;
+    this.retryAfterMs = getRetryAfterMs(headers);
+    this.isRateLimited =
+      status === 429 ||
+      (status === 403 &&
+        (headers?.get('x-ratelimit-remaining') === '0' ||
+          headers?.has('retry-after') === true ||
+          /rate.?limit/i.test(JSON.stringify(body ?? ''))));
   }
 }
 
@@ -48,7 +60,11 @@ export const ghRest = async <T>(
   }
 
   if (!response.ok) {
-    throw new GitHubRestError(response.status, await parseErrorBody(response));
+    throw new GitHubRestError(
+      response.status,
+      await parseErrorBody(response),
+      response.headers
+    );
   }
 
   return (await response.json()) as T;
@@ -68,8 +84,32 @@ export const ghRestOk = async (
   if (response.status === 404) return false;
 
   if (!response.ok) {
-    throw new GitHubRestError(response.status, await parseErrorBody(response));
+    throw new GitHubRestError(
+      response.status,
+      await parseErrorBody(response),
+      response.headers
+    );
   }
 
   return true;
+};
+
+/**
+ * Fetches the full text of a gist file from its `raw_url` (through the
+ * same-origin raw proxy). Used when the Gist API truncated a large file.
+ */
+export const ghGistRaw = async (rawUrl: string): Promise<string> => {
+  const response = await fetch(
+    `${GH_GIST_RAW_PROXY}?url=${encodeURIComponent(rawUrl)}`
+  );
+
+  if (!response.ok) {
+    throw new GitHubRestError(
+      response.status,
+      await response.text().catch(() => null),
+      response.headers
+    );
+  }
+
+  return response.text();
 };

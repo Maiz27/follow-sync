@@ -24,12 +24,11 @@ export const fetchAndClassifyNetwork = async ({
   client: GraphQLClient;
   onProgress?: (progress: FetchProgress) => void;
 }) => {
-  const networkData = await fetchAllUserFollowersAndFollowing({
-    client,
-    onProgress,
-  });
-
-  const [restFollowing, restFollowers] = await Promise.all([
+  // Fetch the GraphQL and REST lists concurrently: ghosts are inferred by
+  // diffing them, so the closer in time they're read, the fewer follows that
+  // changed in between get misclassified (and the faster the sync).
+  const [networkData, restFollowing, restFollowers] = await Promise.all([
+    fetchAllUserFollowersAndFollowing({ client, onProgress }),
     fetchRestFollowing(),
     fetchRestFollowers(),
   ]);

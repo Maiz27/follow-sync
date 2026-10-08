@@ -46,17 +46,39 @@ describe('fetchAndClassifyNetwork', () => {
     vi.clearAllMocks();
   });
 
-  it('propagates a GraphQL fetch rejection before starting REST fetches', async () => {
+  it('propagates a GraphQL fetch rejection', async () => {
     mocks.fetchGraphql.mockRejectedValue(
       new Error('GraphQL pagination failed')
     );
+    mocks.fetchRestFollowing.mockResolvedValue([]);
+    mocks.fetchRestFollowers.mockResolvedValue([]);
 
     await expect(fetchAndClassifyNetwork({ client })).rejects.toThrow(
       'GraphQL pagination failed'
     );
+  });
 
-    expect(mocks.fetchRestFollowing).not.toHaveBeenCalled();
-    expect(mocks.fetchRestFollowers).not.toHaveBeenCalled();
+  it('fetches the GraphQL and REST lists concurrently', async () => {
+    let resolveGraphql: (value: unknown) => void = () => undefined;
+    mocks.fetchGraphql.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGraphql = resolve;
+      })
+    );
+    mocks.fetchRestFollowing.mockResolvedValue([]);
+    mocks.fetchRestFollowers.mockResolvedValue([]);
+
+    const pending = fetchAndClassifyNetwork({ client });
+
+    // REST is already in flight while GraphQL is still paginating.
+    expect(mocks.fetchRestFollowing).toHaveBeenCalled();
+    expect(mocks.fetchRestFollowers).toHaveBeenCalled();
+
+    resolveGraphql({
+      followers: { nodes: [], totalCount: 0 },
+      following: { nodes: [], totalCount: 0 },
+    });
+    await expect(pending).resolves.toMatchObject({ followers: [] });
   });
 
   it('propagates a REST fetch rejection without returning classified data', async () => {

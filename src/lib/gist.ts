@@ -4,7 +4,8 @@ import {
   GIST_DESCRIPTION_PREFIX,
   GIST_FILENAME,
 } from './constants';
-import { ghRest, ghRestOk } from './ghRest';
+import { ghGistRaw, ghRest, ghRestOk } from './ghRest';
+import { decodeCache, encodeCache } from './cacheCodec';
 
 // Requests go through the same-origin proxy (via the ghRest gateway), which
 // injects the GitHub token and the standard Accept / API-version headers
@@ -24,12 +25,26 @@ type GitHubGistSummary = {
 };
 
 type GitHubGistDetail = GitHubGistSummary & {
-  files?: Record<string, { filename?: string | null; content?: string | null }>;
+  files?: Record<
+    string,
+    {
+      filename?: string | null;
+      content?: string | null;
+      /** Set when `content` was cut at GitHub's 1 MB inline limit. */
+      truncated?: boolean;
+      raw_url?: string | null;
+    }
+  >;
 };
 
 export type CacheDiscoveryResult = {
   canonicalGist: CacheGist | null;
   duplicateGists: CacheGist[];
+  /**
+   * False when the remembered gist was validated directly and the full gist
+   * listing was skipped — `duplicateGists` is then unknown, not empty.
+   */
+  scannedAll: boolean;
 };
 
 type WriteCacheOptions = {
@@ -47,7 +62,7 @@ const normalizeOwnerLogin = (ownerLogin: string) => ownerLogin.toLowerCase();
  * through `JSON.parse` on read. Stays compact — only the rare non-ASCII
  * character in a display name grows, not the ASCII-only logins/ids/urls.
  */
-export const serializeCache = (data: CachedData): string =>
+export const serializeCache = (data: unknown): string =>
   JSON.stringify(data).replace(/[\u007F-\uFFFF]/g, (char) => {
     return `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
   });
@@ -75,13 +90,26 @@ const toCacheGist = (gist: GitHubGistDetail): CacheGist => ({
   files: Object.values(gist.files ?? {}).map((file) => ({
     name: file.filename ?? '',
     text: file.content ?? null,
+    truncated: Boolean(file.truncated),
+    rawUrl: file.raw_url ?? null,
   })),
 });
 
 const fetchGistById = async (gistId: string) => {
   const gist = await ghRest<GitHubGistDetail>(`/gists/${gistId}`);
+  if (!gist) return null;
 
-  return gist ? toCacheGist(gist) : null;
+  const cacheGist = toCacheGist(gist);
+
+  // Files over 1 MB come back truncated; load the full cache from raw_url so
+  // large networks don't fail to parse and trigger a full sync on every load.
+  const cacheFile = cacheGist.files.find((file) => file.name === GIST_FILENAME);
+  if (cacheFile?.truncated && cacheFile.rawUrl) {
+    cacheFile.text = await ghGistRaw(cacheFile.rawUrl);
+    cacheFile.truncated = false;
+  }
+
+  return cacheGist;
 };
 
 const listAllGists = async () => {
@@ -225,21 +253,35 @@ export const getGistIdentifier = (
   return gist.id ?? gist.name ?? null;
 };
 
+// Parsing a multi-megabyte cache is expensive and scoring/sorting candidates
+// asks for it repeatedly; memoize per gist object (and file text).
+const parsedCacheMemo = new WeakMap<
+  CacheGist,
+  { text: string | null | undefined; data: CachedData | null }
+>();
+
 /**
- * Parses the content of a Gist object retrieved from the API.
+ * Parses the content of a Gist object retrieved from the API. Accepts both the
+ * compact format and caches written before it existed.
  */
 export const parseCache = (gist: CacheGist): CachedData | null => {
+  const file = gist.files.find((candidate) => candidate.name === GIST_FILENAME);
+  const content = file?.text;
+
+  const memo = parsedCacheMemo.get(gist);
+  if (memo && memo.text === content) return memo.data;
+
+  let data: CachedData | null = null;
   try {
-    const file = gist.files.find(
-      (candidate) => candidate.name === GIST_FILENAME
-    );
-    const content = file?.text;
-    if (!content) return null;
-    return JSON.parse(content) as CachedData;
+    if (content && !file?.truncated) {
+      data = decodeCache(JSON.parse(content));
+    }
   } catch (error) {
     console.error('Failed to parse cache content:', error);
-    return null;
   }
+
+  parsedCacheMemo.set(gist, { text: content, data });
+  return data;
 };
 
 export const normalizeCachedData = (
@@ -259,12 +301,27 @@ export const normalizeCachedData = (
   };
 };
 
+/**
+ * A remembered gist that is unambiguously this account's current cache: owned
+ * by the account, parseable, and tagged with the expected cache key.
+ */
+const isValidatedCanonical = (gist: CacheGist, ownerLogin: string) =>
+  isCacheGistOwnedBy(gist, ownerLogin) &&
+  parseCache(gist)?.metadata?.cacheKey === getExpectedCacheKey(ownerLogin);
+
 export const findCanonicalCacheGist = async ({
   ownerLogin,
   preferredGistId,
+  fullScan = false,
 }: {
   ownerLogin: string;
   preferredGistId?: string | null;
+  /**
+   * List every gist even when the remembered one validates — needed to find
+   * duplicates. Off by default: listing and downloading every candidate on
+   * each load is slow and burns rate limit for accounts with many gists.
+   */
+  fullScan?: boolean;
 }): Promise<CacheDiscoveryResult> => {
   const candidateMap = new Map<string, CacheGist>();
 
@@ -276,6 +333,13 @@ export const findCanonicalCacheGist = async ({
         (isCacheDescription(preferredGist.description) ||
           hasCacheFilename(preferredGist))
       ) {
+        if (!fullScan && isValidatedCanonical(preferredGist, ownerLogin)) {
+          return {
+            canonicalGist: preferredGist,
+            duplicateGists: [],
+            scannedAll: false,
+          };
+        }
         candidateMap.set(preferredGist.id, preferredGist);
       }
     } catch (error) {
@@ -316,7 +380,7 @@ export const findCanonicalCacheGist = async ({
   );
 
   if (validCandidates.length === 0) {
-    return { canonicalGist: null, duplicateGists: [] };
+    return { canonicalGist: null, duplicateGists: [], scannedAll: true };
   }
 
   const sortedCandidates = selectCanonicalCacheGist(
@@ -328,6 +392,7 @@ export const findCanonicalCacheGist = async ({
   return {
     canonicalGist,
     duplicateGists,
+    scannedAll: true,
   };
 };
 
@@ -373,6 +438,7 @@ export const cleanupDuplicateCacheGists = async ({
   const discoveryResult = await findCanonicalCacheGist({
     ownerLogin,
     preferredGistId,
+    fullScan: true,
   });
 
   if (!discoveryResult.canonicalGist) {
@@ -402,6 +468,7 @@ export const cleanupDuplicateCacheGists = async ({
   const refreshedResult = await findCanonicalCacheGist({
     ownerLogin,
     preferredGistId: discoveryResult.canonicalGist.id,
+    fullScan: true,
   });
 
   return {
@@ -437,7 +504,7 @@ export const writeCache = async (
         // ~35%, and large networks can approach GitHub's per-file gist limit.
         // ASCII-escaped so GitHub never flags the gist for bidirectional or
         // hidden Unicode coming from account display names. See serializeCache.
-        content: serializeCache(normalizedData),
+        content: serializeCache(encodeCache(normalizedData)),
       },
     },
     public: false,
@@ -459,6 +526,7 @@ export const writeCache = async (
     const discoveryResult = await findCanonicalCacheGist({
       ownerLogin: normalizedOwnerLogin,
       preferredGistId: gistId,
+      fullScan: true,
     });
 
     const canonicalGistId = discoveryResult.canonicalGist?.id;

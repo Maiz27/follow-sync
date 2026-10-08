@@ -32,6 +32,9 @@ export type NetworkUser = UserInfoFragment & {
 export interface CacheGistFile {
   name: string;
   text?: string | null;
+  /** The API cut `text` at its 1 MB inline limit; full content is at rawUrl. */
+  truncated?: boolean;
+  rawUrl?: string | null;
 }
 
 export interface CacheGist {

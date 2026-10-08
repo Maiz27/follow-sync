@@ -7,6 +7,7 @@ export const QUERY_KEY_USER_NETWORK = 'user-network';
 // access token is injected server-side so it never reaches client code.
 export const GH_GRAPHQL_PROXY = '/api/gh/graphql';
 export const GH_REST_PROXY = '/api/gh/rest';
+export const GH_GIST_RAW_PROXY = '/api/gh/gist-raw';
 
 // GitHub Gist
 export const GIST_DESCRIPTION_PREFIX = 'Follow Sync Cache';

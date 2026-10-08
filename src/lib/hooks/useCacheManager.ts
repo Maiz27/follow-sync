@@ -125,14 +125,23 @@ export const useCacheManager = () => {
         useGistStore.getState().setForceNextRefresh(false);
       }
 
-      if (!isForced) {
-        const { canonicalGist, duplicateGists } = await findCanonicalCacheGist({
-          ownerLogin: username,
-          preferredGistId: currentGistName,
-        });
+      /**
+       * Finds, validates and (when fresh enough) serves the cache gist.
+       * Returns the network when the cache was served as-is, or null when a
+       * sync should run.
+       */
+      const loadCachedNetwork = async () => {
+        const { canonicalGist, duplicateGists, scannedAll } =
+          await findCanonicalCacheGist({
+            ownerLogin: username,
+            preferredGistId: currentGistName,
+          });
 
-        duplicateCacheCount = duplicateGists.length;
-        setDuplicateGistCount(duplicateCacheCount);
+        // Without a full scan the duplicate count is unknown; keep the last one.
+        if (scannedAll) {
+          duplicateCacheCount = duplicateGists.length;
+          setDuplicateGistCount(duplicateCacheCount);
+        }
 
         if (canonicalGist) {
           const cachedData = parseCache(canonicalGist);
@@ -174,11 +183,17 @@ export const useCacheManager = () => {
                 username
               )
             ) {
-              const migratedGist = await enqueuePersist(() =>
-                writeCache(normalizedCachedData, canonicalGist.id)
-              );
-              activeGistName = migratedGist.id;
-              setGistName(activeGistName);
+              try {
+                const migratedGist = await enqueuePersist(() =>
+                  writeCache(normalizedCachedData, canonicalGist.id)
+                );
+                activeGistName = migratedGist.id;
+                setGistName(activeGistName);
+              } catch (error) {
+                // The cache is still usable as read; the migration is retried
+                // on the next write.
+                console.warn('Failed to migrate the cache gist.', error);
+              }
             }
 
             // Only serve the cache when it matches the current schema.
@@ -198,6 +213,21 @@ export const useCacheManager = () => {
               }
             }
           }
+        }
+        return null;
+      };
+
+      if (!isForced) {
+        try {
+          const served = await loadCachedNetwork();
+          if (served) return served;
+        } catch (error) {
+          // Discovery/migration problems must never block the dashboard: warn
+          // and fall through to a normal sync, which writes a fresh cache.
+          console.error('Failed to load the network cache gist:', error);
+          toast.warning(
+            "Couldn't load your cached network; syncing from GitHub instead."
+          );
         }
       }
 

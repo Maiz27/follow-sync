@@ -7,18 +7,21 @@ import { GIST_FILENAME } from '@/lib/constants';
 vi.mock('@/lib/ghRest', () => ({
   ghRest: vi.fn(),
   ghRestOk: vi.fn(),
+  ghGistRaw: vi.fn(),
   GitHubRestError: class extends Error {},
 }));
 
-import { ghRest } from '@/lib/ghRest';
+import { ghGistRaw, ghRest } from '@/lib/ghRest';
 import {
   findCanonicalCacheGist,
   scoreCacheGist,
   buildCacheDescription,
+  parseCache,
 } from '@/lib/gist';
 import type { CacheGist } from '@/lib/types';
 
 const mockedGhRest = vi.mocked(ghRest);
+const mockedGhGistRaw = vi.mocked(ghGistRaw);
 
 const OWNER = 'octocat';
 
@@ -169,5 +172,75 @@ describe('findCanonicalCacheGist', () => {
 
     expect(result.canonicalGist).toBeNull();
     expect(result.duplicateGists).toEqual([]);
+  });
+
+  it('loads truncated cache files from raw_url', async () => {
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path.startsWith('/gists?')) return [summary('A', OWNER)] as never;
+      if (path === '/gists/A')
+        return {
+          ...summary('A', OWNER),
+          files: {
+            [GIST_FILENAME]: {
+              filename: GIST_FILENAME,
+              content: '{"network":{"follo',
+              truncated: true,
+              raw_url: 'https://gist.githubusercontent.com/o/A/raw/x/file',
+            },
+          },
+        } as never;
+      return null;
+    });
+    mockedGhGistRaw.mockResolvedValue(cacheContent(OWNER));
+
+    const { canonicalGist } = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+    });
+
+    expect(mockedGhGistRaw).toHaveBeenCalledWith(
+      'https://gist.githubusercontent.com/o/A/raw/x/file'
+    );
+    expect(
+      canonicalGist && parseCache(canonicalGist)?.metadata.ownerLogin
+    ).toBe(OWNER);
+  });
+
+  it('skips listing every gist when the remembered gist validates', async () => {
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path === '/gists/A') return detail('A', OWNER) as never;
+      throw new Error(`unexpected request ${path}`);
+    });
+
+    const result = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+      preferredGistId: 'A',
+    });
+
+    expect(result.canonicalGist?.id).toBe('A');
+    expect(result.scannedAll).toBe(false);
+    expect(mockedGhRest).toHaveBeenCalledTimes(1);
+  });
+
+  it('still lists every gist when a full scan is requested', async () => {
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path.startsWith('/gists?'))
+        return [summary('A', OWNER), summary('C', OWNER)] as never;
+      if (path === '/gists/A') return detail('A', OWNER) as never;
+      if (path === '/gists/C')
+        return {
+          ...detail('C', OWNER),
+          updated_at: '2020-01-01T00:00:00Z',
+        } as never;
+      return null;
+    });
+
+    const result = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+      preferredGistId: 'A',
+      fullScan: true,
+    });
+
+    expect(result.scannedAll).toBe(true);
+    expect(result.duplicateGists.map((g) => g.id)).toEqual(['C']);
   });
 });
