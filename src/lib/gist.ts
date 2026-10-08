@@ -1,4 +1,4 @@
-import { CacheGist, CacheGistFile, CachedData } from './types';
+import { CacheGist, CacheGistFile, CachedData, GistRevision } from './types';
 import {
   CACHE_CHUNK_CHARS,
   GIST_CACHE_VERSION,
@@ -10,6 +10,12 @@ import {
 } from './constants';
 import { GitHubRestError, ghGistRaw, ghRest, ghRestOk } from './ghRest';
 import { decodeCache, encodeCache } from './cacheCodec';
+import {
+  CacheBase,
+  isSameRevision,
+  mergeCacheData,
+  toCacheBase,
+} from './cacheMerge';
 
 // Requests go through the same-origin proxy (via the ghRest gateway), which
 // injects the GitHub token and the standard Accept / API-version headers
@@ -29,6 +35,8 @@ type GitHubGistSummary = {
 };
 
 type GitHubGistDetail = GitHubGistSummary & {
+  /** Newest first; the proxy keeps only the latest entry. */
+  history?: Array<{ version?: string | null }> | null;
   files?: Record<
     string,
     {
@@ -60,6 +68,12 @@ export type CacheDiscoveryResult = {
 
 type WriteCacheOptions = {
   discoverCanonicalFallback?: boolean;
+  /**
+   * Called with the merged cache when the gist had changed elsewhere and the
+   * write merged those changes in (see writeCacheTo), so the caller can show
+   * them.
+   */
+  onMerged?: (merged: CachedData) => void;
 };
 
 const normalizeOwnerLogin = (ownerLogin: string) => ownerLogin.toLowerCase();
@@ -92,12 +106,18 @@ const isCacheDescription = (description?: string | null) =>
 const hasCacheFilename = (gist: Pick<CacheGist, 'files'>) =>
   gist.files.some((file) => file.name === GIST_FILENAME);
 
+const gistRevision = (gist: GitHubGistDetail): GistRevision => ({
+  version: gist.history?.[0]?.version ?? null,
+  updatedAt: gist.updated_at ?? null,
+});
+
 const toCacheGist = (gist: GitHubGistDetail): CacheGist => ({
   id: gist.id,
   name: gist.id,
   ownerLogin: gist.owner?.login ?? null,
   description: gist.description,
   updatedAt: gist.updated_at,
+  revision: gistRevision(gist),
   files: Object.values(gist.files ?? {}).map((file) => ({
     name: file.filename ?? '',
     text: file.content ?? null,
@@ -669,18 +689,39 @@ const postGist = async (body: object) => {
 };
 
 /**
- * The gist's file names, without their contents (the proxy drops them on
- * request). Null when the gist no longer exists.
+ * The gist's file names and current revision, without file contents (the
+ * proxy drops them on request). Null when the gist no longer exists.
  */
-const fetchGistFileNames = async (gistId: string) => {
+const fetchGistMeta = async (gistId: string) => {
   const gist = await ghRest<GitHubGistDetail>(`/gists/${gistId}`, {
     headers: { [GIST_VIEW_HEADER]: 'meta' },
   });
   if (!gist) return null;
-  return Object.values(gist.files ?? {})
-    .map((file) => file.filename ?? '')
-    .filter(Boolean);
+  return {
+    revision: gistRevision(gist),
+    files: Object.values(gist.files ?? {})
+      .map((file) => file.filename ?? '')
+      .filter(Boolean),
+  };
 };
+
+/**
+ * Per cache gist: the revision this session last read or wrote, and what it
+ * held (see CacheBase). Module-level like the write queue, so every hook
+ * instance shares it.
+ */
+const cacheBases = new Map<string, CacheBase>();
+
+/**
+ * Records that this session's state is based on `data`, read from `gist`.
+ * Call it when a cache is loaded into the stores; writes record their own.
+ */
+export const rememberCacheBase = (gist: CacheGist, data: CachedData) => {
+  cacheBases.set(gist.id, toCacheBase(gist.revision ?? null, data));
+};
+
+/** Forgets every recorded base (e.g. on sign-out). */
+export const forgetCacheBases = () => cacheBases.clear();
 
 /**
  * Writes a sharded cache to `gistId` (or a new gist when null). Small caches
@@ -692,7 +733,8 @@ const fetchGistFileNames = async (gistId: string) => {
  */
 const writeShardedCache = async (
   gistId: string | null,
-  plan: CacheWritePlan
+  plan: CacheWritePlan,
+  existingFiles: string[]
 ): Promise<CacheGist | null> => {
   const chunkFiles: GistFiles = Object.fromEntries(
     plan.chunks.map(({ file, content }) => [file, { content }])
@@ -700,14 +742,9 @@ const writeShardedCache = async (
   const finalFiles: GistFiles = {
     [GIST_FILENAME]: { content: plan.manifest },
   };
-
-  if (gistId) {
-    const existing = await fetchGistFileNames(gistId);
-    if (!existing) return null;
-    for (const name of existing) {
-      if (isCacheChunkFile(name) && !(name in chunkFiles)) {
-        finalFiles[name] = null;
-      }
+  for (const name of existingFiles) {
+    if (isCacheChunkFile(name) && !(name in chunkFiles)) {
+      finalFiles[name] = null;
     }
   }
 
@@ -742,6 +779,66 @@ const writeShardedCache = async (
     description: plan.description,
     files: finalFiles,
   });
+};
+
+/** The cache another device or tab wrote, or null when it can't be read. */
+const readRemoteCache = async (gistId: string) => {
+  try {
+    const gist = await fetchGistById(gistId);
+    return gist ? parseCache(gist) : null;
+  } catch (error) {
+    console.warn('Failed to read the newer cache to merge with.', error);
+    return null;
+  }
+};
+
+/**
+ * Writes `data` to `gistId` (or a new gist when null). Null when the gist no
+ * longer exists.
+ *
+ * Optimistic concurrency: when this session knows which revision its state
+ * is based on and the gist has moved on since (another device or tab wrote
+ * it), the newer cache is read and merged with `data` first (see
+ * mergeCacheData), so its changes aren't overwritten. Exactly one check per
+ * write and no retry loop: a write racing in between the check and the
+ * write still wins, as before.
+ */
+const writeCacheTo = async (
+  gistId: string | null,
+  data: CachedData,
+  description: string,
+  onMerged?: (merged: CachedData) => void
+): Promise<CacheGist | null> => {
+  let toWrite = data;
+  let merged = false;
+  let existingFiles: string[] = [];
+
+  if (gistId) {
+    const meta = await fetchGistMeta(gistId);
+    if (!meta) return null;
+    existingFiles = meta.files;
+
+    const base = cacheBases.get(gistId);
+    if (base && !isSameRevision(meta.revision, base.revision)) {
+      const remote = await readRemoteCache(gistId);
+      if (remote) {
+        toWrite = mergeCacheData(base, remote, data);
+        merged = true;
+      }
+    }
+  }
+
+  const { manifest, chunks } = buildShardedCache(toWrite, newGeneration());
+  const written = await writeShardedCache(
+    gistId,
+    { description, manifest, chunks },
+    existingFiles
+  );
+  if (!written) return null;
+
+  cacheBases.set(written.id, toCacheBase(written.revision ?? null, toWrite));
+  if (merged) onMerged?.(toWrite);
+  return written;
 };
 
 const deleteGist = (gistId: string) =>
@@ -819,15 +916,9 @@ export const writeCache = async (
     throw new Error('Cannot write cache without a normalized owner login.');
   }
 
-  const { manifest, chunks } = buildShardedCache(
-    normalizedData,
-    newGeneration()
-  );
-  const plan: CacheWritePlan = {
-    description: buildCacheDescription(normalizedOwnerLogin),
-    manifest,
-    chunks,
-  };
+  const description = buildCacheDescription(normalizedOwnerLogin);
+  const writeTo = (targetId: string | null) =>
+    writeCacheTo(targetId, normalizedData, description, options.onMerged);
 
   const updateTargets = new Set<string>();
   if (gistId) {
@@ -835,7 +926,7 @@ export const writeCache = async (
   }
 
   for (const targetId of updateTargets) {
-    const updatedGist = await writeShardedCache(targetId, plan);
+    const updatedGist = await writeTo(targetId);
     if (updatedGist) {
       return updatedGist;
     }
@@ -850,14 +941,14 @@ export const writeCache = async (
 
     const canonicalGistId = discoveryResult.canonicalGist?.id;
     if (canonicalGistId && !updateTargets.has(canonicalGistId)) {
-      const updatedGist = await writeShardedCache(canonicalGistId, plan);
+      const updatedGist = await writeTo(canonicalGistId);
       if (updatedGist) {
         return updatedGist;
       }
     }
   }
 
-  const createdGist = await writeShardedCache(null, plan);
+  const createdGist = await writeTo(null);
   if (!createdGist) {
     throw new Error('Failed to create Gist cache.');
   }

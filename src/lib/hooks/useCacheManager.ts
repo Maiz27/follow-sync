@@ -18,6 +18,7 @@ import {
   getGistIdentifier,
   normalizeCachedData,
   parseCache,
+  rememberCacheBase,
   shouldMigrateCanonicalCache,
   writeCache,
 } from '@/lib/gist';
@@ -247,6 +248,14 @@ export const useCacheManager = () => {
             activeGistName = getGistIdentifier(canonicalGist);
             setGistName(activeGistName, username);
 
+            // The stores are about to be based on this revision of the gist:
+            // a later write that finds it changed since merges instead of
+            // overwriting. Recorded before the migration write below, which
+            // moves the base on to the revision it creates.
+            if (policy.shouldHydrate) {
+              rememberCacheBase(canonicalGist, cachedData);
+            }
+
             if (duplicateGists.length > 0) {
               toast.info(
                 `Found ${duplicateGists.length + 1} cache gists. Using the newest canonical cache.`
@@ -443,7 +452,14 @@ export const useCacheManager = () => {
                 metadata,
               }),
               gistId,
-              { discoverCanonicalFallback: isForced || !gistId }
+              {
+                discoverCanonicalFallback: isForced || !gistId,
+                // The gist changed elsewhere since it was read: show the
+                // merged result.
+                onMerged: (merged) => {
+                  if (!signal.aborted) loadFromCache(merged);
+                },
+              }
             );
             setGistName(newGist.id, username);
           });
@@ -524,16 +540,30 @@ export const useCacheManager = () => {
       // succeeds, so a failed write doesn't show a misleading "last synced".
       // Without a known gist id (e.g. the sync's own write failed), look for
       // the account's existing cache before creating a new gist.
+      let written = dataToCache;
       const updatedGist = await writeCache(dataToCache, gistName, {
         discoverCanonicalFallback: !gistName,
+        // Another device or tab wrote the gist since: show what was merged.
+        onMerged: (merged) => {
+          written = merged;
+          if (useGistStore.getState().ownerLogin === accountLogin) {
+            loadFromCache(merged);
+          }
+        },
       });
       setGistName(updatedGist.id, accountLogin);
       // The account changed during the write: its stores were reset and
       // aren't described by this write.
       if (useGistStore.getState().ownerLogin !== accountLogin) return;
-      setGistData({ timestamp: newTimestamp, metadata: dataToCache.metadata });
+      setGistData({ timestamp: newTimestamp, metadata: written.metadata });
     });
-  }, [isAuthenticated, sessionOwnerLogin, setGistData, setGistName]);
+  }, [
+    isAuthenticated,
+    sessionOwnerLogin,
+    loadFromCache,
+    setGistData,
+    setGistName,
+  ]);
 
   const cleanupDuplicateCaches = useCallback(async () => {
     if (!isAuthenticated) {

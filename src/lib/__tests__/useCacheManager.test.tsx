@@ -579,7 +579,7 @@ describe('useCacheManager: switching accounts in the same tab', () => {
     expect(mocks.writeCache).toHaveBeenCalledTimes(1);
     const [written, gistId, options] = mocks.writeCache.mock.calls[0];
     expect(gistId).toBeNull();
-    expect(options).toEqual({ discoverCanonicalFallback: true });
+    expect(options).toMatchObject({ discoverCanonicalFallback: true });
     expect(written).toMatchObject({
       network: { followers: [user('bobfan')], following: [] },
       ignoredLogins: [],
@@ -783,7 +783,7 @@ describe('useCacheManager: plain writes', () => {
         metadata: expect.objectContaining({ ownerLogin: 'octocat' }),
       }),
       null,
-      { discoverCanonicalFallback: true }
+      expect.objectContaining({ discoverCanonicalFallback: true })
     );
   });
 
@@ -799,9 +799,11 @@ describe('useCacheManager: plain writes', () => {
       await result.current.persistChanges();
     });
 
-    expect(mocks.writeCache).toHaveBeenLastCalledWith(expect.anything(), 'G1', {
-      discoverCanonicalFallback: false,
-    });
+    expect(mocks.writeCache).toHaveBeenLastCalledWith(
+      expect.anything(),
+      'G1',
+      expect.objectContaining({ discoverCanonicalFallback: false })
+    );
   });
 });
 
@@ -957,5 +959,39 @@ describe('useCacheManager: cache version bump', () => {
       await result.current.persistChanges();
     });
     expect(lastWrite().metadata.cacheVersion).toBe(GIST_CACHE_VERSION);
+  });
+});
+
+describe('useCacheManager: writes merged with another device', () => {
+  it('shows what the merge brought in from the other device', async () => {
+    useGistStore.setState({
+      ownerLogin: 'octocat',
+      gistName: 'G1',
+      metadata: cacheData('octocat').metadata,
+    });
+    useIgnoreStore.getState().setIgnoredLogins(['mine']);
+    mocks.writeCache.mockImplementation(
+      async (
+        data: CachedData,
+        _gistId: string,
+        options: { onMerged?: (merged: CachedData) => void }
+      ) => {
+        options.onMerged?.({
+          ...data,
+          ignoredLogins: ['mine', 'theirs'],
+        });
+        return { id: 'G1', name: 'G1', files: [] };
+      }
+    );
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      await result.current.persistChanges();
+    });
+
+    expect([...useIgnoreStore.getState().ignoredLogins].sort()).toEqual([
+      'mine',
+      'theirs',
+    ]);
   });
 });

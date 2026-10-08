@@ -1,5 +1,6 @@
 import { getQueryClient } from '@/app/get-query-client';
 import { QUERY_KEY_USER_NETWORK } from '@/lib/constants';
+import { forgetCacheBases } from '@/lib/gist';
 import { useGhostStore } from './ghost';
 import { useGistStore } from './gist';
 import { useIgnoreStore } from './ignore';
@@ -11,8 +12,9 @@ import { useSettingsStore } from './settings';
  * Forgets every piece of in-memory state that belongs to the signed-in
  * account: its network (and journaled follows), ghosts and their tombstones,
  * ignore list, cache gist id/metadata/diff, the settings saved in its cache,
- * and list pagination. The single place both an account switch and sign-out
- * go through, so nothing of one account can end up in another's cache.
+ * list pagination, and the cache revision its writes are based on. The single
+ * place both an account switch and sign-out go through, so nothing of one
+ * account can end up in another's cache.
  */
 export const resetAccountState = () => {
   useNetworkStore.getState().reset();
@@ -21,6 +23,9 @@ export const resetAccountState = () => {
   useGistStore.getState().reset();
   useSettingsStore.getState().resetPersistedSettings();
   usePaginationStore.getState().reset();
+  // What this session last read from the account's cache gist: the next
+  // account's writes must never be merged against it.
+  forgetCacheBases();
 };
 
 /**

@@ -25,7 +25,9 @@ import {
   buildCacheDescription,
   buildShardedCache,
   findCanonicalCacheGist,
+  forgetCacheBases,
   parseCache,
+  rememberCacheBase,
   serializeCache,
   writeCache,
 } from '@/lib/gist';
@@ -77,22 +79,25 @@ const cache = (followers: number, following = 10): CachedData => ({
  * (null deletes), inline content is cut at 1 MB like GitHub does, and request
  * bodies over the host limit are refused like Vercel does.
  */
-const fakeGitHub = () => {
+const fakeGitHub = ({ historyOnWrite = true } = {}) => {
   const gists = new Map<
     string,
-    { description: string; files: Map<string, string> }
+    { description: string; files: Map<string, string>; version?: number }
   >();
   const bodies: number[] = [];
   let nextId = 1;
   let failWhen: ((method: string, files: string[]) => boolean) | null = null;
 
-  const view = (id: string, omitContent = false) => {
+  const view = (id: string, omitContent = false, withHistory = true) => {
     const gist = gists.get(id)!;
     return {
       id,
       description: gist.description,
       public: false,
-      updated_at: '2024-01-01T00:00:00Z',
+      updated_at: `2024-01-01T00:00:${String(gist.version ?? 0).padStart(2, '0')}Z`,
+      ...(withHistory
+        ? { history: [{ version: `v${gist.version ?? 0}` }] }
+        : {}),
       owner: { login: OWNER },
       files: Object.fromEntries(
         [...gist.files].map(([name, content]) => {
@@ -141,13 +146,14 @@ const fakeGitHub = () => {
       for (const [name, file] of Object.entries(body.files ?? {})) {
         if (file) gists.get(id)!.files.set(name, file.content);
       }
-      return view(id) as never;
+      return view(id, false, historyOnWrite) as never;
     }
 
     const id = path.replace('/gists/', '');
     const gist = gists.get(id);
     if (!gist) return null;
     if (method === 'PATCH') {
+      gist.version = (gist.version ?? 0) + 1;
       if (body.description) gist.description = body.description;
       for (const [name, file] of Object.entries(body.files ?? {})) {
         if (file) gist.files.set(name, file.content);
@@ -155,7 +161,11 @@ const fakeGitHub = () => {
       }
     }
     const headers = new Headers(init?.headers);
-    return view(id, headers.get('x-follow-sync-gist-view') === 'meta') as never;
+    return view(
+      id,
+      headers.get('x-follow-sync-gist-view') === 'meta',
+      method === 'GET' || historyOnWrite
+    ) as never;
   });
 
   vi.mocked(ghGistRaw).mockImplementation(async (rawUrl) => {
@@ -168,6 +178,18 @@ const fakeGitHub = () => {
   return {
     gists,
     bodies,
+    /** Another device writes `data` to the gist. */
+    writeElsewhere: (id: string, data: CachedData) => {
+      const gist = gists.get(id)!;
+      const { manifest, chunks } = buildShardedCache(data, 'elsewhere');
+      gist.files = new Map([
+        [GIST_FILENAME, manifest],
+        ...chunks.map(
+          ({ file, content }) => [file, content] as [string, string]
+        ),
+      ]);
+      gist.version = (gist.version ?? 0) + 1;
+    },
     failWhen: (fn: typeof failWhen) => {
       failWhen = fn;
     },
@@ -183,7 +205,10 @@ const readBack = async (gistId: string) => {
   return canonicalGist ? parseCache(canonicalGist) : null;
 };
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.clearAllMocks();
+  forgetCacheBases();
+});
 
 describe('sharded cache', () => {
   it('round-trips a small network through one write request', async () => {
@@ -377,5 +402,106 @@ describe('single-file caches from before sharding', () => {
 
     expect(canonicalGist?.id).toBe('legacy');
     expect(parseCache(canonicalGist!)).toBeNull();
+  });
+});
+
+describe('concurrent writers (optimistic concurrency)', () => {
+  const withIgnored = (data: CachedData, ignoredLogins: string[]) => ({
+    ...data,
+    ignoredLogins,
+  });
+
+  const requests = () =>
+    vi.mocked(ghRest).mock.calls.map(([path, init]) => {
+      const view = new Headers(init?.headers).get('x-follow-sync-gist-view');
+      return `${init?.method ?? 'GET'}${view ? `(${view})` : ''} ${path}`;
+    });
+
+  it('merges in what another device wrote since this session read the cache', async () => {
+    const github = fakeGitHub();
+    const base = withIgnored(cache(20), ['old']);
+    const gist = await writeCache(base, null);
+
+    // Another device ignores "theirs"; this session then ignores "mine".
+    github.writeElsewhere(gist.id, withIgnored(base, ['old', 'theirs']));
+    vi.mocked(ghRest).mockClear();
+    const onMerged = vi.fn();
+    await writeCache(
+      { ...withIgnored(base, ['old', 'mine']), timestamp: 5 },
+      gist.id,
+      { onMerged }
+    );
+
+    const stored = await readBack(gist.id);
+    expect([...(stored?.ignoredLogins ?? [])].sort()).toEqual([
+      'mine',
+      'old',
+      'theirs',
+    ]);
+    expect(onMerged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ignoredLogins: expect.arrayContaining(['theirs', 'mine']),
+      })
+    );
+  });
+
+  it('checks the revision once and writes straight away when nothing changed', async () => {
+    fakeGitHub();
+    const gist = await writeCache(cache(20), null);
+    vi.mocked(ghRest).mockClear();
+    const onMerged = vi.fn();
+
+    await writeCache({ ...cache(21), timestamp: 5 }, gist.id, { onMerged });
+
+    expect(requests()).toEqual([
+      `GET(meta) /gists/${gist.id}`,
+      `PATCH /gists/${gist.id}`,
+    ]);
+    expect(onMerged).not.toHaveBeenCalled();
+  });
+
+  it('does not mistake its own write for a newer one when a write response has no history', async () => {
+    fakeGitHub({ historyOnWrite: false });
+    const gist = await writeCache(cache(20), null);
+    await writeCache({ ...cache(21), timestamp: 5 }, gist.id);
+    vi.mocked(ghRest).mockClear();
+
+    await writeCache({ ...cache(22), timestamp: 6 }, gist.id);
+
+    expect(requests()).toEqual([
+      `GET(meta) /gists/${gist.id}`,
+      `PATCH /gists/${gist.id}`,
+    ]);
+  });
+
+  it('merges against the revision a read recorded', async () => {
+    const github = fakeGitHub();
+    const gist = await writeCache(withIgnored(cache(20), []), null);
+    forgetCacheBases();
+
+    // This session loads the cache, then another device writes.
+    const { canonicalGist } = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+      preferredGistId: gist.id,
+    });
+    rememberCacheBase(canonicalGist!, parseCache(canonicalGist!)!);
+    github.writeElsewhere(gist.id, withIgnored(cache(20), ['theirs']));
+
+    await writeCache(withIgnored(cache(20), ['mine']), gist.id);
+
+    expect(
+      [...((await readBack(gist.id))?.ignoredLogins ?? [])].sort()
+    ).toEqual(['mine', 'theirs']);
+  });
+
+  it('overwrites as before when this session never read the gist', async () => {
+    const github = fakeGitHub();
+    const gist = await writeCache(withIgnored(cache(20), []), null);
+    forgetCacheBases();
+    github.writeElsewhere(gist.id, withIgnored(cache(20), ['theirs']));
+
+    await writeCache(withIgnored(cache(20), ['mine']), gist.id);
+
+    expect((await readBack(gist.id))?.ignoredLogins).toEqual(['mine']);
   });
 });

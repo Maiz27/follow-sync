@@ -38,6 +38,12 @@ export interface CacheGistFile {
   rawUrl?: string | null;
 }
 
+/** A gist revision: its latest history version and `updated_at`. */
+export interface GistRevision {
+  version: string | null;
+  updatedAt: string | null;
+}
+
 export interface CacheGist {
   id: string;
   name?: string | null;
@@ -45,6 +51,11 @@ export interface CacheGist {
   ownerLogin?: string | null;
   description?: string | null;
   updatedAt?: string | null;
+  /**
+   * The gist's current revision, used to notice writes made elsewhere since
+   * this session read it.
+   */
+  revision?: GistRevision | null;
   files: CacheGistFile[];
 }
 
