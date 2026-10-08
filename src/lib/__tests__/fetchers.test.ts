@@ -100,7 +100,8 @@ describe('paginated follow fetchers', () => {
     expect(restMocks.ghRest).toHaveBeenCalledTimes(5);
     expect(restMocks.ghRest).toHaveBeenNthCalledWith(
       2,
-      '/user/following?per_page=100&page=2'
+      '/user/following?per_page=100&page=2',
+      expect.objectContaining({})
     );
   });
 
@@ -116,6 +117,47 @@ describe('paginated follow fetchers', () => {
     await rejection;
 
     expect(restMocks.ghRest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('fetcher cancellation', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('passes the abort signal to REST requests and stops paginating once aborted', async () => {
+    const controller = new AbortController();
+    restMocks.ghRest.mockImplementation(async () => {
+      controller.abort();
+      return Array.from({ length: 100 }, (_, index) => makeRawRestUser(index));
+    });
+
+    await expect(
+      fetchRestFollowing({ signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(restMocks.ghRest).toHaveBeenCalledTimes(1);
+    expect(restMocks.ghRest).toHaveBeenCalledWith(
+      '/user/following?per_page=100&page=1',
+      { signal: controller.signal }
+    );
+  });
+
+  it('passes the abort signal to GraphQL requests', async () => {
+    const controller = new AbortController();
+    const client = new GraphQLClient('https://example.test/graphql');
+    const request = vi.spyOn(client, 'request');
+    request.mockImplementation((async () => {
+      controller.abort();
+      return firstGraphqlPage;
+    }) as never);
+
+    await expect(
+      fetchAllUserFollowersAndFollowing({ client, signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: controller.signal })
+    );
   });
 });
 

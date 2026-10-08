@@ -287,3 +287,72 @@ describe('useCacheManager: sync time vs write time', () => {
     expect(useGistStore.getState().syncedAt).toBe(fresh.timestamp);
   });
 });
+
+describe('useCacheManager: sync lifecycle', () => {
+  it('shows rate-limit pauses in the sync progress toast', async () => {
+    mocks.findCanonicalCacheGist.mockResolvedValue(discovery(null));
+    mocks.fetchAndClassifyNetwork.mockImplementation(
+      async ({
+        onRateLimitPause,
+      }: {
+        onRateLimitPause?: (waitMs: number) => void;
+      }) => {
+        onRateLimitPause?.(42_000);
+        return fetched();
+      }
+    );
+    const callbacks = progress();
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(
+        client,
+        'octocat',
+        callbacks
+      );
+    });
+
+    expect(callbacks.update).toHaveBeenCalledWith(
+      expect.any(Array),
+      'Rate limited by GitHub, resuming in 42s...'
+    );
+  });
+
+  it('aborts a running sync when a newer one starts', async () => {
+    mocks.findCanonicalCacheGist.mockResolvedValue(discovery(null));
+    let firstSignal: AbortSignal | undefined;
+    mocks.fetchAndClassifyNetwork.mockImplementationOnce(
+      ({ signal }: { signal: AbortSignal }) => {
+        firstSignal = signal;
+        return new Promise((_, reject) =>
+          signal.addEventListener('abort', () => reject(signal.reason))
+        );
+      }
+    );
+    mocks.fetchAndClassifyNetwork.mockResolvedValueOnce(
+      fetched({ following: [user('newest')] })
+    );
+    const first = progress();
+    const second = progress();
+    const { result } = renderHook(() => useCacheManager());
+
+    let firstRun: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      firstRun = result.current
+        .initializeAndFetchNetwork(client, 'octocat', first)
+        .catch((error: unknown) => error);
+      await vi.waitFor(() => expect(firstSignal).toBeDefined());
+      await result.current.initializeAndFetchNetwork(client, 'octocat', second);
+    });
+
+    expect(firstSignal?.aborted).toBe(true);
+    expect(await firstRun).toMatchObject({ name: 'AbortError' });
+    // The superseded sync neither fails the shared toast nor writes.
+    expect(first.fail).not.toHaveBeenCalled();
+    expect(second.complete).toHaveBeenCalled();
+    expect(mocks.writeCache).toHaveBeenCalledTimes(1);
+    expect(
+      useNetworkStore.getState().network.following.map((u) => u.login)
+    ).toEqual(['newest']);
+  });
+});

@@ -5,6 +5,7 @@ import {
   classifyError,
   getRetryAfterMs,
   withRetry,
+  createRetryBudget,
 } from '@/lib/rateLimit';
 import { GitHubRestError } from '@/lib/ghRest';
 
@@ -115,5 +116,73 @@ describe('withRetry', () => {
     const task = vi.fn().mockRejectedValue(new GitHubRestError(401, {}));
     await expect(withRetry(task)).rejects.toBeInstanceOf(GitHubRestError);
     expect(task).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports rate-limit pauses so the UI can say when it resumes', async () => {
+    const onPause = vi.fn();
+    const task = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new GitHubRestError(429, {}, headers({ 'retry-after': '5' }))
+      )
+      .mockResolvedValue('ok');
+
+    const promise = withRetry(task, { onPause });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onPause).toHaveBeenCalledWith(5_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await expect(promise).resolves.toBe('ok');
+  });
+
+  it('caps the total rate-limit wait across calls sharing a budget', async () => {
+    const budget = createRetryBudget(5_000);
+    const limited = () =>
+      new GitHubRestError(429, {}, headers({ 'retry-after': '3' }));
+    const first = vi
+      .fn()
+      .mockRejectedValueOnce(limited())
+      .mockResolvedValue('ok');
+
+    const firstPromise = withRetry(first, { budget });
+    await vi.advanceTimersByTimeAsync(3_000);
+    await expect(firstPromise).resolves.toBe('ok');
+    expect(budget.remainingMs).toBe(2_000);
+
+    // Another request in the same sync may not wait past what's left.
+    const second = vi.fn().mockRejectedValue(limited());
+    await expect(withRetry(second, { budget })).rejects.toBeInstanceOf(
+      RateLimitError
+    );
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops waiting and retrying once aborted', async () => {
+    const controller = new AbortController();
+    const task = vi
+      .fn()
+      .mockRejectedValue(
+        new GitHubRestError(429, {}, headers({ 'retry-after': '30' }))
+      );
+
+    const promise = withRetry(task, { signal: controller.signal });
+    const rejection = expect(promise).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    controller.abort();
+    await rejection;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(task).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start when already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const task = vi.fn().mockResolvedValue('ok');
+
+    await expect(
+      withRetry(task, { signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(task).not.toHaveBeenCalled();
   });
 });

@@ -118,7 +118,8 @@ export interface ProgressCallbacks {
     message: string;
     items: ProgressCallbackItem[];
   }) => void;
-  update: (items: ProgressCallbackItem[]) => void;
+  /** `message` replaces the status line; omit it to keep the current one. */
+  update: (items: ProgressCallbackItem[], message?: string) => void;
   complete: () => void;
   fail: (config: { message: string }) => void;
 }

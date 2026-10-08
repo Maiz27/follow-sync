@@ -138,14 +138,61 @@ export class RateLimitError extends Error {
   }
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Most a whole network sync may spend waiting out rate limits (across every
+ * request sharing one budget) before giving up and telling the user when to
+ * come back.
+ */
+export const MAX_TOTAL_RATE_LIMIT_WAIT_MS = 5 * 60_000;
+
+/** Rate-limit wait time left for a group of requests (e.g. one sync). */
+export type RetryBudget = { remainingMs: number };
+
+export const createRetryBudget = (
+  remainingMs = MAX_TOTAL_RATE_LIMIT_WAIT_MS
+): RetryBudget => ({ remainingMs });
+
+const abortReason = (signal: AbortSignal): unknown =>
+  signal.reason ?? new DOMException('The operation was aborted.', 'AbortError');
+
+/** Rejects with the signal's reason as soon as it aborts. */
+export const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortReason(signal));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortReason(signal as AbortSignal));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+
+export type RetryOptions = {
+  retries?: number;
+  baseDelayMs?: number;
+  /** Longest single rate-limit wait to sit out inline. */
+  maxWaitMs?: number;
+  /** Stops retrying (and any wait in progress) once aborted. */
+  signal?: AbortSignal;
+  /** Called before sitting out a rate limit, with the wait in ms. */
+  onPause?: (waitMs: number) => void;
+  /** Shared cap on total rate-limit waiting; decremented as time is spent. */
+  budget?: RetryBudget;
+};
 
 /**
  * Retries a task on transient failures only: 5xx, network errors and rate
  * limits. Client errors (401/403/404/422...) fail immediately — retrying them
  * just burns quota. Rate limits wait as long as GitHub asks (`Retry-After` /
- * `X-RateLimit-Reset`) when that's short; otherwise a `RateLimitError` is
- * thrown so callers can stop and tell the user when to come back.
+ * `X-RateLimit-Reset`) when that's short and within the budget; otherwise a
+ * `RateLimitError` is thrown so callers can stop and tell the user when to
+ * come back.
  */
 export const withRetry = async <T>(
   task: () => Promise<T>,
@@ -153,12 +200,18 @@ export const withRetry = async <T>(
     retries = 3,
     baseDelayMs = 500,
     maxWaitMs = MAX_INLINE_RETRY_WAIT_MS,
-  }: { retries?: number; baseDelayMs?: number; maxWaitMs?: number } = {}
+    signal,
+    onPause,
+    budget,
+  }: RetryOptions = {}
 ): Promise<T> => {
   for (let attempt = 0; ; attempt++) {
+    if (signal?.aborted) throw abortReason(signal);
     try {
       return await task();
     } catch (error) {
+      // A cancelled request is never retried, whatever it failed with.
+      if (signal?.aborted) throw abortReason(signal);
       const info = classifyError(error);
       if (!info.isRetryable) throw error;
 
@@ -166,16 +219,25 @@ export const withRetry = async <T>(
         // Secondary limits often come without a hint; GitHub recommends
         // waiting at least a minute before retrying.
         const wait = info.retryAfterMs ?? maxWaitMs;
-        if (attempt >= retries || wait > maxWaitMs) {
+        if (
+          attempt >= retries ||
+          wait > maxWaitMs ||
+          (budget && wait > budget.remainingMs)
+        ) {
           throw new RateLimitError(info.retryAfterMs, error);
         }
-        await sleep(wait);
+        if (budget) budget.remainingMs -= wait;
+        onPause?.(wait);
+        await sleep(wait, signal);
         continue;
       }
 
       if (attempt >= retries) throw error;
       // Exponential backoff with jitter.
-      await sleep(baseDelayMs * 2 ** attempt + Math.floor(Math.random() * 137));
+      await sleep(
+        baseDelayMs * 2 ** attempt + Math.floor(Math.random() * 137),
+        signal
+      );
     }
   }
 };

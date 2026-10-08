@@ -14,7 +14,12 @@ import type {
 } from '@/lib/gql/types';
 import { GraphQLClient } from 'graphql-request';
 import { ghRest, ghRestOk } from '@/lib/ghRest';
-import { RateLimitError, withRetry } from '@/lib/rateLimit';
+import {
+  RateLimitError,
+  sleep,
+  withRetry,
+  type RetryBudget,
+} from '@/lib/rateLimit';
 
 /**
  * Defines the shape of the progress update object.
@@ -54,6 +59,25 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
   return fallbackMessage;
 };
 
+/** Options shared by the paginated fetchers of one sync. */
+export type PaginationOptions = {
+  /** Aborts the pagination (in-flight request, retries and waits). */
+  signal?: AbortSignal;
+  /** Called before sitting out a rate limit, with the wait in ms. */
+  onPause?: (waitMs: number) => void;
+  /** Shared cap on how long the whole sync may wait out rate limits. */
+  retryBudget?: RetryBudget;
+};
+
+const retryOptions = ({ signal, onPause, retryBudget }: PaginationOptions) => ({
+  signal,
+  onPause,
+  budget: retryBudget,
+});
+
+const isAbortError = (error: unknown) =>
+  error instanceof Error && error.name === 'AbortError';
+
 const getAccountKey = (user: Pick<User, 'id' | 'login'>) =>
   user.id || user.login.toLowerCase();
 
@@ -85,10 +109,11 @@ const mergeUniqueUsers = (
 export const fetchAllUserFollowersAndFollowing = async ({
   client,
   onProgress,
+  ...options
 }: {
   client: GraphQLClient;
   onProgress?: (progress: FetchProgress) => void;
-}) => {
+} & PaginationOptions) => {
   const allFollowers: Pick<FollowerFieldsFragment, 'nodes' | 'totalCount'> = {
     nodes: [],
     totalCount: 0,
@@ -118,12 +143,19 @@ export const fetchAllUserFollowersAndFollowing = async ({
     };
 
     try {
-      const data = await withRetry(() =>
-        client.request<
-          GetUserFollowersAndFollowingQuery,
-          GetUserFollowersAndFollowingQueryVariables
-        >(GET_USER_FOLLOWERS_AND_FOLLOWING, variables)
+      const data = await withRetry(
+        () =>
+          client.request<
+            GetUserFollowersAndFollowingQuery,
+            GetUserFollowersAndFollowingQueryVariables
+          >({
+            document: GET_USER_FOLLOWERS_AND_FOLLOWING,
+            variables,
+            signal: options.signal,
+          }),
+        retryOptions(options)
       );
+      options.signal?.throwIfAborted();
 
       viewerLogin = data.viewer?.login ?? viewerLogin;
 
@@ -167,9 +199,10 @@ export const fetchAllUserFollowersAndFollowing = async ({
       });
 
       if (hasNextPageFollowers || hasNextPageFollowing) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await sleep(200, options.signal);
       }
     } catch (error: unknown) {
+      if (options.signal?.aborted || isAbortError(error)) throw error;
       console.error('Error fetching paginated follow data:', error);
       if (error instanceof RateLimitError) throw error;
       throw new Error(
@@ -208,17 +241,20 @@ type RawRestUser = {
 };
 
 const fetchRestUserList = async (
-  path: string
+  path: string,
+  options: PaginationOptions = {}
 ): Promise<RestFollowingEntry[]> => {
   const all: RestFollowingEntry[] = [];
 
   for (let page = 1; ; page++) {
     const pageItems = await withRetry(async () => {
       const data = await ghRest<RawRestUser[]>(
-        `${path}?per_page=${REST_PER_PAGE}&page=${page}`
+        `${path}?per_page=${REST_PER_PAGE}&page=${page}`,
+        { signal: options.signal }
       );
       return data ?? [];
-    });
+    }, retryOptions(options));
+    options.signal?.throwIfAborted();
     if (!pageItems.length) break;
 
     for (const item of pageItems) {
@@ -243,14 +279,16 @@ const fetchRestUserList = async (
  * organizations that GraphQL's User-only `FollowingConnection` cannot return
  * and to infer ghosts from entries present only in the completed GraphQL list.
  */
-export const fetchRestFollowing = () => fetchRestUserList(REST_FOLLOWING_PATH);
+export const fetchRestFollowing = (options?: PaginationOptions) =>
+  fetchRestUserList(REST_FOLLOWING_PATH, options);
 
 /**
  * Fetches the authenticated user's full followers list via the REST API. Once
  * both paginated lists complete, GraphQL-only entries are treated as ghosts
  * under the API behavior observed by this app.
  */
-export const fetchRestFollowers = () => fetchRestUserList(REST_FOLLOWERS_PATH);
+export const fetchRestFollowers = (options?: PaginationOptions) =>
+  fetchRestUserList(REST_FOLLOWERS_PATH, options);
 
 /**
  * Unfollows an inferred ghost by login via the REST API. This path does not

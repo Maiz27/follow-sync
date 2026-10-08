@@ -28,7 +28,11 @@ import {
   gistIdStorageKey,
 } from '@/lib/constants';
 import { readStorage, writeStorage } from '@/lib/storage';
-import { CachedData, ProgressCallbacks } from '@/lib/types';
+import {
+  CachedData,
+  ProgressCallbackItem,
+  ProgressCallbacks,
+} from '@/lib/types';
 import { useSession } from 'next-auth/react';
 
 /**
@@ -66,6 +70,15 @@ const snapshotStores = ({
     },
   };
 };
+
+/**
+ * The sync currently running, app-wide. A newer sync (forced refresh, another
+ * account) aborts it, so two syncs never paginate GitHub concurrently or race
+ * to write the stores.
+ */
+let activeSync: AbortController | null = null;
+
+const SYNC_MESSAGE = 'Fetching connections from GitHub...';
 
 export const useCacheManager = () => {
   const setNetwork = useNetworkStore((state) => state.setNetwork);
@@ -118,6 +131,13 @@ export const useCacheManager = () => {
     ) => {
       const { show, update, complete, fail } = progress;
 
+      activeSync?.abort(
+        new DOMException('Superseded by a newer sync.', 'AbortError')
+      );
+      const controller = new AbortController();
+      activeSync = controller;
+      const { signal } = controller;
+
       // The remembered gist id is scoped to this account; the old global key
       // could belong to whoever used this browser before, so drop it.
       setOwnerLogin(username);
@@ -159,6 +179,7 @@ export const useCacheManager = () => {
           viewerLogin: useGistStore.getState().viewerLogin,
           preferredGistId: currentGistName,
         });
+        signal.throwIfAborted();
         identityLogin = resolvedOwnerLogin;
         useGistStore.getState().setViewerLogin(identityLogin);
 
@@ -250,6 +271,7 @@ export const useCacheManager = () => {
           const served = await loadCachedNetwork();
           if (served) return served;
         } catch (error) {
+          if (signal.aborted) throw error;
           // Discovery/migration problems must never block the dashboard: warn
           // and fall through to a normal sync, which writes a fresh cache.
           console.error('Failed to load the network cache gist:', error);
@@ -261,13 +283,14 @@ export const useCacheManager = () => {
 
       const fetchStart = performance.now();
       const syncStartedAt = Date.now();
+      let progressItems: ProgressCallbackItem[] = [
+        { label: 'Followers', current: 0, total: 0 },
+        { label: 'Following', current: 0, total: 0 },
+      ];
       show({
         title: 'Syncing Your Network',
-        message: 'Fetching connections from GitHub...',
-        items: [
-          { label: 'Followers', current: 0, total: 0 },
-          { label: 'Following', current: 0, total: 0 },
-        ],
+        message: SYNC_MESSAGE,
+        items: progressItems,
       });
 
       try {
@@ -279,8 +302,9 @@ export const useCacheManager = () => {
           graphqlFollowingLogins,
         } = await fetchAndClassifyNetwork({
           client,
+          signal,
           onProgress: (p) => {
-            update([
+            progressItems = [
               {
                 label: 'Followers',
                 current: p.fetchedFollowers,
@@ -293,9 +317,19 @@ export const useCacheManager = () => {
                 total: p.totalFollowing,
                 isApproximateTotal: p.hasFollowingTotalMismatch,
               },
-            ]);
+            ];
+            update(progressItems, SYNC_MESSAGE);
+          },
+          onRateLimitPause: (waitMs) => {
+            update(
+              progressItems,
+              `Rate limited by GitHub, resuming in ${Math.ceil(waitMs / 1000)}s...`
+            );
           },
         });
+        // Superseded while the last page landed: leave the stores to the
+        // newer sync.
+        signal.throwIfAborted();
 
         if (viewerLogin) {
           identityLogin = viewerLogin.toLowerCase();
@@ -382,10 +416,16 @@ export const useCacheManager = () => {
 
         return useNetworkStore.getState().network;
       } catch (error: unknown) {
-        const message =
-          error instanceof Error ? error.message : 'Failed to sync network.';
-        fail({ message });
+        // A superseded sync stays quiet: the progress toast now belongs to the
+        // sync that replaced it.
+        if (!signal.aborted) {
+          const message =
+            error instanceof Error ? error.message : 'Failed to sync network.';
+          fail({ message });
+        }
         throw error;
+      } finally {
+        if (activeSync === controller) activeSync = null;
       }
     },
     [
