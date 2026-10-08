@@ -45,6 +45,7 @@ import {
   gistIdStorageKey,
 } from '@/lib/constants';
 import { getQueryClient } from '@/app/get-query-client';
+import { enqueuePersist } from '@/lib/persistenceQueue';
 import { useGistStore } from '@/lib/store/gist';
 import { useNetworkStore } from '@/lib/store/network';
 import { useGhostStore } from '@/lib/store/ghost';
@@ -638,5 +639,121 @@ describe('useCacheManager: switching accounts in the same tab', () => {
 
     expect(useGistStore.getState().lastDiff).toBeNull();
     expect(lastWrite().lastDiff).toBeNull();
+  });
+});
+
+describe('useCacheManager: superseded loads', () => {
+  const deferred = <T,>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  };
+
+  const startBobSync = (result: {
+    current: ReturnType<typeof useCacheManager>;
+  }) => {
+    mocks.session.login = 'bob';
+    mocks.findCanonicalCacheGist.mockResolvedValueOnce(discovery(null, 'bob'));
+    mocks.fetchAndClassifyNetwork.mockResolvedValueOnce(
+      fetched({
+        viewerLogin: 'bob',
+        followers: [user('bobfan')],
+        following: [],
+      })
+    );
+    return result.current.initializeAndFetchNetwork(client, 'bob', progress());
+  };
+
+  it('does not hydrate the stores or remember its gist after a newer sync took over during the migration write', async () => {
+    // Alice's cache needs relabelling, so loading it writes it first.
+    const aliceCache = cacheData('alice');
+    const aliceGist = {
+      ...gistFor(aliceCache, 'alice'),
+      description: 'follow-sync cache (old format)',
+    };
+    mocks.findCanonicalCacheGist.mockResolvedValueOnce(
+      discovery(aliceGist, 'alice')
+    );
+    const migration = deferred<{ id: string; name: string; files: [] }>();
+    mocks.writeCache
+      .mockImplementationOnce(() => migration.promise)
+      .mockImplementationOnce(async () => ({
+        id: 'GB',
+        name: 'GB',
+        files: [],
+      }));
+    mocks.session.login = 'alice';
+    const { result } = renderHook(() => useCacheManager());
+
+    let aliceRun: Promise<unknown> = Promise.resolve();
+    let bobRun: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      aliceRun = result.current
+        .initializeAndFetchNetwork(client, 'alice', progress())
+        .catch((error: unknown) => error);
+      await vi.waitFor(() => expect(mocks.writeCache).toHaveBeenCalledTimes(1));
+
+      // Bob signs in (another tab) while Alice's migration write is running.
+      bobRun = startBobSync(result);
+      await vi.waitFor(() =>
+        expect(mocks.fetchAndClassifyNetwork).toHaveBeenCalled()
+      );
+      migration.resolve({ id: 'G1', name: 'G1', files: [] });
+      await bobRun;
+    });
+
+    expect(await aliceRun).toMatchObject({ name: 'AbortError' });
+    // Bob's cache write didn't go to Alice's gist...
+    expect(mocks.writeCache).toHaveBeenCalledTimes(2);
+    expect(mocks.writeCache.mock.calls[1][1]).toBeNull();
+    // ...and nothing of Alice's landed in Bob's stores or storage key.
+    expect(useGistStore.getState()).toMatchObject({
+      ownerLogin: 'bob',
+      gistName: 'GB',
+    });
+    expect(window.localStorage.getItem(gistIdStorageKey('bob'))).toBe('GB');
+    expect(useNetworkStore.getState().network.followers).toEqual([
+      user('bobfan'),
+    ]);
+  });
+
+  it('drops a queued cache write of a sync that was superseded before it ran', async () => {
+    // Hold the write queue so Alice's write is still queued when Bob starts.
+    const blocker = deferred<void>();
+    void enqueuePersist(() => blocker.promise);
+
+    mocks.session.login = 'alice';
+    mocks.findCanonicalCacheGist.mockResolvedValueOnce(
+      discovery(null, 'alice')
+    );
+    mocks.fetchAndClassifyNetwork.mockResolvedValueOnce(
+      fetched({ viewerLogin: 'alice' })
+    );
+    const aliceProgress = progress();
+    const { result } = renderHook(() => useCacheManager());
+
+    let aliceRun: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      aliceRun = result.current
+        .initializeAndFetchNetwork(client, 'alice', aliceProgress)
+        .catch((error: unknown) => error);
+      await vi.waitFor(() =>
+        expect(mocks.fetchAndClassifyNetwork).toHaveBeenCalledTimes(1)
+      );
+      const bobRun = startBobSync(result);
+      await vi.waitFor(() =>
+        expect(mocks.fetchAndClassifyNetwork).toHaveBeenCalledTimes(2)
+      );
+      blocker.resolve();
+      await bobRun;
+    });
+
+    expect(await aliceRun).toMatchObject({ name: 'AbortError' });
+    expect(aliceProgress.complete).not.toHaveBeenCalled();
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+    expect(mocks.writeCache).toHaveBeenCalledTimes(1);
+    expect(lastWrite().metadata.ownerLogin).toBe('bob');
   });
 });

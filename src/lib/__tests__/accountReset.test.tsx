@@ -21,7 +21,7 @@ describe('signOutAndReset', () => {
 
   it("forgets the signed-out account's data, not just its stored gist id", async () => {
     useGistStore.getState().setOwnerLogin('alice');
-    useGistStore.getState().setGistName('G1');
+    useGistStore.getState().setGistName('G1', 'alice');
     useGistStore.getState().setDuplicateGistCount(3);
     useNetworkStore
       .getState()

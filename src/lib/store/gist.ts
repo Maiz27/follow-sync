@@ -31,7 +31,13 @@ export type GistState = {
 export type GistActions = {
   setOwnerLogin: (ownerLogin: string | null) => void;
   setViewerLogin: (viewerLogin: string | null) => void;
-  setGistName: (gistName: string | null) => void;
+  /**
+   * Records `gistName` as the cache gist of `ownerLogin`. Named explicitly so
+   * a write that finishes after the account changed can't file its gist under
+   * the new account: the in-memory id only changes when `ownerLogin` is still
+   * the store's owner.
+   */
+  setGistName: (gistName: string | null, ownerLogin: string | null) => void;
   setDuplicateGistCount: (count: number) => void;
   setForceNextRefresh: (force: boolean) => void;
   setLastDiff: (diff: NetworkDiff | null) => void;
@@ -71,12 +77,12 @@ export const useGistStore = create<GistStore>((set, get) => ({
   setViewerLogin: (viewerLogin) => {
     set({ viewerLogin: viewerLogin?.toLowerCase() ?? null });
   },
-  setGistName: (gistName) => {
-    const { ownerLogin } = get();
-    if (ownerLogin) {
-      writeStorage(gistIdStorageKey(ownerLogin), gistName);
+  setGistName: (gistName, forOwnerLogin) => {
+    const owner = forOwnerLogin?.toLowerCase() ?? null;
+    if (owner) {
+      writeStorage(gistIdStorageKey(owner), gistName);
     }
-    set({ gistName });
+    if (owner === get().ownerLogin) set({ gistName });
   },
   setDuplicateGistCount: (duplicateGistCount) => {
     set({ duplicateGistCount });

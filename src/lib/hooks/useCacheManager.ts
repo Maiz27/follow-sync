@@ -155,7 +155,7 @@ export const useCacheManager = () => {
       writeStorage(LEGACY_GIST_ID_STORAGE_KEY, null);
       const localGistName = readStorage(gistIdStorageKey(username));
       if (!useGistStore.getState().gistName) {
-        setGistName(localGistName);
+        setGistName(localGistName, username);
       }
 
       // The login cache writes are labelled with. Starts as the session login
@@ -227,7 +227,7 @@ export const useCacheManager = () => {
               identityLogin
             );
             activeGistName = getGistIdentifier(canonicalGist);
-            setGistName(activeGistName);
+            setGistName(activeGistName, username);
 
             if (duplicateGists.length > 0) {
               toast.info(
@@ -244,12 +244,16 @@ export const useCacheManager = () => {
               )
             ) {
               try {
-                const migratedGist = await enqueuePersist(() =>
-                  writeCache(normalizedCachedData, canonicalGist.id)
-                );
+                const migratedGist = await enqueuePersist(() => {
+                  // Superseded while queued: leave the gist to the newer sync.
+                  signal.throwIfAborted();
+                  return writeCache(normalizedCachedData, canonicalGist.id);
+                });
+                signal.throwIfAborted();
                 activeGistName = migratedGist.id;
-                setGistName(activeGistName);
+                setGistName(activeGistName, username);
               } catch (error) {
+                if (signal.aborted) throw error;
                 // The cache is still usable as read; the migration is retried
                 // on the next write.
                 console.warn('Failed to migrate the cache gist.', error);
@@ -410,6 +414,9 @@ export const useCacheManager = () => {
           // Serialized with every other cache write, and built from the store
           // at write time so it includes changes queued ahead of it.
           await enqueuePersist(async () => {
+            // Superseded while queued: the stores now belong to the newer
+            // sync (possibly another account), so this snapshot isn't ours.
+            signal.throwIfAborted();
             const gistId = useGistStore.getState().gistName ?? activeGistName;
             const newGist = await writeCache(
               snapshotStores({
@@ -420,9 +427,10 @@ export const useCacheManager = () => {
               gistId,
               { discoverCanonicalFallback: isForced || !gistId }
             );
-            setGistName(newGist.id);
+            setGistName(newGist.id, username);
           });
         } catch (error) {
+          if (signal.aborted) throw error;
           // The sync itself succeeded; only persisting it to the gist cache
           // failed. Keep the data and surface a non-fatal warning rather than
           // erroring the whole sync.
@@ -431,6 +439,9 @@ export const useCacheManager = () => {
             'Synced your network, but saving the cache to a gist failed.'
           );
         }
+        // Superseded during the write: the progress toast and the result
+        // belong to the newer sync.
+        signal.throwIfAborted();
 
         complete();
 
@@ -465,7 +476,12 @@ export const useCacheManager = () => {
     await enqueuePersist(async () => {
       // Read state inside the serialized section so each write sees the latest
       // network/ghosts/gist id produced by any preceding write.
-      const { metadata, gistName, viewerLogin } = useGistStore.getState();
+      const {
+        metadata,
+        gistName,
+        viewerLogin,
+        ownerLogin: accountLogin,
+      } = useGistStore.getState();
       const { network } = useNetworkStore.getState();
 
       if (!network || !metadata) return;
@@ -486,7 +502,10 @@ export const useCacheManager = () => {
       // Only commit the timestamp/metadata to the store after the write
       // succeeds, so a failed write doesn't show a misleading "last synced".
       const updatedGist = await writeCache(dataToCache, gistName);
-      setGistName(updatedGist.id);
+      setGistName(updatedGist.id, accountLogin);
+      // The account changed during the write: its stores were reset and
+      // aren't described by this write.
+      if (useGistStore.getState().ownerLogin !== accountLogin) return;
       setGistData({ timestamp: newTimestamp, metadata: dataToCache.metadata });
     });
   }, [isAuthenticated, sessionOwnerLogin, setGistData, setGistName]);
@@ -514,7 +533,7 @@ export const useCacheManager = () => {
     });
 
     if (result.canonicalGist) {
-      setGistName(result.canonicalGist.id);
+      setGistName(result.canonicalGist.id, useGistStore.getState().ownerLogin);
     }
 
     setDuplicateGistCount(result.remainingDuplicateCount);

@@ -13,9 +13,9 @@ describe('account-scoped storage', () => {
 
   it('stores the gist id per account', () => {
     useGistStore.getState().setOwnerLogin('Alice');
-    useGistStore.getState().setGistName('gist-a');
+    useGistStore.getState().setGistName('gist-a', 'Alice');
     useGistStore.getState().setOwnerLogin('bob');
-    useGistStore.getState().setGistName('gist-b');
+    useGistStore.getState().setGistName('gist-b', 'bob');
 
     expect(window.localStorage.getItem(gistIdStorageKey('alice'))).toBe(
       'gist-a'
@@ -24,8 +24,19 @@ describe('account-scoped storage', () => {
   });
 
   it('does not remember a gist id before the owner is known', () => {
-    useGistStore.getState().setGistName('orphan');
+    useGistStore.getState().setGistName('orphan', null);
     expect(window.localStorage.length).toBe(0);
+  });
+
+  it('files a gist under the account it belongs to, even after a switch', () => {
+    useGistStore.getState().setOwnerLogin('bob');
+    useGistStore.getState().setGistName('gist-a', 'alice');
+
+    expect(window.localStorage.getItem(gistIdStorageKey('alice'))).toBe(
+      'gist-a'
+    );
+    expect(window.localStorage.getItem(gistIdStorageKey('bob'))).toBeNull();
+    expect(useGistStore.getState().gistName).toBeNull();
   });
 
   it('clearUserStorage removes account keys and the legacy key only', () => {
