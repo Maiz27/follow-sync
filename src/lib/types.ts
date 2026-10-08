@@ -1,5 +1,6 @@
 import { UserInfoFragment } from './gql/types';
 import { SettingsState } from './store/settings';
+import type { NetworkDiff } from './networkDiff';
 
 /**
  * How a connection is classified.
@@ -69,6 +70,10 @@ export interface CachedData {
   removedGhosts?: string[];
   /** Optional: caches written before settings were persisted omit it. */
   settings?: CachedSettings;
+  /** Lowercased logins never suggested in the One-Way lists. */
+  ignoredLogins?: string[];
+  /** Changes found by the most recent sync that had something to compare. */
+  lastDiff?: NetworkDiff | null;
   timestamp: number;
   metadata: {
     totalConnections: number;

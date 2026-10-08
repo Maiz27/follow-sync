@@ -14,7 +14,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { useGhostStore } from '@/lib/store/ghost';
 import { NetworkUser } from '@/lib/types';
 import { formatNumber, cn } from '@/lib/utils';
-import { LuGhost, LuBuilding2 } from 'react-icons/lu';
+import { LuGhost, LuBuilding2, LuEllipsis, LuEyeOff } from 'react-icons/lu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 import { Checkbox } from '../ui/checkbox';
 import { useSettingsStore } from '@/lib/store/settings';
 
@@ -30,9 +36,19 @@ type ConnectionCardProps = {
     isSelected: boolean;
     onSelect: (id: string) => void;
   };
+  /** Ignore-list controls ("never suggest @x in the One-Way lists"). */
+  ignore?: {
+    isIgnored: boolean;
+    onToggle: (login: string) => void;
+  };
 };
 
-const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
+const ConnectionCard = ({
+  user,
+  selection,
+  action,
+  ignore,
+}: ConnectionCardProps) => {
   const { onClick, label, loading, isDisabled } = action || {};
   const isGhostInStore = useGhostStore((state) => state.isGhost(user.login));
   const showAvatars = useSettingsStore((state) => state.showAvatars);
@@ -67,7 +83,7 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
           selection?.isSelected && 'border-primary'
         )}
       >
-        {(isGhost || isOrg) && (
+        {(isGhost || isOrg || ignore?.isIgnored) && (
           <div
             className={cn('absolute top-2', canSelect ? 'right-10' : 'right-2')}
           >
@@ -76,10 +92,15 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
                 <LuGhost />
                 Ghost
               </Badge>
-            ) : (
+            ) : isOrg ? (
               <Badge variant='secondary'>
                 <LuBuilding2 />
                 Org
+              </Badge>
+            ) : (
+              <Badge variant='outline' title='Not suggested in One-Way lists'>
+                <LuEyeOff />
+                Ignored
               </Badge>
             )}
           </div>
@@ -122,7 +143,7 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
             </div>
           </CardContent>
         )}
-        <CardFooter>
+        <CardFooter className='gap-2'>
           {canAct && (
             <Button
               size='sm'
@@ -133,6 +154,31 @@ const ConnectionCard = ({ user, selection, action }: ConnectionCardProps) => {
             >
               {label}
             </Button>
+          )}
+          {ignore && !isGhost && !isOrg && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size='icon'
+                  variant='ghost'
+                  className='ml-auto size-8'
+                  aria-label={`More actions for @${user.login}`}
+                >
+                  <LuEllipsis />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align='end'>
+                <DropdownMenuItem
+                  className='px-2 py-1.5'
+                  onSelect={() => ignore.onToggle(user.login)}
+                >
+                  <LuEyeOff />
+                  {ignore.isIgnored
+                    ? 'Suggest in One-Way lists again'
+                    : 'Never suggest in One-Way lists'}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </CardFooter>
       </Card>

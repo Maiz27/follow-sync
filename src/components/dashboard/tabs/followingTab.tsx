@@ -34,6 +34,7 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
       exportName='follow-sync-following'
       users={following}
       action={action}
+      ignorable
       empty={{
         icon: LuHeart,
         title: 'You are not following anyone yet',

@@ -8,6 +8,7 @@ import { TabHeader } from './tabHeader';
 import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
 import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
 import { useListControls } from '@/lib/hooks/useListControls';
+import { useIgnoreList } from '@/lib/hooks/useIgnoreList';
 import { NetworkUser } from '@/lib/types';
 
 /**
@@ -41,6 +42,10 @@ type ConnectionListTabProps = {
   action?: ConnectionListAction;
   /** Ghost rows are selectable (the Ghosts tab removes them). */
   includeGhosts?: boolean;
+  /** Offer the ignore-list menu on user cards. */
+  ignorable?: boolean;
+  /** A One-Way suggestion list: ignored accounts are hidden by default. */
+  hideIgnoredByDefault?: boolean;
 };
 
 const isOrganization = (user: NetworkUser) =>
@@ -58,9 +63,30 @@ const ConnectionListTab = ({
   empty,
   action,
   includeGhosts = false,
+  ignorable = false,
+  hideIgnoredByDefault = false,
 }: ConnectionListTabProps) => {
-  const { search, setSearch, sort, setSort, processed, isSearching } =
-    useListControls(users, { listId });
+  const { ignoredLogins, toggleIgnored } = useIgnoreList();
+  const {
+    search,
+    setSearch,
+    sort,
+    setSort,
+    filters,
+    setFilter,
+    availableFilters,
+    processed,
+    isSearching,
+  } = useListControls(users, {
+    listId,
+    ignoredLogins,
+    defaultFilters: { hideIgnored: hideIgnoredByDefault },
+  });
+
+  const isIgnoredUser = useCallback(
+    (user: NetworkUser) => ignoredLogins.has(user.login.toLowerCase()),
+    [ignoredLogins]
+  );
 
   const canAct = useCallback(
     (user: NetworkUser) =>
@@ -70,11 +96,17 @@ const ConnectionListTab = ({
     [action]
   );
 
+  // Ignored accounts can still be acted on one at a time, but never in bulk.
+  const canSelect = useCallback(
+    (user: NetworkUser) => canAct(user) && !isIgnoredUser(user),
+    [canAct, isIgnoredUser]
+  );
+
   const itemIds = useMemo(() => processed.map((u) => u.login), [processed]);
   // Listed (so pages line up with what's rendered) but never selectable.
   const unselectableIds = useMemo(
-    () => new Set(processed.filter((u) => !canAct(u)).map((u) => u.login)),
-    [processed, canAct]
+    () => new Set(processed.filter((u) => !canSelect(u)).map((u) => u.login)),
+    [processed, canSelect]
   );
 
   const {
@@ -148,6 +180,9 @@ const ConnectionListTab = ({
         setSort={setSort}
         data={processed}
         exportName={exportName}
+        filters={filters}
+        setFilter={setFilter}
+        availableFilters={availableFilters}
       />
       <PaginatedList
         listId={listId}
@@ -157,14 +192,22 @@ const ConnectionListTab = ({
           isSearching ? `No connections match "${search.trim()}".` : undefined
         }
         onClearSearch={isSearching ? () => setSearch('') : undefined}
-        renderItem={(item) =>
-          action && canAct(item) ? (
+        renderItem={(item) => {
+          const ignore = ignorable
+            ? { isIgnored: isIgnoredUser(item), onToggle: toggleIgnored }
+            : undefined;
+          return action && canAct(item) ? (
             <ConnectionCard
               user={item}
-              selection={{
-                isSelected: selectedIds.has(item.login),
-                onSelect: handleSelect,
-              }}
+              ignore={ignore}
+              selection={
+                canSelect(item)
+                  ? {
+                      isSelected: selectedIds.has(item.login),
+                      onSelect: handleSelect,
+                    }
+                  : undefined
+              }
               action={{
                 label: action.label,
                 loading: action.pendingLogins.has(item.login),
@@ -177,9 +220,9 @@ const ConnectionListTab = ({
               }}
             />
           ) : (
-            <ConnectionCard user={item} />
-          )
-        }
+            <ConnectionCard user={item} ignore={ignore} />
+          );
+        }}
       />
     </>
   );

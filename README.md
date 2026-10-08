@@ -16,6 +16,10 @@
 - **Rate-Limit Aware:** GitHub's `Retry-After` / `X-RateLimit-*` headers are honored. Short throttles pause syncs and bulk actions; long ones stop them cleanly with a "try again in N minutes" message instead of a pile of errors.
 - **Search, Sort & Export:** Filter every list by login or name, sort by followers/following/name, and export the current view as CSV (spreadsheet-safe) or JSON.
 - **Undo:** Single follow/unfollow actions can be undone from the confirmation toast.
+- **Ignore List:** Mark accounts you never want suggested (from a card's ⋯ menu or Settings). Ignored accounts are hidden from the One-Way lists by default and never bulk-selected. Stored in your cache gist.
+- **Changes Since Last Sync:** After a refresh, a dismissible summary shows new followers, who unfollowed you, and follows changed outside the app.
+- **Filters:** Hide organizations or ignored accounts in any list.
+- **Guided Start:** A short, dismissible tour explains each dashboard tab on your first visit.
 - **Large Networks:** The cache uses a compact format (~3-4x smaller than plain JSON) and is read past the Gist API's 1 MB inline limit, so networks with tens of thousands of connections load from cache instead of re-syncing.
 - **Customizable Settings:** Tailor your experience with settings for pagination, avatar display, and cache lifetime.
 

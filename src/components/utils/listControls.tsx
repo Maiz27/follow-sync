@@ -12,14 +12,15 @@ import {
 } from '@/components/ui/select';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { LuSearch, LuDownload } from 'react-icons/lu';
+import { LuSearch, LuDownload, LuFilter } from 'react-icons/lu';
 import { NetworkUser } from '@/lib/types';
 import { usersToCSV, usersToJSON } from '@/lib/utils';
-import type { SortOption } from '@/lib/hooks/useListControls';
+import type { ListFilters, SortOption } from '@/lib/hooks/useListControls';
 
 type ListControlsProps = {
   search: string;
@@ -30,6 +31,10 @@ type ListControlsProps = {
   data: NetworkUser[];
   /** Base name for exported files, e.g. "follow-sync-ghosts". */
   exportName: string;
+  filters?: ListFilters;
+  setFilter?: (key: keyof ListFilters, value: boolean) => void;
+  /** How many rows each filter would affect; filters with 0 are hidden. */
+  availableFilters?: { organizations: number; ignored: number };
 };
 
 const SORT_LABELS: Record<SortOption, string> = {
@@ -58,7 +63,16 @@ const ListControls = ({
   setSort,
   data,
   exportName,
+  filters,
+  setFilter,
+  availableFilters,
 }: ListControlsProps) => {
+  const showOrgFilter = (availableFilters?.organizations ?? 0) > 0;
+  const showIgnoredFilter = (availableFilters?.ignored ?? 0) > 0;
+  const activeFilterCount =
+    (filters?.hideOrganizations && showOrgFilter ? 1 : 0) +
+    (filters?.hideIgnored && showIgnoredFilter ? 1 : 0);
+
   return (
     <div className='mb-3 flex flex-col gap-2 sm:flex-row sm:items-center'>
       <div className='relative flex-1'>
@@ -88,6 +102,39 @@ const ListControls = ({
           ))}
         </SelectContent>
       </Select>
+
+      {filters && setFilter && (showOrgFilter || showIgnoredFilter) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant='outline' size='sm'>
+              <LuFilter />
+              Filters{activeFilterCount ? ` (${activeFilterCount})` : ''}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end'>
+            {showOrgFilter && (
+              <DropdownMenuCheckboxItem
+                checked={filters.hideOrganizations}
+                onCheckedChange={(checked) =>
+                  setFilter('hideOrganizations', checked === true)
+                }
+              >
+                Hide organizations ({availableFilters?.organizations})
+              </DropdownMenuCheckboxItem>
+            )}
+            {showIgnoredFilter && (
+              <DropdownMenuCheckboxItem
+                checked={filters.hideIgnored}
+                onCheckedChange={(checked) =>
+                  setFilter('hideIgnored', checked === true)
+                }
+              >
+                Hide ignored ({availableFilters?.ignored})
+              </DropdownMenuCheckboxItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import Stats from '@/components/dashboard/stats';
 import Analyzer from '@/components/dashboard/analyzer';
 import DashboardSkeleton from '@/components/dashboard/dashboardSkeleton';
+import ChangesSummary from '@/components/dashboard/changesSummary';
 import { Section } from '@/components/utils/section';
 import { Button } from '@/components/ui/button';
 import { useNetworkManager } from '@/lib/hooks/useNetworkManager';
@@ -112,6 +113,7 @@ const ClientDashboard = () => {
           )}
         </div>
       )}
+      <ChangesSummary />
       <Stats list={statsList} />
       <Analyzer
         refetch={refetch}

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { CachedData } from '@/lib/types';
+import type { NetworkDiff } from '@/lib/networkDiff';
 import { gistIdStorageKey } from '@/lib/constants';
 import { writeStorage } from '@/lib/storage';
 
@@ -14,6 +15,8 @@ export type GistState = {
   metadata: CachedData['metadata'] | null;
   duplicateGistCount: number;
   forceNextRefresh: boolean;
+  /** "Changes since last sync" summary, persisted in the cache. */
+  lastDiff: NetworkDiff | null;
 };
 
 export type GistActions = {
@@ -21,6 +24,7 @@ export type GistActions = {
   setGistName: (gistName: string | null) => void;
   setDuplicateGistCount: (count: number) => void;
   setForceNextRefresh: (force: boolean) => void;
+  setLastDiff: (diff: NetworkDiff | null) => void;
   setGistData: (data: {
     timestamp: number;
     metadata: CachedData['metadata'];
@@ -36,6 +40,7 @@ const initialState: GistState = {
   metadata: null,
   duplicateGistCount: 0,
   forceNextRefresh: false,
+  lastDiff: null,
 };
 
 export const useGistStore = create<GistStore>((set, get) => ({
@@ -55,6 +60,9 @@ export const useGistStore = create<GistStore>((set, get) => ({
   },
   setForceNextRefresh: (force) => {
     set({ forceNextRefresh: force });
+  },
+  setLastDiff: (lastDiff) => {
+    set({ lastDiff });
   },
   setGistData: (data) => {
     set(data);

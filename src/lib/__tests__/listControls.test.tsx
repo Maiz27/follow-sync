@@ -134,3 +134,40 @@ describe('usePaginatedList', () => {
     expect(usePaginationStore.getState().pagination.p.currentPage).toBe(1);
   });
 });
+
+describe('list filters', () => {
+  const org = {
+    ...makeUser('acme', 'Acme', 1),
+    accountType: 'organization' as const,
+  };
+  const index = buildSearchIndex([...users, org]);
+
+  it('hides organizations', () => {
+    expect(
+      filterAndSort(index, '', 'default', { hideOrganizations: true }).map(
+        (u) => u.login
+      )
+    ).toEqual(['alice', 'bob', 'carol']);
+  });
+
+  it('hides ignored accounts case-insensitively', () => {
+    expect(
+      filterAndSort(
+        buildSearchIndex([makeUser('Bob', null, 1), makeUser('eve', null, 1)]),
+        '',
+        'default',
+        { hideIgnored: true },
+        new Set(['bob'])
+      ).map((u) => u.login)
+    ).toEqual(['eve']);
+  });
+
+  it('resets to page 1 when a filter changes', () => {
+    usePaginationStore.setState({ pagination: { list: { currentPage: 4 } } });
+    const { result } = renderHook(() =>
+      useListControls(users, { listId: 'list' })
+    );
+    act(() => result.current.setFilter('hideOrganizations', true));
+    expect(usePaginationStore.getState().pagination.list.currentPage).toBe(1);
+  });
+});

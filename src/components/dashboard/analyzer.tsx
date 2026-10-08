@@ -15,6 +15,7 @@ import NonFollowingTab from './tabs/nonFollowingTab';
 import GhostsTab from './tabs/ghostsTab';
 import { Button } from '../ui/button';
 import UserSettings from '../user/userSettings';
+import Onboarding from './onboarding';
 import { useGistStore } from '@/lib/store/gist';
 import { useGhostStore } from '@/lib/store/ghost';
 import { UserInfoFragment } from '@/lib/gql/types';
@@ -115,6 +116,7 @@ const Analyzer = ({
         </div>
 
         <CardContent className='h-full w-full overflow-hidden px-0'>
+          <Onboarding />
           <TabManager
             tabs={networkTabsData}
             value={activeTab}

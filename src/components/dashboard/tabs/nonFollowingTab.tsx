@@ -34,6 +34,8 @@ const NonFollowingTab = ({ oneWayIn }: NonFollowingTabProps) => {
       exportName='follow-sync-one-way-in'
       users={oneWayIn}
       action={action}
+      ignorable
+      hideIgnoredByDefault
       empty={{
         icon: LuUserPlus,
         title: 'No One-Way In Connections',

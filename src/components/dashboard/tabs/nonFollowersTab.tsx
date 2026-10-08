@@ -34,6 +34,8 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
       exportName='follow-sync-one-way-out'
       users={oneWayOut}
       action={action}
+      ignorable
+      hideIgnoredByDefault
       empty={{
         icon: LuUserX,
         title: 'No One-Way Out Connections',

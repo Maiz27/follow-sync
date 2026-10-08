@@ -14,6 +14,7 @@ const FollowersTab = ({ followers }: FollowersTabProps) => (
     description={TAB_DESCRIPTIONS.followers}
     exportName='follow-sync-followers'
     users={followers}
+    ignorable
     empty={{
       icon: LuEye,
       title: 'No Followers',

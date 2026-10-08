@@ -6,6 +6,8 @@ import { useNetworkStore } from '@/lib/store/network';
 import { useGistStore } from '@/lib/store/gist';
 import { useGhostStore } from '@/lib/store/ghost';
 import { pickPersistedSettings, useSettingsStore } from '@/lib/store/settings';
+import { useIgnoreStore } from '@/lib/store/ignore';
+import { diffNetworks, hasChanges } from '@/lib/networkDiff';
 
 import {
   buildCacheKey,
@@ -51,6 +53,8 @@ const snapshotStores = ({
     ghosts,
     removedGhosts: [...removedGhostLogins],
     settings: pickPersistedSettings(useSettingsStore.getState()),
+    ignoredLogins: [...useIgnoreStore.getState().ignoredLogins],
+    lastDiff: useGistStore.getState().lastDiff,
     timestamp,
     metadata: {
       ...metadata,
@@ -88,6 +92,10 @@ export const useCacheManager = () => {
         timestamp: cachedData.timestamp,
         metadata: cachedData.metadata,
       });
+      useIgnoreStore
+        .getState()
+        .setIgnoredLogins(cachedData.ignoredLogins ?? []);
+      useGistStore.getState().setLastDiff(cachedData.lastDiff ?? null);
 
       if (cachedData.settings) {
         const settings = useSettingsStore.getState();
@@ -282,6 +290,21 @@ export const useCacheManager = () => {
         const ghosts = allGhosts.filter(
           (g) => !removedGhostSet.has(g.login.toLowerCase())
         );
+
+        // "Changes since last sync": compare against the snapshot this session
+        // already holds (the cache, plus any changes made in-app since), so
+        // only changes made elsewhere — new/lost followers etc. — show up.
+        const previousTimestamp = useGistStore.getState().timestamp;
+        if (previousTimestamp !== null) {
+          const diff = diffNetworks(
+            useNetworkStore.getState().network,
+            { followers, following },
+            { since: previousTimestamp, at: Date.now() }
+          );
+          if (hasChanges(diff)) {
+            useGistStore.getState().setLastDiff(diff);
+          }
+        }
 
         // Hydrate the store with the freshly fetched network first, so a gist
         // write failure can't throw away an expensive successful sync. Follows

@@ -26,7 +26,9 @@ import {
 } from '@/components/ui/select';
 import { Button } from '../ui/button';
 import { PAGE_SIZE_LIST } from '@/lib/constants';
-import { LuTrash2 } from 'react-icons/lu';
+import { LuTrash2, LuX } from 'react-icons/lu';
+import { useIgnoreList } from '@/lib/hooks/useIgnoreList';
+import { useIgnoreStore } from '@/lib/store/ignore';
 
 const SettingsModal = () => {
   const [isSaving, setIsSaving] = useState(false);
@@ -43,6 +45,25 @@ const SettingsModal = () => {
     saveSettings,
   } = useSettingsStore();
   const { persistChanges, cleanupDuplicateCaches } = useCacheManager();
+  const { ignoredLogins, unignore } = useIgnoreList();
+  const [ignoreInput, setIgnoreInput] = useState('');
+  const sortedIgnored = [...ignoredLogins].sort();
+
+  const handleAddIgnored = () => {
+    const login = ignoreInput.trim().replace(/^@/, '');
+    // GitHub logins: alphanumerics and single hyphens, up to 39 chars.
+    if (!/^[a-z\d](?:[a-z\d-]{0,38})$/i.test(login)) {
+      toast.error('Enter a valid GitHub username.');
+      return;
+    }
+    useIgnoreStore.getState().ignore(login);
+    setIgnoreInput('');
+    persistChanges().catch((error) =>
+      toast.warning(
+        toUserMessage(error, 'Added, but saving the ignore list failed.')
+      )
+    );
+  };
   const [staleTimeInput, setStaleTimeInput] = useState(
     customStaleTime === null ? '' : String(customStaleTime)
   );
@@ -89,7 +110,7 @@ const SettingsModal = () => {
 
   return (
     <Dialog open={modal?.type === 'settings'} onOpenChange={closeModal}>
-      <DialogContent>
+      <DialogContent className='max-h-[90vh] overflow-y-auto'>
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
@@ -164,6 +185,63 @@ const SettingsModal = () => {
                 Enter a whole number of minutes (1 or more), or leave it empty.
               </p>
             )}
+          </div>
+          <div className='grid gap-2 rounded-md border p-4'>
+            <p className='text-sm font-medium' id='ignored-accounts-label'>
+              Ignored accounts
+            </p>
+            <p className='text-xs text-muted-foreground'>
+              Never suggested in the One-Way lists and never bulk-selected. You
+              can also ignore someone from the ⋯ menu on their card.
+            </p>
+            {sortedIgnored.length === 0 ? (
+              <p className='text-xs text-muted-foreground'>None yet.</p>
+            ) : (
+              <ul
+                aria-labelledby='ignored-accounts-label'
+                className='flex max-h-32 flex-wrap gap-2 overflow-y-auto'
+              >
+                {sortedIgnored.map((login) => (
+                  <li
+                    key={login}
+                    className='flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs'
+                  >
+                    @{login}
+                    <button
+                      type='button'
+                      className='cursor-pointer rounded-sm opacity-70 hover:opacity-100'
+                      aria-label={`Stop ignoring @${login}`}
+                      onClick={() => unignore(login)}
+                    >
+                      <LuX />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form
+              className='flex gap-2'
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleAddIgnored();
+              }}
+            >
+              <Input
+                value={ignoreInput}
+                onChange={(e) => setIgnoreInput(e.target.value)}
+                placeholder='username'
+                aria-label='Username to ignore'
+                className='h-8'
+              />
+              <Button
+                type='submit'
+                size='sm'
+                variant='outline'
+                disabled={!ignoreInput.trim()}
+              >
+                Ignore
+              </Button>
+            </form>
           </div>
           <div className='grid gap-2 rounded-md border p-4'>
             <div className='flex items-center justify-between gap-4'>
