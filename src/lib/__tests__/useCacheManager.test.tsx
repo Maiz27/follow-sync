@@ -41,11 +41,15 @@ import {
   GIST_CACHE_VERSION,
   GIST_FILENAME,
   LEGACY_GIST_ID_STORAGE_KEY,
+  QUERY_KEY_USER_NETWORK,
   gistIdStorageKey,
 } from '@/lib/constants';
+import { getQueryClient } from '@/app/get-query-client';
 import { useGistStore } from '@/lib/store/gist';
 import { useNetworkStore } from '@/lib/store/network';
 import { useGhostStore } from '@/lib/store/ghost';
+import { useIgnoreStore } from '@/lib/store/ignore';
+import { useSettingsStore } from '@/lib/store/settings';
 import type { CacheGist, CachedData, NetworkUser } from '@/lib/types';
 
 const client = new GraphQLClient('https://example.test/graphql');
@@ -150,6 +154,13 @@ beforeEach(() => {
     ghostsSet: new Set(),
     removedGhostLogins: new Set(),
   });
+  useIgnoreStore.setState({ ignoredLogins: new Set() });
+  useSettingsStore.setState({
+    showAvatars: true,
+    paginationPageSize: 100,
+    customStaleTime: null,
+  });
+  getQueryClient().clear();
   mocks.writeCache.mockImplementation(async () => ({
     id: 'G1',
     name: 'G1',
@@ -481,5 +492,151 @@ describe('useCacheManager: changes since last sync', () => {
     expect(
       useNetworkStore.getState().network.following.map((u) => u.login)
     ).toEqual(['friend', 'buddy']);
+  });
+});
+
+describe('useCacheManager: switching accounts in the same tab', () => {
+  const aliceDiff = {
+    since: 1,
+    at: 2,
+    newFollowers: ['someone'],
+    lostFollowers: [],
+    newFollowing: [],
+    removedFollowing: [],
+    counts: {
+      newFollowers: 1,
+      lostFollowers: 0,
+      newFollowing: 0,
+      removedFollowing: 0,
+    },
+  };
+
+  /** Alice's dashboard, loaded from her cache and then used for a while. */
+  const signInAsAlice = async () => {
+    mocks.session.login = 'alice';
+    const aliceCache = cacheData('alice', {
+      ignoredLogins: ['spam'],
+      removedGhosts: ['oldghost'],
+      lastDiff: aliceDiff,
+      settings: {
+        showAvatars: false,
+        paginationPageSize: 50,
+        customStaleTime: null,
+      },
+    });
+    mocks.findCanonicalCacheGist.mockResolvedValueOnce(
+      discovery(gistFor(aliceCache, 'alice'), 'alice')
+    );
+    const { result } = renderHook(() => useCacheManager());
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(
+        client,
+        'alice',
+        progress()
+      );
+    });
+    expect(useGistStore.getState().gistName).toBe('G1');
+    expect(mocks.writeCache).not.toHaveBeenCalled();
+
+    // A follow and an unfollow that haven't settled yet, and a
+    // duplicate-cache warning.
+    useNetworkStore.getState().optimisticFollow(user('crush'));
+    const unfollow = useNetworkStore
+      .getState()
+      .optimisticUnfollow(user('friend'));
+    useGistStore.getState().setDuplicateGistCount(2);
+    return { unfollow };
+  };
+
+  const signInAsBob = async () => {
+    mocks.session.login = 'bob';
+    mocks.findCanonicalCacheGist.mockResolvedValueOnce(discovery(null, 'bob'));
+    mocks.fetchAndClassifyNetwork.mockResolvedValueOnce(
+      fetched({
+        viewerLogin: 'bob',
+        followers: [user('bobfan')],
+        following: [],
+      })
+    );
+    mocks.writeCache.mockResolvedValueOnce({ id: 'GB', name: 'GB', files: [] });
+    const { result } = renderHook(() => useCacheManager());
+    await act(async () => {
+      await result.current.initializeAndFetchNetwork(client, 'bob', progress());
+    });
+  };
+
+  it("never carries the previous account's state into the next account's cache", async () => {
+    window.localStorage.setItem(gistIdStorageKey('alice'), 'G1');
+    await signInAsAlice();
+    await signInAsBob();
+
+    // Bob's discovery isn't pointed at Alice's gist...
+    expect(mocks.findCanonicalCacheGist).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ownerLogin: 'bob', preferredGistId: null })
+    );
+    // ...and his first write neither targets it nor carries her data.
+    expect(mocks.writeCache).toHaveBeenCalledTimes(1);
+    const [written, gistId, options] = mocks.writeCache.mock.calls[0];
+    expect(gistId).toBeNull();
+    expect(options).toEqual({ discoverCanonicalFallback: true });
+    expect(written).toMatchObject({
+      network: { followers: [user('bobfan')], following: [] },
+      ignoredLogins: [],
+      removedGhosts: [],
+      lastDiff: null,
+      settings: { showAvatars: true },
+      metadata: { ownerLogin: 'bob' },
+    });
+
+    expect(useGistStore.getState()).toMatchObject({
+      ownerLogin: 'bob',
+      gistName: 'GB',
+      duplicateGistCount: 0,
+      lastDiff: null,
+    });
+    expect(useNetworkStore.getState().pendingOps).toEqual([]);
+    expect(useIgnoreStore.getState().ignoredLogins.size).toBe(0);
+    expect(window.localStorage.getItem(gistIdStorageKey('alice'))).toBe('G1');
+    expect(window.localStorage.getItem(gistIdStorageKey('bob'))).toBe('GB');
+  });
+
+  it("does not let the previous account's in-flight change touch the next account's network", async () => {
+    const { unfollow } = await signInAsAlice();
+    await signInAsBob();
+
+    // Alice's unfollow fails after the switch: undoing it must not add her
+    // friend to Bob's list.
+    unfollow.rollback();
+
+    expect(useNetworkStore.getState().network).toEqual({
+      followers: [user('bobfan')],
+      following: [],
+    });
+  });
+
+  it("drops the previous account's network query so switching back reloads it", async () => {
+    const queryClient = getQueryClient();
+    queryClient.setQueryData([QUERY_KEY_USER_NETWORK, 'alice'], { a: 1 });
+    queryClient.setQueryData([QUERY_KEY_USER_NETWORK, 'bob'], { b: 1 });
+
+    await signInAsAlice();
+    await signInAsBob();
+
+    expect(
+      queryClient.getQueryData([QUERY_KEY_USER_NETWORK, 'alice'])
+    ).toBeUndefined();
+    expect(queryClient.getQueryData([QUERY_KEY_USER_NETWORK, 'bob'])).toEqual({
+      b: 1,
+    });
+  });
+
+  it('does not report a diff against a snapshot of another account', async () => {
+    await signInAsAlice();
+    // Even if a previous account's sync time survived somehow.
+    useGistStore.setState({ ownerLogin: 'bob', syncedAt: 1 });
+    await signInAsBob();
+
+    expect(useGistStore.getState().lastDiff).toBeNull();
+    expect(lastWrite().lastDiff).toBeNull();
   });
 });

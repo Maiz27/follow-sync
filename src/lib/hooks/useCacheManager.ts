@@ -7,6 +7,7 @@ import { useGistStore } from '@/lib/store/gist';
 import { useGhostStore } from '@/lib/store/ghost';
 import { pickPersistedSettings, useSettingsStore } from '@/lib/store/settings';
 import { useIgnoreStore } from '@/lib/store/ignore';
+import { switchAccount } from '@/lib/store/account';
 import { diffNetworks, hasChanges } from '@/lib/networkDiff';
 
 import {
@@ -88,7 +89,6 @@ export const useCacheManager = () => {
     (state) => state.setRemovedGhostLogins
   );
   const setGistName = useGistStore((state) => state.setGistName);
-  const setOwnerLogin = useGistStore((state) => state.setOwnerLogin);
   const setDuplicateGistCount = useGistStore(
     (state) => state.setDuplicateGistCount
   );
@@ -138,12 +138,16 @@ export const useCacheManager = () => {
       activeSync = controller;
       const { signal } = controller;
 
+      // The stores now belong to this account. Signing in as someone else
+      // (in another tab) resets everything the previous account left here,
+      // so none of it reaches this account's cache.
+      switchAccount(username);
+
       // The remembered gist id is scoped to this account. The old global key
       // is carried over once (unless this account already has its own) and
       // then dropped: it could belong to whoever used this browser before,
       // but it is only a hint — discovery still checks that GitHub reports
       // this account as the gist's owner before using it.
-      setOwnerLogin(username);
       const legacyGistName = readStorage(LEGACY_GIST_ID_STORAGE_KEY);
       if (legacyGistName && !readStorage(gistIdStorageKey(username))) {
         writeStorage(gistIdStorageKey(username), legacyGistName);
@@ -361,6 +365,8 @@ export const useCacheManager = () => {
         // The snapshot this session holds (the cache, plus any changes made
         // in-app since), read before the fetched lists replace it.
         const previousSyncedAt = useGistStore.getState().syncedAt;
+        const previousOwnerLogin =
+          useGistStore.getState().metadata?.ownerLogin?.toLowerCase() ?? null;
         const previousNetwork = useNetworkStore.getState().network;
 
         // Hydrate the store with the freshly fetched network first, so a gist
@@ -373,8 +379,12 @@ export const useCacheManager = () => {
         // "Changes since last sync": diff the previous snapshot against the
         // fetched lists *with* in-app changes re-applied, so only changes made
         // elsewhere show up — not a follow made here while GitHub was being
-        // read. A sync that finds nothing replaces the previous diff.
-        if (previousSyncedAt !== null) {
+        // read. A sync that finds nothing replaces the previous diff. Only a
+        // snapshot of this same account is compared; any other diff held
+        // here isn't this account's.
+        if (previousOwnerLogin !== identityLogin) {
+          useGistStore.getState().setLastDiff(null);
+        } else if (previousSyncedAt !== null) {
           const diff = diffNetworks(
             previousNetwork,
             useNetworkStore.getState().network,
@@ -445,7 +455,6 @@ export const useCacheManager = () => {
       setRemovedGhostLogins,
       setDuplicateGistCount,
       setGistName,
-      setOwnerLogin,
       setGistData,
     ]
   );

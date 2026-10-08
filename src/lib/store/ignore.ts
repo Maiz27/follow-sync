@@ -10,6 +10,7 @@ export type IgnoreStore = {
   setIgnoredLogins: (logins: string[]) => void;
   ignore: (login: string) => void;
   unignore: (login: string) => void;
+  reset: () => void;
 };
 
 export const useIgnoreStore = create<IgnoreStore>((set, get) => ({
@@ -26,6 +27,7 @@ export const useIgnoreStore = create<IgnoreStore>((set, get) => ({
     next.delete(login.toLowerCase());
     set({ ignoredLogins: next });
   },
+  reset: () => set({ ignoredLogins: new Set() }),
 }));
 
 export const isIgnored = (ignored: ReadonlySet<string>, login: string) =>

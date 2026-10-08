@@ -25,6 +25,11 @@ export type GhostActions = {
   optimisticRemoveGhost: (login: string) => Rollback;
   setRemovedGhostLogins: (logins: string[]) => void;
   isGhost: (login: string) => boolean;
+  /**
+   * Back to the empty state for another account; rollbacks returned before
+   * the reset become no-ops.
+   */
+  reset: () => void;
 };
 
 export type GhostStore = GhostState & GhostActions;
@@ -34,6 +39,9 @@ const initialState: GhostState = {
   ghostsSet: new Set(),
   removedGhostLogins: new Set(),
 };
+
+// Bumped by `reset`; a rollback only acts within the account it was made for.
+let accountEpoch = 0;
 
 export const useGhostStore = create<GhostStore>((set, get) => ({
   ...initialState,
@@ -63,8 +71,10 @@ export const useGhostStore = create<GhostStore>((set, get) => ({
     const removed = index === -1 ? null : before[index];
     const wasTombstoned = get().removedGhostLogins.has(key);
     get().removeGhosts([login]);
+    const epoch = accountEpoch;
 
     return () => {
+      if (epoch !== accountEpoch) return;
       const { ghosts, removedGhostLogins } = get();
       const nextGhosts = [...ghosts];
       if (removed && !ghosts.some((g) => g.login.toLowerCase() === key)) {
@@ -84,5 +94,13 @@ export const useGhostStore = create<GhostStore>((set, get) => ({
   },
   isGhost: (login) => {
     return get().ghostsSet.has(login);
+  },
+  reset: () => {
+    accountEpoch++;
+    set({
+      ghosts: [],
+      ghostsSet: new Set(),
+      removedGhostLogins: new Set(),
+    });
   },
 }));

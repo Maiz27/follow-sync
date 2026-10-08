@@ -5,16 +5,19 @@ import { signIn, signOut } from 'next-auth/react';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
 import { clearUserStorage } from '@/lib/storage';
+import { resetAccountState } from '@/lib/store/account';
 
 /**
  * Signs the user out and returns them to the landing page. Shared by every
  * sign-out entry point (dropdown, landing page) so they behave identically.
  * Account-scoped localStorage (the remembered cache gist id) is cleared first,
- * so the next account on this browser can't pick up the previous one's cache.
+ * so the next account on this browser can't pick up the previous one's cache,
+ * and the in-memory account state is dropped once the session is gone.
  */
-export const signOutAndReset = () => {
+export const signOutAndReset = async () => {
   clearUserStorage();
-  return signOut({ redirectTo: '/' });
+  await signOut({ redirectTo: '/' });
+  resetAccountState();
 };
 
 export const SignInButton = ({

@@ -14,6 +14,8 @@ export type SettingsActions = {
   setPaginationPageSize: (size: number) => void;
   setCustomStaleTime: (time: number | null) => void;
   saveSettings: (persistChanges: () => Promise<void>) => Promise<void>;
+  /** Restores the defaults of the settings saved in an account's cache. */
+  resetPersistedSettings: () => void;
 };
 
 export type SettingsStore = SettingsState & SettingsActions;
@@ -27,11 +29,18 @@ export const clampPageSize = (size: number) => {
   return allowed.length ? allowed[allowed.length - 1] : PAGE_SIZE_LIST[0];
 };
 
-export const useSettingsStore = create<SettingsStore>((set) => ({
-  isSettingsModalOpen: false,
+const DEFAULT_PERSISTED_SETTINGS = {
   showAvatars: true,
   paginationPageSize: PAGE_SIZE_LIST[0],
   customStaleTime: null,
+} satisfies Pick<
+  SettingsState,
+  'showAvatars' | 'paginationPageSize' | 'customStaleTime'
+>;
+
+export const useSettingsStore = create<SettingsStore>((set) => ({
+  isSettingsModalOpen: false,
+  ...DEFAULT_PERSISTED_SETTINGS,
   toggleSettingsModal: () =>
     set((state) => ({ isSettingsModalOpen: !state.isSettingsModalOpen })),
   setShowAvatars: (show) => set({ showAvatars: show }),
@@ -41,6 +50,7 @@ export const useSettingsStore = create<SettingsStore>((set) => ({
   saveSettings: async (persistChanges) => {
     await persistChanges();
   },
+  resetPersistedSettings: () => set(DEFAULT_PERSISTED_SETTINGS),
 }));
 
 /**

@@ -35,6 +35,8 @@ export type GistActions = {
   setDuplicateGistCount: (count: number) => void;
   setForceNextRefresh: (force: boolean) => void;
   setLastDiff: (diff: NetworkDiff | null) => void;
+  /** Forgets everything about the current account (in memory only). */
+  reset: () => void;
   setGistData: (data: {
     timestamp: number;
     /** Omit to keep the current sync time (a plain write). */
@@ -84,6 +86,9 @@ export const useGistStore = create<GistStore>((set, get) => ({
   },
   setLastDiff: (lastDiff) => {
     set({ lastDiff });
+  },
+  reset: () => {
+    set(initialState);
   },
   setGistData: ({ timestamp, syncedAt, metadata }) => {
     set(

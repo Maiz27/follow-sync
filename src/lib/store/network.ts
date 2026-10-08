@@ -54,6 +54,12 @@ export type NetworkActions = {
   optimisticFollow: (user: NetworkUser) => OptimisticHandle;
   /** Optimistically remove a followed user, recomputing non-mutuals. */
   optimisticUnfollow: (user: NetworkUser) => OptimisticHandle;
+  /**
+   * Back to the empty state for another account. Handles of changes made
+   * before the reset become no-ops, so a late rollback can't edit the next
+   * account's network.
+   */
+  reset: () => void;
 };
 
 export type NetworkStore = NetworkState & NetworkActions;
@@ -105,6 +111,15 @@ export const applyPendingOps = (network: Network, ops: PendingOp[]): Network =>
 let nextOpId = 1;
 
 export const useNetworkStore = create<NetworkStore>((set, get) => {
+  // Bumped by `reset`; a handle only acts within the account it was made for.
+  let accountEpoch = 0;
+  const scoped = (fn: () => void) => {
+    const epoch = accountEpoch;
+    return () => {
+      if (epoch === accountEpoch) fn();
+    };
+  };
+
   const addOp = (kind: PendingOp['kind'], user: NetworkUser) => {
     const op: PendingOp = {
       id: nextOpId++,
@@ -159,7 +174,7 @@ export const useNetworkStore = create<NetworkStore>((set, get) => {
       return {
         // Targeted undo: remove only this user from the *current* list, so
         // follows/unfollows made concurrently (or a sync that landed) survive.
-        rollback: () => {
+        rollback: scoped(() => {
           dropOp(opId);
           const current = get().network;
           set(
@@ -168,8 +183,8 @@ export const useNetworkStore = create<NetworkStore>((set, get) => {
               following: withoutUser(current.following, user),
             })
           );
-        },
-        commit: () => settleOp(opId),
+        }),
+        commit: scoped(() => settleOp(opId)),
       };
     },
     optimisticUnfollow: (user) => {
@@ -188,16 +203,20 @@ export const useNetworkStore = create<NetworkStore>((set, get) => {
       const opId = addOp('unfollow', removed);
       return {
         // Targeted undo: put this one user back near its old position.
-        rollback: () => {
+        rollback: scoped(() => {
           dropOp(opId);
           const current = get().network;
           if (current.following.some((u) => isSameUser(u, removed))) return;
           const following = [...current.following];
           following.splice(Math.min(index, following.length), 0, removed);
           set(setNetworkState({ ...current, following }));
-        },
-        commit: () => settleOp(opId),
+        }),
+        commit: scoped(() => settleOp(opId)),
       };
+    },
+    reset: () => {
+      accountEpoch++;
+      set(initialState);
     },
   };
 });
