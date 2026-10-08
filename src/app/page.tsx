@@ -1,4 +1,3 @@
-import { auth } from '@/app/auth';
 import GetStarted from '@/components/auth/getStarted';
 import Stats from '@/components/dashboard/stats';
 import { Heading } from '@/components/utils/heading';
@@ -25,9 +24,7 @@ const HOW_IT_WORKS = [
   },
 ];
 
-export default async function Home() {
-  const session = await auth();
-
+export default function Home() {
   // Illustrative numbers only — the landing page never has your real data.
   const sampleStats = [
     { ...STATS_DATA[0], value: 1234 },
@@ -48,13 +45,12 @@ export default async function Home() {
           you're always in sync with your professional network.`}
         </SubText>
 
-        <GetStarted session={session} />
+        <GetStarted />
       </Section>
 
       <Section className='py-10'>
         <p className='mb-3 text-center text-sm text-muted-foreground'>
-          Sample dashboard — example numbers.{' '}
-          {session ? 'Open your dashboard' : 'Sign in'} to see yours.
+          Sample dashboard — example numbers. Your own appear on your dashboard.
         </p>
         <Stats list={sampleStats} />
       </Section>
