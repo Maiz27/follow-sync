@@ -11,7 +11,9 @@ export const useNetworkManager = (username?: string) => {
   const { client, status: authStatus } = useClientAuthenticatedGraphQLClient();
   const { data: session } = useSession();
   const { initializeAndFetchNetwork } = useCacheManager();
-  const { setForceNextRefresh } = useGistStore();
+  const setForceNextRefresh = useGistStore(
+    (state) => state.setForceNextRefresh
+  );
   const progress = useProgress();
 
   // The key is the account. The client, session and progress callbacks are

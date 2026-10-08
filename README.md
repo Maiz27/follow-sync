@@ -60,7 +60,7 @@ This project is currently in active development.
 | Command          | What it does                                       |
 | ---------------- | -------------------------------------------------- |
 | `pnpm dev`       | Start the dev server (Turbopack) on port 3000      |
-| `pnpm build`     | Production build (`AUTH_SECRET` must be set)       |
+| `pnpm build`     | Production build (no env vars needed)              |
 | `pnpm start`     | Serve the production build                         |
 | `pnpm lint`      | ESLint (Next.js + TanStack Query rules)            |
 | `pnpm typecheck` | `tsc --noEmit`                                     |
