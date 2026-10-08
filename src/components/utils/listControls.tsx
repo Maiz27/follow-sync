@@ -41,7 +41,7 @@ const SORT_LABELS: Record<SortOption, string> = {
   default: 'Default order',
   followers: 'Most followers',
   following: 'Most following',
-  alphabetical: 'Name (A–Z)',
+  alphabetical: 'Name (A to Z)',
 };
 
 const downloadFile = (content: string, filename: string, mime: string) => {

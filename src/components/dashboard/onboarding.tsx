@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '../ui/button';
 import { readStorage, writeStorage } from '@/lib/storage';
-import { LuInfo, LuX } from 'react-icons/lu';
+import { LuEllipsis, LuInfo, LuX } from 'react-icons/lu';
 
 /** Browser preference (not account data), so it survives sign-out. */
 export const ONBOARDING_STORAGE_KEY = 'follow-sync:pref:onboarding-dismissed';
@@ -67,9 +67,15 @@ const Onboarding = () => {
         ))}
       </ul>
       <p className='mt-2 text-muted-foreground'>
-        Select cards for bulk actions, use the ⋯ menu to stop suggesting someone
-        in the One-Way lists, and export any list as CSV or JSON. Everything is
-        cached in a secret gist in your own account.
+        Select cards for bulk actions, use the{' '}
+        <LuEllipsis
+          className='inline size-4 align-text-bottom'
+          aria-label='More'
+          role='img'
+        />{' '}
+        menu on a card to stop suggesting someone in the One-Way lists, and
+        export any list as CSV or JSON. Everything is cached in a secret gist in
+        your own account.
       </p>
       <Button size='sm' className='mt-3' onClick={dismiss}>
         Got it

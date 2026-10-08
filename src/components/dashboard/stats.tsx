@@ -39,7 +39,7 @@ const Stats = ({ list }: StatsProps) => {
               </CardDescription>
             </CardHeader>
             <CardContent className='grid place-items-center'>
-              <span className='text-5xl text-primary'>
+              <span className='text-5xl font-semibold tracking-tight text-primary tabular-nums'>
                 {formatNumber(item.value)}
               </span>
             </CardContent>

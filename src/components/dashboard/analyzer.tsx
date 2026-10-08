@@ -96,8 +96,8 @@ const Analyzer = ({
   return (
     <Card>
       <CardHeader>
-        <div className='mb-2 flex flex-col justify-between md:flex-row md:items-center'>
-          <div>
+        <div className='mb-2 flex flex-col justify-between gap-2 md:flex-row md:items-center'>
+          <div className='grid gap-1.5'>
             <CardTitle>Your Network, Deep Dive</CardTitle>
             <CardDescription>
               Explore detailed lists for comprehensive network understanding.
@@ -107,25 +107,26 @@ const Analyzer = ({
           <UserSettings />
         </div>
 
-        <div className='mb-2 flex flex-col justify-between md:flex-row md:items-center'>
-          <span className='flex items-center gap-2'>
-            <IoSync /> Last synced: {syncedAt ? timeAgo(syncedAt) : 'Never'}
+        <div className='flex flex-col justify-between gap-2 md:flex-row md:items-center'>
+          <span className='flex items-center gap-2 text-sm text-muted-foreground'>
+            <IoSync aria-hidden='true' /> Last synced:{' '}
+            {syncedAt ? timeAgo(syncedAt) : 'Never'}
           </span>
           <Button size='sm' onClick={() => refetch()} disabled={isFetching}>
             <IoSync className={isFetching ? 'animate-spin' : ''} />
             {isFetching ? 'Refreshing...' : 'Refresh'}
           </Button>
         </div>
-
-        <CardContent className='h-full w-full overflow-hidden px-0'>
-          <Onboarding />
-          <TabManager
-            tabs={networkTabsData}
-            value={activeTab}
-            onValueChange={handleTabChange}
-          />
-        </CardContent>
       </CardHeader>
+
+      <CardContent className='h-full w-full overflow-hidden'>
+        <Onboarding />
+        <TabManager
+          tabs={networkTabsData}
+          value={activeTab}
+          onValueChange={handleTabChange}
+        />
+      </CardContent>
     </Card>
   );
 };

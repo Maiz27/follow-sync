@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '../ui/button';
 import { PAGE_SIZE_LIST } from '@/lib/constants';
-import { LuTrash2, LuX } from 'react-icons/lu';
+import { LuEllipsis, LuTrash2, LuX } from 'react-icons/lu';
 import { useIgnoreList } from '@/lib/hooks/useIgnoreList';
 import { useIgnoreStore } from '@/lib/store/ignore';
 
@@ -192,7 +192,13 @@ const SettingsModal = () => {
             </p>
             <p className='text-xs text-muted-foreground'>
               Never suggested in the One-Way lists and never bulk-selected. You
-              can also ignore someone from the ⋯ menu on their card.
+              can also ignore someone from the{' '}
+              <LuEllipsis
+                className='inline size-3.5 align-text-bottom'
+                aria-label='More'
+                role='img'
+              />{' '}
+              menu on their card.
             </p>
             {sortedIgnored.length === 0 ? (
               <p className='text-xs text-muted-foreground'>None yet.</p>
