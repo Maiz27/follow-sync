@@ -4,7 +4,7 @@ import { NetworkUser, textSizes } from './types';
 import type { RestFollowingEntry } from './gql/fetchers';
 import { Metadata } from 'next';
 import { OpenGraph } from 'next/dist/lib/metadata/types/opengraph-types';
-import { BASE_URL, METADATA } from './constants';
+import { BASE_URL, METADATA, SITE_NAME } from './constants';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -66,6 +66,16 @@ export const timeAgo = (timestamp: number) => {
   }
 
   return 'just now';
+};
+
+/**
+ * GitHub stores the profile website as typed, often without a scheme
+ * ("example.com"), which a plain href would resolve relative to this site.
+ */
+export const toExternalUrl = (value?: string | null) => {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 };
 
 export const textSizesClasses: Record<NonNullable<textSizes>, string> = {
@@ -223,9 +233,17 @@ export const getNonMutuals = (network: {
   };
 };
 
-const csvEscape = (value: string | number): string => {
-  const str = String(value);
-  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+/**
+ * Escapes one CSV cell. Text cells starting with a formula trigger (`=`, `+`,
+ * `-`, `@`, tab or CR) are prefixed with `'` so spreadsheet apps show them as
+ * text instead of evaluating them — display names are attacker-controlled.
+ */
+export const csvEscape = (value: string | number): string => {
+  let str = String(value);
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+  return /[",\n\r]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
 };
 
 /** Serializes a list of connections to CSV for export. */
@@ -266,53 +284,58 @@ export const usersToJSON = (users: NetworkUser[]): string =>
     2
   );
 
+/**
+ * Builds page metadata from the METADATA table. Non-home titles are short and
+ * rendered through the root layout's `%s | Follow Sync` template; Open Graph
+ * titles are always the full title. Icons and the web manifest are declared
+ * once in the root layout / `app/manifest.ts`, not per page.
+ */
 export const getPageMetadata = (name: string): Metadata | undefined => {
   const pageMetaData = METADATA.get(name);
 
-  if (pageMetaData)
-    return {
-      metadataBase: new URL(BASE_URL),
-      title: pageMetaData.title,
+  if (!pageMetaData) return undefined;
+
+  const fullTitle = pageMetaData.absoluteTitle
+    ? pageMetaData.title
+    : `${pageMetaData.title} | ${SITE_NAME}`;
+
+  return {
+    metadataBase: new URL(BASE_URL),
+    title: pageMetaData.absoluteTitle
+      ? { absolute: pageMetaData.title }
+      : pageMetaData.title,
+    description: pageMetaData.description,
+    alternates: {
+      canonical: pageMetaData.url,
+    },
+    openGraph: {
+      type: pageMetaData.type,
+      url: pageMetaData.url,
+      title: fullTitle,
       description: pageMetaData.description,
-      alternates: {
-        canonical: pageMetaData.url,
-      },
-      icons: {
-        icon: pageMetaData.icon,
-        shortcut: pageMetaData.icon,
-        apple: '/imgs/logo/apple-icon.png',
-        other: {
-          rel: 'apple-touch-icon-precomposed',
-          url: pageMetaData.icon,
+      siteName: SITE_NAME,
+      images: [
+        {
+          url: pageMetaData.image,
         },
-      },
-      openGraph: {
-        type: pageMetaData.type,
-        url: pageMetaData.url,
-        title: pageMetaData.title,
-        description: pageMetaData.description,
-        siteName: pageMetaData.title,
-        images: [
-          {
-            url: pageMetaData.image,
-          },
-        ],
-      } as OpenGraph,
-      twitter: {
-        card: 'summary_large_image',
-        site: pageMetaData.url,
-        images: [
-          {
-            url: pageMetaData.image,
-          },
-        ],
-      },
-      robots: {
-        index: true,
-        follow: true,
-        'max-snippet': 50,
-        'max-image-preview': 'large',
-        'max-video-preview': -1,
-      },
-    };
+      ],
+    } as OpenGraph,
+    twitter: {
+      card: 'summary_large_image',
+      title: fullTitle,
+      description: pageMetaData.description,
+      images: [
+        {
+          url: pageMetaData.image,
+        },
+      ],
+    },
+    robots: {
+      index: true,
+      follow: true,
+      'max-snippet': 50,
+      'max-image-preview': 'large',
+      'max-video-preview': -1,
+    },
+  };
 };

@@ -11,7 +11,7 @@ const PrivacyPage = async () => {
 
   return (
     <div className='container mx-auto max-w-4xl px-4 py-12'>
-      <div className='mx-auto prose max-w-none prose-invert'>
+      <div className='mx-auto prose max-w-none dark:prose-invert'>
         <ReactMarkdown>{content}</ReactMarkdown>
       </div>
     </div>

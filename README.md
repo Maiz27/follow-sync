@@ -12,8 +12,16 @@
 - **Single-Click Follow/Unfollow:** Manage your network directly from the Follow Sync interface with optimistic UI updates for a seamless experience.
 - **Adaptive Caching:** Utilizes your own GitHub Gists as a database, with an intelligent caching mechanism to respect GitHub's API rate limits while keeping your data fresh.
 - **Secure & Private:** All your network data is stored in a private Gist that you own. Follow Sync never stores your data on its servers.
-- **Bulk Actions:** Select multiple users and perform follow/unfollow operations on them sequentially with progress tracking.
-- **Customizable Settings:** Tailor your experience with settings for pagination, avatar display, and more.
+- **Bulk Actions:** Select a page or every matching account and follow/unfollow/remove them sequentially, after a confirmation, with progress tracking and a Cancel button. Failed accounts are listed when the run ends.
+- **Rate-Limit Aware:** GitHub's `Retry-After` / `X-RateLimit-*` headers are honored. Short throttles pause syncs and bulk actions; long ones stop them cleanly with a "try again in N minutes" message instead of a pile of errors.
+- **Search, Sort & Export:** Filter every list by login or name, sort by followers/following/name, and export the current view as CSV (spreadsheet-safe) or JSON.
+- **Undo:** Single follow/unfollow actions can be undone from the confirmation toast.
+- **Ignore List:** Mark accounts you never want suggested (from a card's ⋯ menu or Settings). Ignored accounts are hidden from the One-Way lists by default and never bulk-selected. Stored in your cache gist.
+- **Changes Since Last Sync:** After a refresh, a dismissible summary shows new followers, who unfollowed you, and follows changed outside the app.
+- **Filters:** Hide organizations or ignored accounts in any list.
+- **Guided Start:** A short, dismissible tour explains each dashboard tab on your first visit.
+- **Large Networks:** The cache uses a compact format (~80 bytes per connection, ~3-4x smaller than plain JSON) split across several files in the gist: a small manifest plus chunk files under 1 MB each (roughly 10,000 connections per chunk). Every read and write request stays under Vercel's 4.5 MB function body limit, so there is no practical cap on network size; large networks just take a few more requests to load and save.
+- **Customizable Settings:** Tailor your experience with settings for pagination, avatar display, and cache lifetime.
 
 ## Technology Stack
 
@@ -47,6 +55,19 @@ This project is currently in active development.
 - [x] **Phase 7:** Performance Improvements & Testing
 - [x] **Phase 8:** User Settings
 
+## Scripts
+
+| Command          | What it does                                       |
+| ---------------- | -------------------------------------------------- |
+| `pnpm dev`       | Start the dev server (Turbopack) on port 3000      |
+| `pnpm build`     | Production build (no env vars needed)              |
+| `pnpm start`     | Serve the production build                         |
+| `pnpm lint`      | ESLint (Next.js + TanStack Query rules)            |
+| `pnpm typecheck` | `tsc --noEmit`                                     |
+| `pnpm test`      | Vitest (unit + hook tests, jsdom where needed)     |
+| `pnpm format`    | Prettier write (`pnpm format:check` to verify, CI) |
+| `pnpm codegen`   | Regenerate GraphQL types (needs `GITHUB_PAT`)      |
+
 ## Getting Started for Local Development
 
 To run this project locally, you first need to create and configure a GitHub OAuth App.
@@ -76,12 +97,18 @@ AUTH_GITHUB_SECRET="YOUR_CLIENT_SECRET"
 # You can generate one with: openssl rand -hex 32
 AUTH_SECRET="YOUR_AUTH_SECRET"
 
-# Personal Access Token (for graphql code generation)
+# Personal Access Token (only for `pnpm codegen`, not used at runtime)
 GITHUB_PAT="YOUR_GITHUB_PAT"
 
-# Domain
+# Public domain used for canonical URLs, Open Graph, sitemap and robots.
+# Optional: falls back to Vercel's VERCEL_PROJECT_PRODUCTION_URL / VERCEL_URL,
+# then to http://localhost:3000.
 NEXT_PUBLIC_DOMAIN="follow-sync.vercel.app"
 ```
+
+Nothing else is configured server-side: there is no database. Your network
+cache lives in a secret gist in your own GitHub account (keyed by your login);
+signing out clears the app's account-scoped browser storage.
 
 ### 3. Install Dependencies & Run
 

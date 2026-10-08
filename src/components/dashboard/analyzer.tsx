@@ -1,4 +1,5 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   Card,
   CardContent,
@@ -14,6 +15,7 @@ import NonFollowingTab from './tabs/nonFollowingTab';
 import GhostsTab from './tabs/ghostsTab';
 import { Button } from '../ui/button';
 import UserSettings from '../user/userSettings';
+import Onboarding from './onboarding';
 import { useGistStore } from '@/lib/store/gist';
 import { useGhostStore } from '@/lib/store/ghost';
 import { UserInfoFragment } from '@/lib/gql/types';
@@ -38,7 +40,9 @@ const Analyzer = ({
   nonMutualsFollowingYou,
 }: AnalyzerProps) => {
   const ghosts = useGhostStore((state) => state.ghosts);
-  const timestamp = useGistStore((state) => state.timestamp);
+  const syncedAt = useGistStore((state) => state.syncedAt);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const networkTabsData = useMemo(
     () => [
@@ -68,13 +72,25 @@ const Analyzer = ({
         component: <GhostsTab ghosts={ghosts} />,
       },
     ],
-    [
-      followers,
-      following,
-      nonMutualsYouFollow,
-      nonMutualsFollowingYou,
-      ghosts,
-    ]
+    [followers, following, nonMutualsYouFollow, nonMutualsFollowingYou, ghosts]
+  );
+
+  // The active tab lives in `?tab=` so it survives reloads and can be linked.
+  const requestedTab = searchParams.get('tab');
+  const activeTab = networkTabsData.some((tab) => tab.id === requestedTab)
+    ? (requestedTab as string)
+    : networkTabsData[0].id;
+
+  // The native History API updates the URL (and useSearchParams) in place;
+  // router.replace would make a server round-trip for the RSC payload on
+  // every tab click.
+  const handleTabChange = useCallback(
+    (tabId: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('tab', tabId);
+      window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
+    },
+    [pathname, searchParams]
   );
 
   return (
@@ -93,7 +109,7 @@ const Analyzer = ({
 
         <div className='mb-2 flex flex-col justify-between md:flex-row md:items-center'>
           <span className='flex items-center gap-2'>
-            <IoSync /> Last synced: {timeAgo(timestamp!)}
+            <IoSync /> Last synced: {syncedAt ? timeAgo(syncedAt) : 'Never'}
           </span>
           <Button size='sm' onClick={() => refetch()} disabled={isFetching}>
             <IoSync className={isFetching ? 'animate-spin' : ''} />
@@ -102,7 +118,12 @@ const Analyzer = ({
         </div>
 
         <CardContent className='h-full w-full overflow-hidden px-0'>
-          <TabManager tabs={networkTabsData} defaultValue='followers' />
+          <Onboarding />
+          <TabManager
+            tabs={networkTabsData}
+            value={activeTab}
+            onValueChange={handleTabChange}
+          />
         </CardContent>
       </CardHeader>
     </Card>

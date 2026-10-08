@@ -14,21 +14,56 @@ export type SettingsActions = {
   setPaginationPageSize: (size: number) => void;
   setCustomStaleTime: (time: number | null) => void;
   saveSettings: (persistChanges: () => Promise<void>) => Promise<void>;
+  /** Restores the defaults of the settings saved in an account's cache. */
+  resetPersistedSettings: () => void;
 };
 
 export type SettingsStore = SettingsState & SettingsActions;
 
-export const useSettingsStore = create<SettingsStore>((set) => ({
-  isSettingsModalOpen: false,
+/**
+ * Snaps a page size to the supported options (older caches may hold 500).
+ */
+export const clampPageSize = (size: number) => {
+  if (PAGE_SIZE_LIST.includes(size)) return size;
+  const allowed = PAGE_SIZE_LIST.filter((option) => option <= size);
+  return allowed.length ? allowed[allowed.length - 1] : PAGE_SIZE_LIST[0];
+};
+
+const DEFAULT_PERSISTED_SETTINGS = {
   showAvatars: true,
   paginationPageSize: PAGE_SIZE_LIST[0],
   customStaleTime: null,
+} satisfies Pick<
+  SettingsState,
+  'showAvatars' | 'paginationPageSize' | 'customStaleTime'
+>;
+
+export const useSettingsStore = create<SettingsStore>((set) => ({
+  isSettingsModalOpen: false,
+  ...DEFAULT_PERSISTED_SETTINGS,
   toggleSettingsModal: () =>
     set((state) => ({ isSettingsModalOpen: !state.isSettingsModalOpen })),
   setShowAvatars: (show) => set({ showAvatars: show }),
-  setPaginationPageSize: (size) => set({ paginationPageSize: size }),
+  setPaginationPageSize: (size) =>
+    set({ paginationPageSize: clampPageSize(size) }),
   setCustomStaleTime: (time) => set({ customStaleTime: time }),
   saveSettings: async (persistChanges) => {
     await persistChanges();
   },
+  resetPersistedSettings: () => set(DEFAULT_PERSISTED_SETTINGS),
 }));
+
+/**
+ * Extracts the user-facing settings that are persisted to the cache gist —
+ * never UI state such as whether the settings modal is open.
+ */
+export const pickPersistedSettings = (
+  state: SettingsState
+): Pick<
+  SettingsState,
+  'showAvatars' | 'paginationPageSize' | 'customStaleTime'
+> => ({
+  showAvatars: state.showAvatars,
+  paginationPageSize: state.paginationPageSize,
+  customStaleTime: state.customStaleTime,
+});

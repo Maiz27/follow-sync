@@ -11,19 +11,26 @@ import { Button } from '../ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LuBuilding2, LuMapPin, LuLink } from 'react-icons/lu';
 import { SiX } from 'react-icons/si';
+import { toExternalUrl } from '@/lib/utils';
 
-export const UserHoverCard = () => {
+export const UserHoverCard = ({
+  fallbackLogin,
+}: {
+  fallbackLogin?: string;
+}) => {
   const { data: session } = useSession();
 
   if (!session?.user) {
-    return null;
+    // Server-rendered pages pass the login so there's no blank while the
+    // client session loads.
+    return fallbackLogin ? <span>@{fallbackLogin}</span> : null;
   }
 
   const user = session.user;
   const properties = [
     { icon: LuBuilding2, value: user.company },
     { icon: LuMapPin, value: user.location },
-    { icon: LuLink, value: user.blog, href: user.blog },
+    { icon: LuLink, value: user.blog, href: toExternalUrl(user.blog) },
     {
       icon: SiX,
       value: user.twitter_username,
@@ -36,7 +43,9 @@ export const UserHoverCard = () => {
   return (
     <HoverCard>
       <HoverCardTrigger asChild>
-        <Button variant='link'>@{user.login}</Button>
+        <Button variant='link' className='h-auto p-0'>
+          @{user.login}
+        </Button>
       </HoverCardTrigger>
       <HoverCardContent className='w-fit max-w-md'>
         <div className='flex h-full w-full justify-between gap-4'>
@@ -53,7 +62,9 @@ export const UserHoverCard = () => {
           <div className='space-y-2'>
             <div className='grid'>
               <span className='text-lg font-semibold'>{user.name}</span>
-              <span className='text-xs text-muted-foreground'>@{user.login}</span>
+              <span className='text-xs text-muted-foreground'>
+                @{user.login}
+              </span>
             </div>
 
             <p className='py-1 text-sm'>{user.bio}</p>

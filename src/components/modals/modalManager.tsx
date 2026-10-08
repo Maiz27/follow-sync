@@ -21,7 +21,7 @@ const ModalManager = () => {
   if (!ModalComponent) {
     return null;
   }
-  
+
   return <ModalComponent {...modal.props} />;
 };
 

@@ -11,6 +11,9 @@ export type Tab = {
 type TabManagerProps<TTabs extends Tab[]> = {
   tabs: TTabs;
   defaultValue?: string;
+  /** Controlled active tab (e.g. mirrored in the URL). */
+  value?: string;
+  onValueChange?: (value: string) => void;
   tabsListClassName?: string;
   tabsContainerClassName?: string;
 };
@@ -18,6 +21,8 @@ type TabManagerProps<TTabs extends Tab[]> = {
 const TabManager = <TTabs extends Tab[]>({
   tabs,
   defaultValue,
+  value,
+  onValueChange,
   tabsListClassName,
   tabsContainerClassName,
 }: TabManagerProps<TTabs>) => {
@@ -31,18 +36,26 @@ const TabManager = <TTabs extends Tab[]>({
 
   return (
     <Tabs
-      defaultValue={initialDefaultValue}
+      defaultValue={value === undefined ? initialDefaultValue : undefined}
+      value={value}
+      onValueChange={onValueChange}
       className={cn('h-full w-full max-w-full', tabsContainerClassName)}
     >
-      <div className='inline-flex h-14 w-full justify-center overflow-x-auto bg-muted md:h-auto'>
+      {/* Scrolls horizontally on narrow screens instead of wrapping into a
+          fixed-height bar that clipped the second row. */}
+      <div className='w-full overflow-x-auto rounded-lg bg-muted'>
         <TabsList
           className={cn(
-            'flex-wrap justify-center gap-2 overflow-y-visible px-2 lg:w-full lg:flex-nowrap lg:justify-evenly lg:gap-0 lg:px-0',
+            'h-auto w-max min-w-full flex-nowrap justify-start gap-1 px-1 py-1 lg:justify-evenly',
             tabsListClassName
           )}
         >
           {tabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id}>
+            <TabsTrigger
+              key={tab.id}
+              value={tab.id}
+              className='flex-none py-1.5 lg:flex-1'
+            >
               {tab.label}
             </TabsTrigger>
           ))}

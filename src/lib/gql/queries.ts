@@ -6,15 +6,20 @@ import {
   FRAGMENT_USER_INFO,
 } from './fragments';
 
+/**
+ * Reads the signed-in user's own network through `viewer`, which always
+ * resolves to the token's account. Querying `user(login:)` with the login
+ * captured in the session at sign-in breaks if the account is renamed later.
+ */
 export const GET_USER_FOLLOWERS_AND_FOLLOWING = gql`
   query GetUserFollowersAndFollowing(
-    $login: String!
     $firstFollowers: Int = 100
     $afterFollowers: String
     $firstFollowing: Int = 100
     $afterFollowing: String
   ) {
-    user(login: $login) {
+    viewer {
+      login
       followers(first: $firstFollowers, after: $afterFollowers) {
         ...FollowerFields
       }
@@ -27,41 +32,5 @@ export const GET_USER_FOLLOWERS_AND_FOLLOWING = gql`
   ${FRAGMENT_USER_INFO}
   ${FRAGMENT_PAGE_INFO}
   ${FRAGMENT_FOLLOWER_FIELDS}
-  ${FRAGMENT_FOLLOWING_FIELDS}
-`;
-
-export const GET_USER_FOLLOWERS = gql`
-  query GetUserFollowers(
-    $login: String!
-    $firstFollowers: Int = 100
-    $afterFollowers: String
-  ) {
-    user(login: $login) {
-      followers(first: $firstFollowers, after: $afterFollowers) {
-        ...FollowerFields
-      }
-    }
-  }
-
-  ${FRAGMENT_USER_INFO}
-  ${FRAGMENT_PAGE_INFO}
-  ${FRAGMENT_FOLLOWER_FIELDS}
-`;
-
-export const GET_USER_FOLLOWING = gql`
-  query GetUserFollowing(
-    $login: String!
-    $firstFollowing: Int = 100
-    $afterFollowing: String
-  ) {
-    user(login: $login) {
-      following(first: $firstFollowing, after: $afterFollowing) {
-        ...FollowingFields
-      }
-    }
-  }
-
-  ${FRAGMENT_USER_INFO}
-  ${FRAGMENT_PAGE_INFO}
   ${FRAGMENT_FOLLOWING_FIELDS}
 `;

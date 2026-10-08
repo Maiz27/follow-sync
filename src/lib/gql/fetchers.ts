@@ -14,6 +14,12 @@ import type {
 } from '@/lib/gql/types';
 import { GraphQLClient } from 'graphql-request';
 import { ghRest, ghRestOk } from '@/lib/ghRest';
+import {
+  RateLimitError,
+  sleep,
+  withRetry,
+  type RetryBudget,
+} from '@/lib/rateLimit';
 
 /**
  * Defines the shape of the progress update object.
@@ -36,36 +42,6 @@ type GraphQLErrorLike = {
   };
 };
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Retries a transient-failing async task with exponential backoff. GitHub's
- * GraphQL endpoint occasionally returns 5xx/secondary-rate-limit errors during
- * long paginated syncs; a few bounded retries make large-network fetches far
- * more resilient than the previous fail-on-first-error behaviour.
- */
-const withRetry = async <T>(
-  task: () => Promise<T>,
-  {
-    retries = 3,
-    baseDelayMs = 500,
-  }: { retries?: number; baseDelayMs?: number } = {}
-): Promise<T> => {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await task();
-    } catch (error) {
-      lastError = error;
-      if (attempt === retries) break;
-      // Exponential backoff with jitter.
-      const delay = baseDelayMs * 2 ** attempt + Math.floor(attempt * 137);
-      await sleep(delay);
-    }
-  }
-  throw lastError;
-};
-
 const getErrorMessage = (error: unknown, fallbackMessage: string) => {
   if (typeof error === 'object' && error !== null) {
     const graphQLError = error as GraphQLErrorLike;
@@ -82,6 +58,25 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
 
   return fallbackMessage;
 };
+
+/** Options shared by the paginated fetchers of one sync. */
+export type PaginationOptions = {
+  /** Aborts the pagination (in-flight request, retries and waits). */
+  signal?: AbortSignal;
+  /** Called before sitting out a rate limit, with the wait in ms. */
+  onPause?: (waitMs: number) => void;
+  /** Shared cap on how long the whole sync may wait out rate limits. */
+  retryBudget?: RetryBudget;
+};
+
+const retryOptions = ({ signal, onPause, retryBudget }: PaginationOptions) => ({
+  signal,
+  onPause,
+  budget: retryBudget,
+});
+
+const isAbortError = (error: unknown) =>
+  error instanceof Error && error.name === 'AbortError';
 
 const getAccountKey = (user: Pick<User, 'id' | 'login'>) =>
   user.id || user.login.toLowerCase();
@@ -105,20 +100,39 @@ const mergeUniqueUsers = (
 };
 
 /**
- * Fetches all followers and following for a given GitHub user, with progress reporting.
+ * The cursor for the next page of a list. A page that claims more pages
+ * follow but hands back no cursor, or the cursor just requested, would make
+ * the loop re-request the same page until the retry budget runs out, so that
+ * is treated as an error instead.
+ */
+const nextPageCursor = (
+  list: 'followers' | 'following',
+  hasNextPage: boolean,
+  currentCursor: string | null,
+  endCursor: string | null | undefined
+): string | null => {
+  const next = endCursor || null;
+  if (hasNextPage && (!next || next === currentCursor)) {
+    throw new Error(`GitHub's ${list} pagination cursor did not advance.`);
+  }
+  return next;
+};
+
+/**
+ * Fetches all followers and following of the signed-in user (GraphQL `viewer`),
+ * with progress reporting. Also returns the viewer's current login as GitHub
+ * reports it, which can differ from the login captured at sign-in.
  * @param client - The authenticated GraphQL client.
- * @param username - The GitHub username to fetch data for.
  * @param onProgress - An optional callback function that receives progress updates.
  */
 export const fetchAllUserFollowersAndFollowing = async ({
   client,
-  username,
   onProgress,
+  ...options
 }: {
   client: GraphQLClient;
-  username: string;
   onProgress?: (progress: FetchProgress) => void;
-}) => {
+} & PaginationOptions) => {
   const allFollowers: Pick<FollowerFieldsFragment, 'nodes' | 'totalCount'> = {
     nodes: [],
     totalCount: 0,
@@ -137,10 +151,10 @@ export const fetchAllUserFollowersAndFollowing = async ({
   let currentCursorFollowing: string | null = null;
 
   const pageSize = 100;
+  let viewerLogin: string | null = null;
 
   while (hasNextPageFollowers || hasNextPageFollowing) {
     const variables: GetUserFollowersAndFollowingQueryVariables = {
-      login: username,
       firstFollowers: hasNextPageFollowers ? pageSize : 0,
       afterFollowers: currentCursorFollowers,
       firstFollowing: hasNextPageFollowing ? pageSize : 0,
@@ -148,15 +162,24 @@ export const fetchAllUserFollowersAndFollowing = async ({
     };
 
     try {
-      const data = await withRetry(() =>
-        client.request<
-          GetUserFollowersAndFollowingQuery,
-          GetUserFollowersAndFollowingQueryVariables
-        >(GET_USER_FOLLOWERS_AND_FOLLOWING, variables)
+      const data = await withRetry(
+        () =>
+          client.request<
+            GetUserFollowersAndFollowingQuery,
+            GetUserFollowersAndFollowingQueryVariables
+          >({
+            document: GET_USER_FOLLOWERS_AND_FOLLOWING,
+            variables,
+            signal: options.signal,
+          }),
+        retryOptions(options)
       );
+      options.signal?.throwIfAborted();
 
-      if (hasNextPageFollowers && data.user?.followers) {
-        const { nodes, totalCount, pageInfo } = data.user.followers;
+      viewerLogin = data.viewer?.login ?? viewerLogin;
+
+      if (hasNextPageFollowers && data.viewer?.followers) {
+        const { nodes, totalCount, pageInfo } = data.viewer.followers;
         mergeUniqueUsers(
           allFollowers.nodes as User[],
           nodes as User[],
@@ -166,11 +189,16 @@ export const fetchAllUserFollowersAndFollowing = async ({
           allFollowers.totalCount = totalCount;
         }
         hasNextPageFollowers = pageInfo?.hasNextPage || false;
-        currentCursorFollowers = pageInfo?.endCursor || null;
+        currentCursorFollowers = nextPageCursor(
+          'followers',
+          hasNextPageFollowers,
+          currentCursorFollowers,
+          pageInfo?.endCursor
+        );
       }
 
-      if (hasNextPageFollowing && data.user?.following) {
-        const { nodes, totalCount, pageInfo } = data.user.following;
+      if (hasNextPageFollowing && data.viewer?.following) {
+        const { nodes, totalCount, pageInfo } = data.viewer.following;
         mergeUniqueUsers(
           allFollowing.nodes as User[],
           nodes as User[],
@@ -180,7 +208,12 @@ export const fetchAllUserFollowersAndFollowing = async ({
           allFollowing.totalCount = totalCount;
         }
         hasNextPageFollowing = pageInfo?.hasNextPage || false;
-        currentCursorFollowing = pageInfo?.endCursor || null;
+        currentCursorFollowing = nextPageCursor(
+          'following',
+          hasNextPageFollowing,
+          currentCursorFollowing,
+          pageInfo?.endCursor
+        );
       }
 
       onProgress?.({
@@ -195,17 +228,20 @@ export const fetchAllUserFollowersAndFollowing = async ({
       });
 
       if (hasNextPageFollowers || hasNextPageFollowing) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await sleep(200, options.signal);
       }
     } catch (error: unknown) {
+      if (options.signal?.aborted || isAbortError(error)) throw error;
       console.error('Error fetching paginated follow data:', error);
+      if (error instanceof RateLimitError) throw error;
       throw new Error(
-        getErrorMessage(error, 'Failed to fetch paginated follow data.')
+        getErrorMessage(error, 'Failed to fetch paginated follow data.'),
+        { cause: error }
       );
     }
   }
 
-  return { followers: allFollowers, following: allFollowing };
+  return { followers: allFollowers, following: allFollowing, viewerLogin };
 };
 
 const REST_FOLLOWING_PATH = '/user/following';
@@ -234,17 +270,20 @@ type RawRestUser = {
 };
 
 const fetchRestUserList = async (
-  path: string
+  path: string,
+  options: PaginationOptions = {}
 ): Promise<RestFollowingEntry[]> => {
   const all: RestFollowingEntry[] = [];
 
   for (let page = 1; ; page++) {
     const pageItems = await withRetry(async () => {
       const data = await ghRest<RawRestUser[]>(
-        `${path}?per_page=${REST_PER_PAGE}&page=${page}`
+        `${path}?per_page=${REST_PER_PAGE}&page=${page}`,
+        { signal: options.signal }
       );
       return data ?? [];
-    });
+    }, retryOptions(options));
+    options.signal?.throwIfAborted();
     if (!pageItems.length) break;
 
     for (const item of pageItems) {
@@ -269,14 +308,16 @@ const fetchRestUserList = async (
  * organizations that GraphQL's User-only `FollowingConnection` cannot return
  * and to infer ghosts from entries present only in the completed GraphQL list.
  */
-export const fetchRestFollowing = () => fetchRestUserList(REST_FOLLOWING_PATH);
+export const fetchRestFollowing = (options?: PaginationOptions) =>
+  fetchRestUserList(REST_FOLLOWING_PATH, options);
 
 /**
  * Fetches the authenticated user's full followers list via the REST API. Once
  * both paginated lists complete, GraphQL-only entries are treated as ghosts
  * under the API behavior observed by this app.
  */
-export const fetchRestFollowers = () => fetchRestUserList(REST_FOLLOWERS_PATH);
+export const fetchRestFollowers = (options?: PaginationOptions) =>
+  fetchRestUserList(REST_FOLLOWERS_PATH, options);
 
 /**
  * Unfollows an inferred ghost by login via the REST API. This path does not
@@ -290,6 +331,20 @@ export const removeFollowingByLogin = ({
 }): Promise<boolean> =>
   ghRestOk(`${REST_FOLLOWING_PATH}/${encodeURIComponent(login)}`, {
     method: 'DELETE',
+  });
+
+/**
+ * Whether the signed-in user follows `login`, via REST
+ * `GET /user/following/{login}`: 204 means following, 404 means not. Used to
+ * confirm a ghost removal that 404'd (deleted/suspended accounts do).
+ */
+export const isFollowingLogin = ({
+  login,
+}: {
+  login: string;
+}): Promise<boolean> =>
+  ghRestOk(`${REST_FOLLOWING_PATH}/${encodeURIComponent(login)}`, {
+    method: 'GET',
   });
 
 export const followUser = async ({
@@ -307,7 +362,10 @@ export const followUser = async ({
     return response;
   } catch (error: unknown) {
     console.error('Error following user:', error);
-    throw new Error(getErrorMessage(error, 'Failed to follow user.'));
+    // Keep the original as `cause` so rate limits stay detectable upstream.
+    throw new Error(getErrorMessage(error, 'Failed to follow user.'), {
+      cause: error,
+    });
   }
 };
 
@@ -326,6 +384,8 @@ export const unfollowUser = async ({
     return response;
   } catch (error: unknown) {
     console.error('Error unfollowing user:', error);
-    throw new Error(getErrorMessage(error, 'Failed to unfollow user.'));
+    throw new Error(getErrorMessage(error, 'Failed to unfollow user.'), {
+      cause: error,
+    });
   }
 };

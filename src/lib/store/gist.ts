@@ -1,21 +1,52 @@
 import { create } from 'zustand';
 import { CachedData } from '@/lib/types';
-import { GIST_ID_STORAGE_KEY } from '@/lib/constants';
+import type { NetworkDiff } from '@/lib/networkDiff';
+import { gistIdStorageKey } from '@/lib/constants';
+import { writeStorage } from '@/lib/storage';
 
 export type GistState = {
+  /** When the cache was last written. */
   timestamp: number | null;
+  /** When the network was last fully synced from GitHub. */
+  syncedAt: number | null;
   gistName: string | null;
+  /**
+   * Login the remembered gist id belongs to. The id is stored per account, so
+   * nothing is written to localStorage until the owner is known.
+   */
+  ownerLogin: string | null;
+  /**
+   * The account's current login as GitHub reports it (GraphQL viewer, or the
+   * owner of its gists). Differs from the session login after a GitHub rename
+   * until the session refreshes; cache writes are labelled with it.
+   */
+  viewerLogin: string | null;
   metadata: CachedData['metadata'] | null;
   duplicateGistCount: number;
   forceNextRefresh: boolean;
+  /** "Changes since last sync" summary, persisted in the cache. */
+  lastDiff: NetworkDiff | null;
 };
 
 export type GistActions = {
-  setGistName: (gistName: string | null) => void;
+  setOwnerLogin: (ownerLogin: string | null) => void;
+  setViewerLogin: (viewerLogin: string | null) => void;
+  /**
+   * Records `gistName` as the cache gist of `ownerLogin`. Named explicitly so
+   * a write that finishes after the account changed can't file its gist under
+   * the new account: the in-memory id only changes when `ownerLogin` is still
+   * the store's owner.
+   */
+  setGistName: (gistName: string | null, ownerLogin: string | null) => void;
   setDuplicateGistCount: (count: number) => void;
   setForceNextRefresh: (force: boolean) => void;
+  setLastDiff: (diff: NetworkDiff | null) => void;
+  /** Forgets everything about the current account (in memory only). */
+  reset: () => void;
   setGistData: (data: {
     timestamp: number;
+    /** Omit to keep the current sync time (a plain write). */
+    syncedAt?: number;
     metadata: CachedData['metadata'];
   }) => void;
 };
@@ -24,21 +55,36 @@ export type GistStore = GistState & GistActions;
 
 const initialState: GistState = {
   timestamp: null,
+  syncedAt: null,
   gistName: null,
+  ownerLogin: null,
+  viewerLogin: null,
   metadata: null,
   duplicateGistCount: 0,
   forceNextRefresh: false,
+  lastDiff: null,
 };
 
-export const useGistStore = create<GistStore>((set) => ({
+export const useGistStore = create<GistStore>((set, get) => ({
   ...initialState,
-  setGistName: (gistName) => {
-    if (gistName) {
-      window.localStorage.setItem(GIST_ID_STORAGE_KEY, gistName);
-    } else {
-      window.localStorage.removeItem(GIST_ID_STORAGE_KEY);
+  setOwnerLogin: (ownerLogin) => {
+    const next = ownerLogin?.toLowerCase() ?? null;
+    // A different account: whatever identity was resolved for the previous
+    // one no longer applies.
+    if (next !== get().ownerLogin) set({ viewerLogin: null });
+    set({ ownerLogin: next });
+  },
+  setViewerLogin: (viewerLogin) => {
+    set({ viewerLogin: viewerLogin?.toLowerCase() ?? null });
+  },
+  setGistName: (gistName, forOwnerLogin) => {
+    const owner = forOwnerLogin?.toLowerCase() ?? null;
+    // Once the account state has been reset (sign-out), a write that finishes
+    // late must not put the signed-out account's gist id back in storage.
+    if (owner && get().ownerLogin !== null) {
+      writeStorage(gistIdStorageKey(owner), gistName);
     }
-    set({ gistName });
+    if (owner === get().ownerLogin) set({ gistName });
   },
   setDuplicateGistCount: (duplicateGistCount) => {
     set({ duplicateGistCount });
@@ -46,7 +92,17 @@ export const useGistStore = create<GistStore>((set) => ({
   setForceNextRefresh: (force) => {
     set({ forceNextRefresh: force });
   },
-  setGistData: (data) => {
-    set(data);
+  setLastDiff: (lastDiff) => {
+    set({ lastDiff });
+  },
+  reset: () => {
+    set(initialState);
+  },
+  setGistData: ({ timestamp, syncedAt, metadata }) => {
+    set(
+      syncedAt === undefined
+        ? { timestamp, metadata }
+        : { timestamp, syncedAt, metadata }
+    );
   },
 }));

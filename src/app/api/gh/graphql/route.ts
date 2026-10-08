@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGitHubToken } from '@/lib/server/githubToken';
+import { isSameOriginRequest } from '@/lib/server/requestGuards';
+import { buildProxyHeaders } from '@/lib/server/proxyHeaders';
 
 const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
 const UPSTREAM_TIMEOUT_MS = 30_000;
@@ -10,6 +12,10 @@ const UPSTREAM_TIMEOUT_MS = 30_000;
  * injected on the server, so it never reaches client code.
  */
 export async function POST(req: NextRequest) {
+  if (!isSameOriginRequest(req)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const token = await getGitHubToken(req);
   if (!token) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -36,7 +42,7 @@ export async function POST(req: NextRequest) {
     const data = await response.text();
     return new NextResponse(data, {
       status: response.status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildProxyHeaders(response),
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {

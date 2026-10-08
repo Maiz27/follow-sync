@@ -46,17 +46,39 @@ describe('fetchAndClassifyNetwork', () => {
     vi.clearAllMocks();
   });
 
-  it('propagates a GraphQL fetch rejection before starting REST fetches', async () => {
+  it('propagates a GraphQL fetch rejection', async () => {
     mocks.fetchGraphql.mockRejectedValue(
       new Error('GraphQL pagination failed')
     );
+    mocks.fetchRestFollowing.mockResolvedValue([]);
+    mocks.fetchRestFollowers.mockResolvedValue([]);
 
-    await expect(
-      fetchAndClassifyNetwork({ client, username: 'octocat' })
-    ).rejects.toThrow('GraphQL pagination failed');
+    await expect(fetchAndClassifyNetwork({ client })).rejects.toThrow(
+      'GraphQL pagination failed'
+    );
+  });
 
-    expect(mocks.fetchRestFollowing).not.toHaveBeenCalled();
-    expect(mocks.fetchRestFollowers).not.toHaveBeenCalled();
+  it('fetches the GraphQL and REST lists concurrently', async () => {
+    let resolveGraphql: (value: unknown) => void = () => undefined;
+    mocks.fetchGraphql.mockReturnValue(
+      new Promise((resolve) => {
+        resolveGraphql = resolve;
+      })
+    );
+    mocks.fetchRestFollowing.mockResolvedValue([]);
+    mocks.fetchRestFollowers.mockResolvedValue([]);
+
+    const pending = fetchAndClassifyNetwork({ client });
+
+    // REST is already in flight while GraphQL is still paginating.
+    expect(mocks.fetchRestFollowing).toHaveBeenCalled();
+    expect(mocks.fetchRestFollowers).toHaveBeenCalled();
+
+    resolveGraphql({
+      followers: { nodes: [], totalCount: 0 },
+      following: { nodes: [], totalCount: 0 },
+    });
+    await expect(pending).resolves.toMatchObject({ followers: [] });
   });
 
   it('propagates a REST fetch rejection without returning classified data', async () => {
@@ -69,9 +91,9 @@ describe('fetchAndClassifyNetwork', () => {
     );
     mocks.fetchRestFollowers.mockResolvedValue([]);
 
-    await expect(
-      fetchAndClassifyNetwork({ client, username: 'octocat' })
-    ).rejects.toThrow('REST pagination failed');
+    await expect(fetchAndClassifyNetwork({ client })).rejects.toThrow(
+      'REST pagination failed'
+    );
   });
 
   it('runs the real classifiers after every fetch completes', async () => {
@@ -93,10 +115,7 @@ describe('fetchAndClassifyNetwork', () => {
       makeRestEntry('activefollower'),
     ]);
 
-    const result = await fetchAndClassifyNetwork({
-      client,
-      username: 'octocat',
-    });
+    const result = await fetchAndClassifyNetwork({ client });
 
     expect(result.followers).toEqual([
       expect.objectContaining({
@@ -129,5 +148,68 @@ describe('fetchAndClassifyNetwork', () => {
     expect(result.graphqlFollowingLogins).toEqual(
       new Set(['activefollowing', 'followingghost'])
     );
+  });
+
+  describe('cancellation', () => {
+    /** A fetch that only settles when its signal aborts. */
+    const untilAborted = (options?: { signal?: AbortSignal }) =>
+      new Promise((_, reject) => {
+        options?.signal?.addEventListener('abort', () =>
+          reject(options.signal?.reason)
+        );
+      });
+
+    it('aborts the sibling paginations when one of them fails', async () => {
+      mocks.fetchGraphql.mockRejectedValue(new Error('GraphQL failed'));
+      mocks.fetchRestFollowing.mockImplementation(untilAborted);
+      mocks.fetchRestFollowers.mockImplementation(untilAborted);
+
+      await expect(fetchAndClassifyNetwork({ client })).rejects.toThrow(
+        'GraphQL failed'
+      );
+
+      const restSignal = mocks.fetchRestFollowing.mock.calls[0][0]?.signal;
+      expect(restSignal).toBeInstanceOf(AbortSignal);
+      expect(restSignal.aborted).toBe(true);
+      expect(mocks.fetchRestFollowers.mock.calls[0][0].signal.aborted).toBe(
+        true
+      );
+    });
+
+    it('aborts every pagination when the caller aborts (superseded sync)', async () => {
+      mocks.fetchGraphql.mockImplementation(
+        ({ signal }: { signal?: AbortSignal }) => untilAborted({ signal })
+      );
+      mocks.fetchRestFollowing.mockImplementation(untilAborted);
+      mocks.fetchRestFollowers.mockImplementation(untilAborted);
+      const controller = new AbortController();
+
+      const pending = fetchAndClassifyNetwork({
+        client,
+        signal: controller.signal,
+      });
+      controller.abort(new DOMException('Superseded', 'AbortError'));
+
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      expect(mocks.fetchGraphql.mock.calls[0][0].signal.aborted).toBe(true);
+    });
+
+    it('passes rate-limit pauses and one shared wait budget to every fetch', async () => {
+      const onRateLimitPause = vi.fn();
+      mocks.fetchGraphql.mockResolvedValue({
+        followers: { nodes: [], totalCount: 0 },
+        following: { nodes: [], totalCount: 0 },
+      });
+      mocks.fetchRestFollowing.mockResolvedValue([]);
+      mocks.fetchRestFollowers.mockResolvedValue([]);
+
+      await fetchAndClassifyNetwork({ client, onRateLimitPause });
+
+      const graphqlOptions = mocks.fetchGraphql.mock.calls[0][0];
+      const restOptions = mocks.fetchRestFollowing.mock.calls[0][0];
+      expect(graphqlOptions.onPause).toBe(onRateLimitPause);
+      expect(restOptions.onPause).toBe(onRateLimitPause);
+      expect(restOptions.retryBudget).toBe(graphqlOptions.retryBudget);
+    });
   });
 });

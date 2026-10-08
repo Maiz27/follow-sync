@@ -2,18 +2,23 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Logo from './logo';
 import UserDropDown from '../user/userDropDown';
 import { SignInButton } from '../auth/buttons';
 import { ThemeToggle } from '../theme/themeToggle';
 import { Separator } from '../ui/separator';
+import { Button } from '../ui/button';
+import { Skeleton } from '../ui/skeleton';
 import { GITHUB_REPO_URL } from '@/lib/constants';
-import { LuGithub } from 'react-icons/lu';
+import { LuGithub, LuLayoutDashboard } from 'react-icons/lu';
 import { SiGithub } from 'react-icons/si';
 
 const Navbar = () => {
   const { data: session, status } = useSession();
+  const pathname = usePathname();
+  const isOnDashboard = pathname?.startsWith('/dashboard');
 
   return (
     <header className='z-50 w-full bg-background'>
@@ -25,8 +30,23 @@ const Navbar = () => {
           </span>
         </Link>
         <div className='flex h-4 items-center space-x-2'>
-          {status === 'loading' ? null : session ? (
-            <UserDropDown />
+          {status === 'loading' ? (
+            // Fixed-size placeholder matching the avatar trigger, so the bar
+            // doesn't shift once the session resolves.
+            <Skeleton aria-hidden='true' className='size-9 rounded-full' />
+          ) : session ? (
+            <>
+              {!isOnDashboard && (
+                <Button asChild size='sm' variant='outline'>
+                  <Link href='/dashboard'>
+                    <LuLayoutDashboard />
+                    <span className='hidden sm:inline'>Dashboard</span>
+                    <span className='sr-only sm:hidden'>Dashboard</span>
+                  </Link>
+                </Button>
+              )}
+              <UserDropDown />
+            </>
           ) : (
             <SignInButton>
               <LuGithub />

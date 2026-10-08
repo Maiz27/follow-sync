@@ -30,16 +30,17 @@ const StarRepoModal = () => {
           <Button variant='outline' onClick={closeModal}>
             Later
           </Button>
-          <Link
-            href={GITHUB_REPO_URL}
-            target='_blank'
-            rel='noopener noreferrer'
-          >
-            <Button>
+          <Button asChild>
+            <Link
+              href={GITHUB_REPO_URL}
+              target='_blank'
+              rel='noopener noreferrer'
+              onClick={closeModal}
+            >
               <LuStar />
               Star on GitHub
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

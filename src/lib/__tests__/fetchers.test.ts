@@ -11,6 +11,7 @@ vi.mock('@/lib/ghRest', () => restMocks);
 import {
   fetchAllUserFollowersAndFollowing,
   fetchRestFollowing,
+  isFollowingLogin,
 } from '@/lib/gql/fetchers';
 import type { GetUserFollowersAndFollowingQuery } from '@/lib/gql/types';
 
@@ -25,7 +26,8 @@ const makeGraphqlUser = (login: string) => ({
 });
 
 const firstGraphqlPage = {
-  user: {
+  viewer: {
+    login: 'octocat',
     followers: {
       totalCount: 0,
       pageInfo: { hasNextPage: false, endCursor: null },
@@ -62,13 +64,14 @@ describe('paginated follow fetchers', () => {
     const client = new GraphQLClient('https://example.test/graphql');
     const request = vi.spyOn(client, 'request');
     request.mockResolvedValueOnce(firstGraphqlPage);
-    request.mockRejectedValue(new Error('GraphQL page 2 failed'));
+    request.mockRejectedValue(
+      Object.assign(new Error('GraphQL page 2 failed'), {
+        response: { status: 502 },
+      })
+    );
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const fetchPromise = fetchAllUserFollowersAndFollowing({
-      client,
-      username: 'octocat',
-    });
+    const fetchPromise = fetchAllUserFollowersAndFollowing({ client });
     const rejection = expect(fetchPromise).rejects.toThrow(
       'GraphQL page 2 failed'
     );
@@ -79,11 +82,54 @@ describe('paginated follow fetchers', () => {
     expect(request).toHaveBeenCalledTimes(5);
   });
 
+  it('rejects instead of re-requesting a page whose cursor does not advance', async () => {
+    const client = new GraphQLClient('https://example.test/graphql');
+    const request = vi.spyOn(client, 'request');
+    const stuck = {
+      viewer: {
+        ...firstGraphqlPage.viewer,
+        following: {
+          ...firstGraphqlPage.viewer.following,
+          pageInfo: { hasNextPage: true, endCursor: 'following-page-1' },
+        },
+      },
+    };
+    request.mockResolvedValueOnce(firstGraphqlPage).mockResolvedValue(stuck);
+
+    const rejection = expect(
+      fetchAllUserFollowersAndFollowing({ client })
+    ).rejects.toThrow('pagination cursor did not advance');
+    await vi.runAllTimersAsync();
+    await rejection;
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a page that says more follow but has no cursor', async () => {
+    const client = new GraphQLClient('https://example.test/graphql');
+    const request = vi.spyOn(client, 'request');
+    request.mockResolvedValue({
+      viewer: {
+        ...firstGraphqlPage.viewer,
+        following: {
+          ...firstGraphqlPage.viewer.following,
+          pageInfo: { hasNextPage: true, endCursor: null },
+        },
+      },
+    });
+
+    await expect(fetchAllUserFollowersAndFollowing({ client })).rejects.toThrow(
+      'pagination cursor did not advance'
+    );
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects the REST fetch instead of returning page 1 when page 2 fails', async () => {
     restMocks.ghRest.mockResolvedValueOnce(
       Array.from({ length: 100 }, (_, index) => makeRawRestUser(index))
     );
-    restMocks.ghRest.mockRejectedValue(new Error('REST page 2 failed'));
+    restMocks.ghRest.mockRejectedValue(
+      Object.assign(new Error('REST page 2 failed'), { status: 503 })
+    );
 
     const fetchPromise = fetchRestFollowing();
     const rejection =
@@ -95,7 +141,77 @@ describe('paginated follow fetchers', () => {
     expect(restMocks.ghRest).toHaveBeenCalledTimes(5);
     expect(restMocks.ghRest).toHaveBeenNthCalledWith(
       2,
-      '/user/following?per_page=100&page=2'
+      '/user/following?per_page=100&page=2',
+      expect.objectContaining({})
     );
+  });
+
+  it('does not retry client errors such as 404', async () => {
+    restMocks.ghRest.mockRejectedValue(
+      Object.assign(new Error('Not Found'), { status: 404 })
+    );
+
+    const fetchPromise = fetchRestFollowing();
+    const rejection = expect(fetchPromise).rejects.toThrow('Not Found');
+
+    await vi.runAllTimersAsync();
+    await rejection;
+
+    expect(restMocks.ghRest).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('fetcher cancellation', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('passes the abort signal to REST requests and stops paginating once aborted', async () => {
+    const controller = new AbortController();
+    restMocks.ghRest.mockImplementation(async () => {
+      controller.abort();
+      return Array.from({ length: 100 }, (_, index) => makeRawRestUser(index));
+    });
+
+    await expect(
+      fetchRestFollowing({ signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(restMocks.ghRest).toHaveBeenCalledTimes(1);
+    expect(restMocks.ghRest).toHaveBeenCalledWith(
+      '/user/following?per_page=100&page=1',
+      { signal: controller.signal }
+    );
+  });
+
+  it('passes the abort signal to GraphQL requests', async () => {
+    const controller = new AbortController();
+    const client = new GraphQLClient('https://example.test/graphql');
+    const request = vi.spyOn(client, 'request');
+    request.mockImplementation((async () => {
+      controller.abort();
+      return firstGraphqlPage;
+    }) as never);
+
+    await expect(
+      fetchAllUserFollowersAndFollowing({ client, signal: controller.signal })
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({ signal: controller.signal })
+    );
+  });
+});
+
+describe('isFollowingLogin', () => {
+  it('checks GET /user/following/{login} (204 following, 404 not)', async () => {
+    restMocks.ghRestOk.mockResolvedValueOnce(true);
+    await expect(isFollowingLogin({ login: 'a b' })).resolves.toBe(true);
+    expect(restMocks.ghRestOk).toHaveBeenCalledWith(
+      '/user/following/a%20b',
+      expect.objectContaining({ method: 'GET' })
+    );
+
+    restMocks.ghRestOk.mockResolvedValueOnce(false);
+    await expect(isFollowingLogin({ login: 'gone' })).resolves.toBe(false);
   });
 });

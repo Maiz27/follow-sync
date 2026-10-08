@@ -7,12 +7,58 @@ export const QUERY_KEY_USER_NETWORK = 'user-network';
 // access token is injected server-side so it never reaches client code.
 export const GH_GRAPHQL_PROXY = '/api/gh/graphql';
 export const GH_REST_PROXY = '/api/gh/rest';
+export const GH_GIST_RAW_PROXY = '/api/gh/gist-raw';
 
 // GitHub Gist
 export const GIST_DESCRIPTION_PREFIX = 'Follow Sync Cache';
-export const GIST_CACHE_VERSION = '3.0';
+/**
+ * Version written into new caches. '4.0' caches are sharded (see gist.ts): the
+ * file named `GIST_FILENAME` is a small manifest and the data lives in chunk
+ * files. Bumped from '3.0' so an older deployment (after a rollback) sees new
+ * caches as outdated and resyncs instead of misreading them.
+ */
+export const GIST_CACHE_VERSION = '4.0';
+/**
+ * Versions this code can read and serve without a resync: '3.0' single-file
+ * caches (legacy objects or compact-1) are still served and rewritten as '4.0'
+ * on the next write.
+ */
+export const READABLE_CACHE_VERSIONS: readonly string[] = ['3.0', '4.0'];
 export const GIST_FILENAME = '[FOLLOW_SYNC] Network Cache.json';
-export const GIST_ID_STORAGE_KEY = 'Follow Sync_gist_id';
+/** Chunk files of a sharded cache: `<prefix><generation>.<n>`. */
+export const GIST_CHUNK_PREFIX = '[FOLLOW_SYNC] Network Cache.part.';
+
+/**
+ * Vercel refuses function request and response bodies over 4.5 MB (413
+ * FUNCTION_PAYLOAD_TOO_LARGE), and every GitHub call goes through a function
+ * here. The proxies stay under this budget, with headroom.
+ */
+export const MAX_PROXY_BODY_BYTES = 4_000_000;
+/** Largest gist write (PATCH/POST body) the client sends in one request. */
+export const MAX_GIST_WRITE_BYTES = 3_500_000;
+/**
+ * Characters per cache chunk file. Under GitHub's 1 MB inline-content limit,
+ * so chunks usually arrive with the gist itself, and far under the proxy
+ * budget when one has to be fetched from its raw URL.
+ */
+export const CACHE_CHUNK_CHARS = 900_000;
+/**
+ * Request header asking the REST proxy to drop file contents from a gist
+ * response (`meta`): only names, sizes and revisions are needed.
+ */
+export const GIST_VIEW_HEADER = 'x-follow-sync-gist-view';
+/**
+ * localStorage keys. Anything tied to a GitHub account lives under
+ * `USER_STORAGE_PREFIX` and is keyed by login, so a second account on the same
+ * browser never picks up the first one's cache gist; sign-out clears the whole
+ * prefix. `LEGACY_GIST_ID_STORAGE_KEY` is the old global key: its value is moved
+ * to the signed-in account's key (still ownership-checked before use), then it
+ * is removed.
+ */
+export const USER_STORAGE_PREFIX = 'follow-sync:user:';
+export const LEGACY_GIST_ID_STORAGE_KEY = 'Follow Sync_gist_id';
+export const gistIdStorageKey = (login: string) =>
+  `${USER_STORAGE_PREFIX}${login.toLowerCase()}:gist-id`;
 
 // Adaptive Stale Times (in milliseconds)
 export const STALE_TIME_SMALL = 1000 * 60 * 15; // 15 minutes
@@ -21,24 +67,41 @@ export const STALE_TIME_LARGE = 1000 * 60 * 60 * 12; // 12 hours
 export const STALE_TIME_MANUAL_ONLY = Infinity; // Never stale, requires manual refresh
 
 // Metadata
-export const DOMAIN = process.env.NEXT_PUBLIC_DOMAIN ?? 'localhost';
-export const BASE_URL = `https://${DOMAIN}`;
+export const SITE_NAME = 'Follow Sync';
+
+/**
+ * Public origin used for canonical URLs, Open Graph, the sitemap and robots.
+ * Prefers the configured domain, then Vercel's production/deployment host,
+ * and finally a local dev server (served over http, not https).
+ */
+const resolveBaseUrl = () => {
+  const host =
+    process.env.NEXT_PUBLIC_DOMAIN ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_URL;
+  if (host) return `https://${host.replace(/^https?:\/\//, '')}`;
+  return `http://localhost:${process.env.PORT ?? 3000}`;
+};
+
+export const BASE_URL = resolveBaseUrl();
 
 export const GITHUB_REPO_URL = 'https://github.com/maiz27/follow-sync';
 
 export const DEFAULT_PAGE_SIZE = 100;
 
-export const PAGE_SIZE_LIST = [50, 100, 200, 500];
+// Capped at 200: every card is a real DOM subtree, and larger pages made
+// rendering/search noticeably janky on big networks.
+export const PAGE_SIZE_LIST = [50, 100, 200];
 
 export const METADATA = new Map([
   [
     'home',
     {
       title: 'Follow Sync | GitHub Follower Management Tool',
+      absoluteTitle: true,
       description:
         'The best way to manage your GitHub followers. Track, analyze, and grow your network effortlessly. Get insights into non-followers, fans, and more.',
       url: BASE_URL,
-      icon: '/imgs/logo/favicon.ico',
       image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',
     },
@@ -46,11 +109,10 @@ export const METADATA = new Map([
   [
     'dashboard',
     {
-      title: 'Dashboard | Follow Sync',
+      title: 'Dashboard',
       description:
         'Analyze your GitHub network. View your followers, following, non-followers, fans, and ghosts.',
       url: `${BASE_URL}/dashboard`,
-      icon: '/imgs/logo/favicon.ico',
       image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',
     },
@@ -58,11 +120,10 @@ export const METADATA = new Map([
   [
     'terms',
     {
-      title: 'Terms of Service | Follow Sync',
+      title: 'Terms of Service',
       description:
         'Review the terms and conditions for using Follow Sync, outlining your rights and responsibilities, acceptable use, and the service agreement for managing your GitHub network with our tool.',
       url: `${BASE_URL}/terms`,
-      icon: '/imgs/logo/favicon.ico',
       image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',
     },
@@ -70,11 +131,10 @@ export const METADATA = new Map([
   [
     'privacy',
     {
-      title: 'Privacy Policy | Follow Sync',
+      title: 'Privacy Policy',
       description:
         'Understand how Follow Sync handles your data, how it is used to analyze your GitHub network, and our commitment to protecting your privacy.',
       url: `${BASE_URL}/privacy`,
-      icon: '/imgs/logo/favicon.ico',
       image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',
     },

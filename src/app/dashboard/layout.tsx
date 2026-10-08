@@ -5,7 +5,11 @@ import { auth } from '@/app/auth';
 import Providers from '@/lib/context/provider';
 import { getPageMetadata } from '@/lib/utils';
 
-export const metadata: Metadata = getPageMetadata('dashboard')!;
+export const metadata: Metadata = {
+  ...getPageMetadata('dashboard')!,
+  // Private, per-user page: keep it out of search results.
+  robots: { index: false, follow: false },
+};
 
 export default async function Layout({
   children,

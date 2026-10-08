@@ -34,7 +34,6 @@ const baseCache = (name: string): CachedData => ({
   ghosts: [],
   removedGhosts: [],
   settings: {
-    isSettingsModalOpen: false,
     showAvatars: true,
     paginationPageSize: 100,
     customStaleTime: null,

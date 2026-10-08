@@ -13,6 +13,7 @@ interface PaginatedListProps<T> {
   maxPagesToShow?: number;
   gridClassName?: string;
   emptyMessage?: string;
+  onClearSearch?: () => void;
   paginationControlsClassName?: string;
 }
 
@@ -25,6 +26,7 @@ const PaginatedList = <T,>({
   maxPagesToShow = 5,
   gridClassName,
   emptyMessage,
+  onClearSearch,
   paginationControlsClassName,
 }: PaginatedListProps<T>) => {
   const {
@@ -45,6 +47,7 @@ const PaginatedList = <T,>({
         getItemKey={getItemKey}
         gridClassName={gridClassName}
         emptyMessage={emptyMessage}
+        onClearSearch={onClearSearch}
       />
       <div className={paginationControlsClassName}>
         <PaginationControls

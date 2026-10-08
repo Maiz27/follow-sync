@@ -1,0 +1,236 @@
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { IconType } from 'react-icons';
+import ConnectionCard from '../connectionCard';
+import PaginatedList from '@/components/utils/paginatedList';
+import EmptyState from '@/components/ui/empty-state';
+import ListControls from '@/components/utils/listControls';
+import { TabHeader } from './tabHeader';
+import { useSelectionManager } from '@/lib/hooks/useSelectionManager';
+import { useBulkOperation } from '@/lib/hooks/useBulkOperation';
+import { useListControls } from '@/lib/hooks/useListControls';
+import { useIgnoreList } from '@/lib/hooks/useIgnoreList';
+import { NetworkUser } from '@/lib/types';
+
+/**
+ * What a list can do to its rows. Single actions persist on their own; bulk
+ * actions run `runSilently` per row and `persist` once at the end.
+ */
+export type ConnectionListAction = {
+  /** Card button label, e.g. "Unfollow". */
+  label: string;
+  /** Verb for the bulk button/confirmation, e.g. "Unfollow". */
+  verb: string;
+  /** Progress title for bulk runs, e.g. "Unfollowing". */
+  progressTitle: string;
+  destructive?: boolean;
+  /** Single action; resolves to whether it succeeded. */
+  run: (user: NetworkUser) => Promise<boolean>;
+  runSilently: (user: NetworkUser) => Promise<unknown>;
+  persist: () => Promise<void>;
+  /** Logins with an action in flight, for per-card busy states. */
+  pendingLogins: ReadonlySet<string>;
+  /** Rows the action applies to; others render without button/checkbox. */
+  canAct?: (user: NetworkUser) => boolean;
+};
+
+type ConnectionListTabProps = {
+  listId: string;
+  description: string;
+  exportName: string;
+  users: NetworkUser[];
+  empty: { icon: IconType; title: string; description: string };
+  action?: ConnectionListAction;
+  /** Ghost rows are selectable (the Ghosts tab removes them). */
+  includeGhosts?: boolean;
+  /** Offer the ignore-list menu on user cards. */
+  ignorable?: boolean;
+  /** A One-Way suggestion list: ignored accounts are hidden by default. */
+  hideIgnoredByDefault?: boolean;
+};
+
+const isOrganization = (user: NetworkUser) =>
+  user.accountType === 'organization';
+
+/**
+ * Shared body of every dashboard list: search/sort/export controls, paging,
+ * selection, the confirmed bulk action and per-card actions.
+ */
+const ConnectionListTab = ({
+  listId,
+  description,
+  exportName,
+  users,
+  empty,
+  action,
+  includeGhosts = false,
+  ignorable = false,
+  hideIgnoredByDefault = false,
+}: ConnectionListTabProps) => {
+  const { ignoredLogins, toggleIgnored } = useIgnoreList();
+  const {
+    search,
+    setSearch,
+    sort,
+    setSort,
+    filters,
+    setFilter,
+    availableFilters,
+    processed,
+    isSearching,
+  } = useListControls(users, {
+    listId,
+    ignoredLogins,
+    defaultFilters: { hideIgnored: hideIgnoredByDefault },
+  });
+
+  const isIgnoredUser = useCallback(
+    (user: NetworkUser) => ignoredLogins.has(user.login.toLowerCase()),
+    [ignoredLogins]
+  );
+
+  const canAct = useCallback(
+    (user: NetworkUser) =>
+      Boolean(action) &&
+      !isOrganization(user) &&
+      (action?.canAct ? action.canAct(user) : true),
+    [action]
+  );
+
+  // Ignored accounts can still be acted on one at a time, but never in bulk.
+  const canSelect = useCallback(
+    (user: NetworkUser) => canAct(user) && !isIgnoredUser(user),
+    [canAct, isIgnoredUser]
+  );
+
+  const itemIds = useMemo(() => processed.map((u) => u.login), [processed]);
+  // Listed (so pages line up with what's rendered) but never selectable.
+  const unselectableIds = useMemo(
+    () => new Set(processed.filter((u) => !canSelect(u)).map((u) => u.login)),
+    [processed, canSelect]
+  );
+
+  const {
+    selectedIds,
+    handleSelect,
+    handleDeselect,
+    handleSelectPage,
+    handleSelectAll,
+    isAllSelected,
+    selectableCount,
+  } = useSelectionManager(listId, itemIds, { includeGhosts, unselectableIds });
+
+  const noopBulk = useCallback(async () => undefined, []);
+  const { execute: runBulk, isPending: isBulkRunning } = useBulkOperation(
+    action?.runSilently ?? noopBulk,
+    action?.progressTitle ?? '',
+    async (succeeded) => {
+      // Rows that failed (or were skipped) stay selected for a retry.
+      handleDeselect(...succeeded.map((u) => u.login));
+      await action?.persist();
+    }
+  );
+
+  // The latest action, read by the stable card callback below: the action
+  // object changes identity whenever its pending set does, and passing it
+  // straight to every memoized card would re-render the whole page.
+  const actionRef = useRef(action);
+  useEffect(() => {
+    actionRef.current = action;
+  }, [action]);
+
+  const handleAction = useCallback(
+    async (user: NetworkUser) => {
+      const succeeded = await actionRef.current?.run(user);
+      if (succeeded) handleDeselect(user.login);
+    },
+    [handleDeselect]
+  );
+
+  const selectedUsers = useMemo(
+    () => processed.filter((u) => selectedIds.has(u.login)),
+    [processed, selectedIds]
+  );
+
+  if (users.length === 0) {
+    return (
+      <EmptyState
+        icon={empty.icon}
+        title={empty.title}
+        description={empty.description}
+      />
+    );
+  }
+
+  return (
+    <>
+      <TabHeader
+        description={description}
+        selection={
+          action
+            ? {
+                selectedCount: selectedIds.size,
+                selectableCount,
+                isPageSelected: isAllSelected,
+                onSelectPage: handleSelectPage,
+                onSelectAll: handleSelectAll,
+              }
+            : undefined
+        }
+        action={
+          action
+            ? {
+                label: `${action.verb} Selected`,
+                verb: action.verb,
+                destructive: action.destructive,
+                selectedLogins: selectedUsers.map((u) => u.login),
+                onConfirm: () => runBulk(selectedUsers),
+                isLoading: isBulkRunning,
+              }
+            : undefined
+        }
+      />
+      <ListControls
+        search={search}
+        setSearch={setSearch}
+        sort={sort}
+        setSort={setSort}
+        data={processed}
+        exportName={exportName}
+        filters={filters}
+        setFilter={setFilter}
+        availableFilters={availableFilters}
+      />
+      <PaginatedList
+        listId={listId}
+        data={processed}
+        getItemKey={(item) => item.id || item.login}
+        emptyMessage={
+          isSearching ? `No connections match "${search.trim()}".` : undefined
+        }
+        onClearSearch={isSearching ? () => setSearch('') : undefined}
+        renderItem={(item) => {
+          const actionable = Boolean(action) && canAct(item);
+          return (
+            <ConnectionCard
+              user={item}
+              isIgnored={ignorable && isIgnoredUser(item)}
+              onToggleIgnore={ignorable ? toggleIgnored : undefined}
+              {...(actionable && {
+                actionLabel: action?.label,
+                actionLoading: action?.pendingLogins.has(item.login),
+                onAction: handleAction,
+              })}
+              {...(actionable &&
+                canSelect(item) && {
+                  isSelected: selectedIds.has(item.login),
+                  onSelect: handleSelect,
+                })}
+            />
+          );
+        }}
+      />
+    </>
+  );
+};
+
+export default ConnectionListTab;

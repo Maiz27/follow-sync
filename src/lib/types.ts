@@ -1,5 +1,6 @@
 import { UserInfoFragment } from './gql/types';
 import { SettingsState } from './store/settings';
+import type { NetworkDiff } from './networkDiff';
 
 /**
  * How a connection is classified.
@@ -32,15 +33,53 @@ export type NetworkUser = UserInfoFragment & {
 export interface CacheGistFile {
   name: string;
   text?: string | null;
+  /** The API cut `text` at its 1 MB inline limit; full content is at rawUrl. */
+  truncated?: boolean;
+  rawUrl?: string | null;
+}
+
+/**
+ * What identifies the cache a gist revision holds (see isSameRevision).
+ */
+export interface GistRevision {
+  /**
+   * The gist's latest history version (a commit SHA), when GitHub returned
+   * one. `history` is documented as deprecated, so it may be missing.
+   */
+  version: string | null;
+  /**
+   * The write generation of the cache manifest at this revision: unique per
+   * cache write. Null for a single-file cache from before sharding, or a gist
+   * without a cache.
+   */
+  generation: string | null;
 }
 
 export interface CacheGist {
   id: string;
   name?: string | null;
+  /** GitHub login of the account that owns the gist, when the API returned it. */
+  ownerLogin?: string | null;
   description?: string | null;
   updatedAt?: string | null;
+  /**
+   * The gist's current revision, used to notice writes made elsewhere since
+   * this session read it.
+   */
+  revision?: GistRevision | null;
+  /**
+   * The gist has more files than GitHub lists in one response (300), so
+   * `files` is only part of them.
+   */
+  filesTruncated?: boolean;
   files: CacheGistFile[];
 }
+
+/** The subset of settings that is saved to the cache gist. */
+export type CachedSettings = Pick<
+  SettingsState,
+  'showAvatars' | 'paginationPageSize' | 'customStaleTime'
+>;
 
 export interface CachedData {
   network: {
@@ -56,8 +95,20 @@ export interface CachedData {
    * list on each fetch.
    */
   removedGhosts?: string[];
-  settings: SettingsState;
+  /** Optional: caches written before settings were persisted omit it. */
+  settings?: CachedSettings;
+  /** Lowercased logins never suggested in the One-Way lists. */
+  ignoredLogins?: string[];
+  /** Changes found by the most recent sync that had something to compare. */
+  lastDiff?: NetworkDiff | null;
+  /** When the cache was last written (any change: follows, settings...). */
   timestamp: number;
+  /**
+   * When the network was last fully synced from GitHub. Drives staleness and
+   * "Last synced". Absent in caches written before it existed, which fall
+   * back to `timestamp`.
+   */
+  syncedAt?: number;
   metadata: {
     totalConnections: number;
     fetchDuration: number;
@@ -94,7 +145,8 @@ export interface ProgressCallbacks {
     message: string;
     items: ProgressCallbackItem[];
   }) => void;
-  update: (items: ProgressCallbackItem[]) => void;
+  /** `message` replaces the status line; omit it to keep the current one. */
+  update: (items: ProgressCallbackItem[], message?: string) => void;
   complete: () => void;
   fail: (config: { message: string }) => void;
 }

@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 
 import { useGhostStore } from '@/lib/store/ghost';
-import { removeFollowingByLogin } from '@/lib/gql/fetchers';
+import { isFollowingLogin, removeFollowingByLogin } from '@/lib/gql/fetchers';
 import { NetworkUser } from '@/lib/types';
 import { toUserMessage } from '@/lib/errors';
 import { useCacheManager } from './useCacheManager';
@@ -33,16 +33,27 @@ export const useGhostManager = () => {
     // uniform with the follow/unfollow mutations.
     const rollback = optimisticRemoveGhost(user.login);
     try {
-      await removeFollowingByLogin({ login: user.login });
+      const removed = await removeFollowingByLogin({ login: user.login });
+      // 404 is what deleted/suspended accounts — most ghosts — return. Ask
+      // GitHub whether the follow still exists: if not, the ghost is gone and
+      // stays hidden (tombstoned); if it does, or the check fails, report it.
+      if (!removed && (await isFollowingLogin({ login: user.login }))) {
+        throw new Error(
+          `GitHub could not remove @${user.login} (404); you still follow it.`
+        );
+      }
     } catch (error) {
       rollback();
       throw error;
     }
   };
 
-  /** Removes a single ghost and persists the change to the cache. */
-  const removeGhost = async (user: NetworkUser) => {
-    if (removingLogins.has(user.login)) return;
+  /**
+   * Removes a single ghost and persists the change to the cache. Resolves to
+   * whether the ghost was removed on GitHub.
+   */
+  const removeGhost = async (user: NetworkUser): Promise<boolean> => {
+    if (removingLogins.has(user.login)) return false;
 
     setRemovingLogins((prev) => new Set(prev).add(user.login));
     let removed = false;
@@ -52,16 +63,18 @@ export const useGhostManager = () => {
       await persistChanges();
       toast.success(`Removed ghost @${user.login}.`);
     } catch (error) {
+      if (!removed) {
+        toast.error(toUserMessage(error, `Failed to remove @${user.login}.`));
+        return false;
+      }
       // Distinguish a removal failure (ghost still there, rolled back) from a
       // persistence failure (ghost removed on GitHub, only the cache didn't
       // save) so the toast isn't misleading.
-      toast.error(
-        removed
-          ? toUserMessage(
-              error,
-              `Removed @${user.login}, but updating the cache failed.`
-            )
-          : toUserMessage(error, `Failed to remove @${user.login}.`)
+      toast.warning(
+        toUserMessage(
+          error,
+          `Removed @${user.login}, but updating the cache failed.`
+        )
       );
     } finally {
       setRemovingLogins((prev) => {
@@ -70,6 +83,7 @@ export const useGhostManager = () => {
         return next;
       });
     }
+    return true;
   };
 
   /**
