@@ -1517,6 +1517,27 @@ describe('chunk files of other writers', () => {
   });
 
   describe('a gist with more files than GitHub lists', () => {
+    it('does not write over a cache file the listing leaves out', async () => {
+      const github = fakeGitHub({ fileListLimit: 2 });
+      const { manifest, chunks } = buildShardedCache(
+        cache(20),
+        newGeneration()
+      );
+      github.seed('busy', {
+        '0-notes.txt': 'a',
+        '1-notes.txt': 'b',
+        [GIST_FILENAME]: manifest,
+        ...Object.fromEntries(
+          chunks.map(({ file, content }) => [file, content])
+        ),
+      });
+
+      await expect(writeCache(cache(21), 'busy')).rejects.toBeInstanceOf(
+        CacheUnreadableError
+      );
+      expect(github.gists.get('busy')!.files.get(GIST_FILENAME)).toBe(manifest);
+    });
+
     it('reads the chunks the listing leaves out and sweeps stale files', async () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       const github = fakeGitHub({ fileListLimit: 5 });

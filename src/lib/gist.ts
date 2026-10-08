@@ -1186,7 +1186,8 @@ const classifyUnreadable = (gist: CacheGist): UnreadableCache => {
  *
  * Anything else that doesn't parse (corrupt, hand-edited, or written by a
  * newer version of the app) throws CacheUnreadableError: overwriting it would
- * destroy it, so the user decides.
+ * destroy it, so the user decides. So does a gist with more files than
+ * GitHub lists whose cache file isn't among those listed: it may be there.
  */
 const readCacheToMerge = async (
   gistId: string,
@@ -1199,7 +1200,11 @@ const readCacheToMerge = async (
     if (data) return { gist, data };
 
     const kind = classifyUnreadable(gist);
-    if (kind === 'absent') return { gist, data: null };
+    if (kind === 'absent') {
+      // Over GitHub's file listing cap, a cache file may just be unlisted.
+      if (gist.filesTruncated) throw new CacheUnreadableError(gistId);
+      return { gist, data: null };
+    }
     if (kind === 'too-large') {
       console.warn('Rewriting a cache too large to read in chunks.');
       return { gist, data: null };
