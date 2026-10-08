@@ -12,6 +12,12 @@ export type GistState = {
    * nothing is written to localStorage until the owner is known.
    */
   ownerLogin: string | null;
+  /**
+   * The account's current login as GitHub reports it (GraphQL viewer, or the
+   * owner of its gists). Differs from the session login after a GitHub rename
+   * until the session refreshes; cache writes are labelled with it.
+   */
+  viewerLogin: string | null;
   metadata: CachedData['metadata'] | null;
   duplicateGistCount: number;
   forceNextRefresh: boolean;
@@ -21,6 +27,7 @@ export type GistState = {
 
 export type GistActions = {
   setOwnerLogin: (ownerLogin: string | null) => void;
+  setViewerLogin: (viewerLogin: string | null) => void;
   setGistName: (gistName: string | null) => void;
   setDuplicateGistCount: (count: number) => void;
   setForceNextRefresh: (force: boolean) => void;
@@ -37,6 +44,7 @@ const initialState: GistState = {
   timestamp: null,
   gistName: null,
   ownerLogin: null,
+  viewerLogin: null,
   metadata: null,
   duplicateGistCount: 0,
   forceNextRefresh: false,
@@ -46,7 +54,14 @@ const initialState: GistState = {
 export const useGistStore = create<GistStore>((set, get) => ({
   ...initialState,
   setOwnerLogin: (ownerLogin) => {
-    set({ ownerLogin: ownerLogin?.toLowerCase() ?? null });
+    const next = ownerLogin?.toLowerCase() ?? null;
+    // A different account: whatever identity was resolved for the previous
+    // one no longer applies.
+    if (next !== get().ownerLogin) set({ viewerLogin: null });
+    set({ ownerLogin: next });
+  },
+  setViewerLogin: (viewerLogin) => {
+    set({ viewerLogin: viewerLogin?.toLowerCase() ?? null });
   },
   setGistName: (gistName) => {
     const { ownerLogin } = get();

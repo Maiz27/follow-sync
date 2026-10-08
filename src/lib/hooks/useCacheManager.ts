@@ -124,6 +124,13 @@ export const useCacheManager = () => {
         setGistName(localGistName);
       }
 
+      // The login cache writes are labelled with. Starts as the session login
+      // and is replaced by what GitHub reports (gist owner, GraphQL viewer),
+      // which differs after a GitHub rename until the session refreshes.
+      let identityLogin = (
+        useGistStore.getState().viewerLogin ?? username
+      ).toLowerCase();
+
       const isForced = useGistStore.getState().forceNextRefresh;
       const currentGistName = useGistStore.getState().gistName;
       let activeGistName = currentGistName;
@@ -139,11 +146,18 @@ export const useCacheManager = () => {
        * sync should run.
        */
       const loadCachedNetwork = async () => {
-        const { canonicalGist, duplicateGists, scannedAll } =
-          await findCanonicalCacheGist({
-            ownerLogin: username,
-            preferredGistId: currentGistName,
-          });
+        const {
+          canonicalGist,
+          duplicateGists,
+          scannedAll,
+          resolvedOwnerLogin,
+        } = await findCanonicalCacheGist({
+          ownerLogin: username,
+          viewerLogin: useGistStore.getState().viewerLogin,
+          preferredGistId: currentGistName,
+        });
+        identityLogin = resolvedOwnerLogin;
+        useGistStore.getState().setViewerLogin(identityLogin);
 
         // Without a full scan the duplicate count is unknown; keep the last one.
         if (scannedAll) {
@@ -170,9 +184,11 @@ export const useCacheManager = () => {
               now: Date.now(),
             });
 
+            // A cache recorded under an older login of this account (GitHub
+            // rename) is relabelled here and rewritten by the migration below.
             const normalizedCachedData = normalizeCachedData(
               cachedData,
-              username
+              identityLogin
             );
             activeGistName = getGistIdentifier(canonicalGist);
             setGistName(activeGistName);
@@ -188,7 +204,7 @@ export const useCacheManager = () => {
               shouldMigrateCanonicalCache(
                 canonicalGist,
                 normalizedCachedData,
-                username
+                identityLogin
               )
             ) {
               try {
@@ -252,6 +268,7 @@ export const useCacheManager = () => {
 
       try {
         const {
+          viewerLogin,
           followers,
           following,
           ghosts: allGhosts,
@@ -275,6 +292,11 @@ export const useCacheManager = () => {
             ]);
           },
         });
+
+        if (viewerLogin) {
+          identityLogin = viewerLogin.toLowerCase();
+          useGistStore.getState().setViewerLogin(identityLogin);
+        }
 
         const fetchEnd = performance.now();
         const fetchDuration = Math.round((fetchEnd - fetchStart) / 1000);
@@ -320,8 +342,8 @@ export const useCacheManager = () => {
             reconciled.followers.length + reconciled.following.length,
           fetchDuration,
           cacheVersion: GIST_CACHE_VERSION,
-          ownerLogin: username.toLowerCase(),
-          cacheKey: buildCacheKey(username),
+          ownerLogin: identityLogin,
+          cacheKey: buildCacheKey(identityLogin),
         };
         setGistData({ timestamp, metadata });
         setDuplicateGistCount(duplicateCacheCount);
@@ -332,7 +354,11 @@ export const useCacheManager = () => {
           await enqueuePersist(async () => {
             const gistId = useGistStore.getState().gistName ?? activeGistName;
             const newGist = await writeCache(
-              snapshotStores({ ownerLogin: username, timestamp, metadata }),
+              snapshotStores({
+                ownerLogin: identityLogin,
+                timestamp,
+                metadata,
+              }),
               gistId,
               { discoverCanonicalFallback: isForced || !gistId }
             );
@@ -376,12 +402,13 @@ export const useCacheManager = () => {
     await enqueuePersist(async () => {
       // Read state inside the serialized section so each write sees the latest
       // network/ghosts/gist id produced by any preceding write.
-      const { metadata, gistName } = useGistStore.getState();
+      const { metadata, gistName, viewerLogin } = useGistStore.getState();
       const { network } = useNetworkStore.getState();
 
       if (!network || !metadata) return;
 
-      const ownerLogin = sessionOwnerLogin ?? metadata.ownerLogin;
+      const ownerLogin =
+        viewerLogin ?? sessionOwnerLogin ?? metadata.ownerLogin;
       if (!ownerLogin) {
         throw new Error('Cannot persist cache without a known owner login.');
       }
@@ -408,8 +435,8 @@ export const useCacheManager = () => {
       );
     }
 
-    const { metadata, gistName } = useGistStore.getState();
-    const ownerLogin = sessionOwnerLogin ?? metadata?.ownerLogin;
+    const { metadata, gistName, viewerLogin } = useGistStore.getState();
+    const ownerLogin = sessionOwnerLogin ?? viewerLogin ?? metadata?.ownerLogin;
 
     if (!ownerLogin) {
       throw new Error(
@@ -419,6 +446,7 @@ export const useCacheManager = () => {
 
     const result = await cleanupDuplicateCacheGists({
       ownerLogin,
+      viewerLogin,
       preferredGistId: gistName,
     });
 

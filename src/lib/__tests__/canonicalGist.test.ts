@@ -17,6 +17,8 @@ import {
   scoreCacheGist,
   buildCacheDescription,
   parseCache,
+  isCacheGistOwnedBy,
+  writeCache,
 } from '@/lib/gist';
 import type { CacheGist } from '@/lib/types';
 
@@ -242,5 +244,141 @@ describe('findCanonicalCacheGist', () => {
 
     expect(result.scannedAll).toBe(true);
     expect(result.duplicateGists.map((g) => g.id)).toEqual(['C']);
+  });
+});
+
+describe('renamed GitHub accounts', () => {
+  // A cache written before the account was renamed: GitHub reports the new
+  // owner login, while the cache metadata still records the old one.
+  const renamedDetail = (id: string) => ({
+    ...detail(id, 'oldname'),
+    owner: { login: 'NewName' },
+  });
+
+  it("keeps using the user's own cache after a rename instead of creating a new gist", async () => {
+    const calls: string[] = [];
+    mockedGhRest.mockImplementation(
+      async (path: string, init?: RequestInit) => {
+        calls.push(`${init?.method ?? 'GET'} ${path}`);
+        if (path.startsWith('/gists?')) return [renamedDetail('G1')] as never;
+        if (path === '/gists/G1' && init?.method === 'PATCH')
+          return renamedDetail('G1') as never;
+        if (path === '/gists/G1') return renamedDetail('G1') as never;
+        if (path === '/gists' && init?.method === 'POST')
+          return detail('G2', 'newname') as never;
+        return null;
+      }
+    );
+
+    const result = await findCanonicalCacheGist({
+      ownerLogin: 'newname',
+      preferredGistId: 'G1',
+    });
+    expect(result.canonicalGist?.id).toBe('G1');
+
+    const written = await writeCache(
+      JSON.parse(cacheContent('newname')),
+      null,
+      { discoverCanonicalFallback: true }
+    );
+    expect(written.id).toBe('G1');
+    expect(calls).not.toContain('POST /gists');
+  });
+
+  it('trusts the gist listing over a stale session login', async () => {
+    // The JWT still carries the old login, but /gists only ever lists the
+    // signed-in account's own gists, and GitHub reports the new owner.
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path.startsWith('/gists?')) return [renamedDetail('G1')] as never;
+      if (path === '/gists/G1') return renamedDetail('G1') as never;
+      return null;
+    });
+
+    const result = await findCanonicalCacheGist({
+      ownerLogin: 'oldname',
+      preferredGistId: 'G1',
+    });
+
+    expect(result.canonicalGist?.id).toBe('G1');
+    expect(result.resolvedOwnerLogin).toBe('newname');
+  });
+
+  it('uses the GraphQL viewer login when known', async () => {
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path === '/gists/G1') return renamedDetail('G1') as never;
+      if (path.startsWith('/gists?')) return [] as never;
+      return null;
+    });
+
+    const result = await findCanonicalCacheGist({
+      ownerLogin: 'oldname',
+      viewerLogin: 'newname',
+      preferredGistId: 'G1',
+    });
+
+    expect(result.canonicalGist?.id).toBe('G1');
+    expect(result.resolvedOwnerLogin).toBe('newname');
+  });
+
+  it('still rejects a remembered gist owned by another account', async () => {
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path.startsWith('/gists?'))
+        return [{ ...detail('MINE', OWNER), owner: { login: OWNER } }] as never;
+      if (path === '/gists/MINE')
+        return { ...detail('MINE', OWNER), owner: { login: OWNER } } as never;
+      if (path === '/gists/THEIRS')
+        return {
+          ...detail('THEIRS', OWNER),
+          owner: { login: 'mallory' },
+        } as never;
+      return null;
+    });
+
+    const result = await findCanonicalCacheGist({
+      ownerLogin: OWNER,
+      preferredGistId: 'THEIRS',
+    });
+
+    expect(result.canonicalGist?.id).toBe('MINE');
+  });
+
+  it('falls back to the recorded owner only when GitHub omits the gist owner', async () => {
+    const gist = (metaOwner: string): CacheGist => ({
+      id: 'g',
+      name: 'g',
+      ownerLogin: null,
+      description: buildCacheDescription(metaOwner),
+      files: [{ name: GIST_FILENAME, text: cacheContent(metaOwner) }],
+    });
+    expect(isCacheGistOwnedBy(gist('someoneelse'), OWNER)).toBe(false);
+    expect(isCacheGistOwnedBy(gist(OWNER), OWNER)).toBe(true);
+    expect(
+      isCacheGistOwnedBy({ ...gist('oldname'), ownerLogin: 'Octocat' }, OWNER)
+    ).toBe(true);
+  });
+
+  it('lets duplicate cleanup see caches written under the old login', async () => {
+    mockedGhRest.mockImplementation(async (path: string) => {
+      if (path.startsWith('/gists?'))
+        return [
+          { ...detail('NEW', 'newname'), owner: { login: 'newname' } },
+          renamedDetail('OLD'),
+        ] as never;
+      if (path === '/gists/NEW')
+        return {
+          ...detail('NEW', 'newname'),
+          owner: { login: 'newname' },
+        } as never;
+      if (path === '/gists/OLD') return renamedDetail('OLD') as never;
+      return null;
+    });
+
+    const result = await findCanonicalCacheGist({
+      ownerLogin: 'newname',
+      fullScan: true,
+    });
+
+    expect(result.canonicalGist?.id).toBe('NEW');
+    expect(result.duplicateGists.map((g) => g.id)).toEqual(['OLD']);
   });
 });

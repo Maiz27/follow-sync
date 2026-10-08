@@ -39,6 +39,13 @@ type GitHubGistDetail = GitHubGistSummary & {
 
 export type CacheDiscoveryResult = {
   canonicalGist: CacheGist | null;
+  /**
+   * The account's current login as GitHub reports it (lowercased): the GraphQL
+   * viewer login when known, else the owner of the gists `/gists` listed
+   * (only ever the signed-in account's own), else the login passed in. Differs
+   * from the session login after a GitHub rename until the session refreshes.
+   */
+  resolvedOwnerLogin: string;
   duplicateGists: CacheGist[];
   /**
    * False when the remembered gist was validated directly and the full gist
@@ -170,17 +177,18 @@ const getExpectedCacheKey = (ownerLogin: string) =>
  * Whether a candidate may be used as this account's cache at all. Secret gists
  * are readable by anyone who knows the id, so a gist id remembered from a
  * previous account on this browser would otherwise load (and relabel) someone
- * else's network. Reject gists owned by a different GitHub account, and caches
- * whose recorded owner is a different login.
+ * else's network.
+ *
+ * The gist owner GitHub reports is authoritative: a cache whose recorded
+ * `metadata.ownerLogin` is an older login of the same account (the user renamed
+ * their GitHub account) is still theirs, and is relabelled on the next write.
+ * The recorded owner is only consulted when GitHub didn't return an owner.
  */
 export const isCacheGistOwnedBy = (gist: CacheGist, ownerLogin: string) => {
   const normalizedOwnerLogin = normalizeOwnerLogin(ownerLogin);
 
-  if (
-    gist.ownerLogin &&
-    normalizeOwnerLogin(gist.ownerLogin) !== normalizedOwnerLogin
-  ) {
-    return false;
+  if (gist.ownerLogin) {
+    return normalizeOwnerLogin(gist.ownerLogin) === normalizedOwnerLogin;
   }
 
   const parsedOwnerLogin = parseCache(gist)?.metadata?.ownerLogin;
@@ -309,12 +317,30 @@ const isValidatedCanonical = (gist: CacheGist, ownerLogin: string) =>
   isCacheGistOwnedBy(gist, ownerLogin) &&
   parseCache(gist)?.metadata?.cacheKey === getExpectedCacheKey(ownerLogin);
 
+/**
+ * The login every listed gist is owned by, when they agree. `GET /gists` only
+ * returns the authenticated account's own gists, so this is its current login.
+ */
+const getListedOwnerLogin = (summaries: GitHubGistSummary[]) => {
+  const logins = new Set(
+    summaries
+      .map((gist) => gist.owner?.login)
+      .filter((login): login is string => Boolean(login))
+      .map(normalizeOwnerLogin)
+  );
+  return logins.size === 1 ? [...logins][0] : null;
+};
+
 export const findCanonicalCacheGist = async ({
-  ownerLogin,
+  ownerLogin: sessionOwnerLogin,
+  viewerLogin,
   preferredGistId,
   fullScan = false,
 }: {
+  /** The login the session knows (may be stale after a GitHub rename). */
   ownerLogin: string;
+  /** The GraphQL viewer login, when already known; authoritative. */
+  viewerLogin?: string | null;
   preferredGistId?: string | null;
   /**
    * List every gist even when the remembered one validates — needed to find
@@ -324,6 +350,7 @@ export const findCanonicalCacheGist = async ({
   fullScan?: boolean;
 }): Promise<CacheDiscoveryResult> => {
   const candidateMap = new Map<string, CacheGist>();
+  let ownerLogin = normalizeOwnerLogin(viewerLogin || sessionOwnerLogin);
 
   if (preferredGistId) {
     try {
@@ -338,6 +365,7 @@ export const findCanonicalCacheGist = async ({
             canonicalGist: preferredGist,
             duplicateGists: [],
             scannedAll: false,
+            resolvedOwnerLogin: ownerLogin,
           };
         }
         candidateMap.set(preferredGist.id, preferredGist);
@@ -348,6 +376,9 @@ export const findCanonicalCacheGist = async ({
   }
 
   const summaries = await listAllGists();
+  if (!viewerLogin) {
+    ownerLogin = getListedOwnerLogin(summaries) ?? ownerLogin;
+  }
   const candidateSummaries = summaries.filter(isPotentialCacheGistSummary);
 
   const unfetchedSummaries = candidateSummaries.filter(
@@ -380,7 +411,12 @@ export const findCanonicalCacheGist = async ({
   );
 
   if (validCandidates.length === 0) {
-    return { canonicalGist: null, duplicateGists: [], scannedAll: true };
+    return {
+      canonicalGist: null,
+      duplicateGists: [],
+      scannedAll: true,
+      resolvedOwnerLogin: ownerLogin,
+    };
   }
 
   const sortedCandidates = selectCanonicalCacheGist(
@@ -393,6 +429,7 @@ export const findCanonicalCacheGist = async ({
     canonicalGist,
     duplicateGists,
     scannedAll: true,
+    resolvedOwnerLogin: ownerLogin,
   };
 };
 
@@ -430,13 +467,16 @@ const deleteGist = (gistId: string) =>
 
 export const cleanupDuplicateCacheGists = async ({
   ownerLogin,
+  viewerLogin,
   preferredGistId,
 }: {
   ownerLogin: string;
+  viewerLogin?: string | null;
   preferredGistId?: string | null;
 }) => {
   const discoveryResult = await findCanonicalCacheGist({
     ownerLogin,
+    viewerLogin,
     preferredGistId,
     fullScan: true,
   });
@@ -467,6 +507,7 @@ export const cleanupDuplicateCacheGists = async ({
 
   const refreshedResult = await findCanonicalCacheGist({
     ownerLogin,
+    viewerLogin: discoveryResult.resolvedOwnerLogin,
     preferredGistId: discoveryResult.canonicalGist.id,
     fullScan: true,
   });
