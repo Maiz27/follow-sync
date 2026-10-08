@@ -521,26 +521,39 @@ export const useCacheManager = () => {
       );
     }
 
-    const { metadata, gistName, viewerLogin } = useGistStore.getState();
-    const ownerLogin = sessionOwnerLogin ?? viewerLogin ?? metadata?.ownerLogin;
+    // Serialized with cache writes: a write queued meanwhile runs after the
+    // deletions and reads the surviving gist id then, so it never targets a
+    // gist that was just deleted (nor does a running write race the scan).
+    const result = await enqueuePersist(async () => {
+      const {
+        metadata,
+        gistName,
+        viewerLogin,
+        ownerLogin: accountLogin,
+      } = useGistStore.getState();
+      const ownerLogin =
+        sessionOwnerLogin ?? viewerLogin ?? metadata?.ownerLogin;
 
-    if (!ownerLogin) {
-      throw new Error(
-        'Could not determine which cache gists belong to this account.'
-      );
-    }
+      if (!ownerLogin) {
+        throw new Error(
+          'Could not determine which cache gists belong to this account.'
+        );
+      }
 
-    const result = await cleanupDuplicateCacheGists({
-      ownerLogin,
-      viewerLogin,
-      preferredGistId: gistName,
+      const cleanup = await cleanupDuplicateCacheGists({
+        ownerLogin,
+        viewerLogin,
+        preferredGistId: gistName,
+      });
+
+      if (cleanup.canonicalGist) {
+        setGistName(cleanup.canonicalGist.id, accountLogin);
+      }
+      if (useGistStore.getState().ownerLogin === accountLogin) {
+        setDuplicateGistCount(cleanup.remainingDuplicateCount);
+      }
+      return cleanup;
     });
-
-    if (result.canonicalGist) {
-      setGistName(result.canonicalGist.id, useGistStore.getState().ownerLogin);
-    }
-
-    setDuplicateGistCount(result.remainingDuplicateCount);
 
     if (result.deletedCount === 0 && result.remainingDuplicateCount === 0) {
       toast.info('No duplicate cache gists found.');

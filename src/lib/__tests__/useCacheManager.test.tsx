@@ -804,3 +804,84 @@ describe('useCacheManager: plain writes', () => {
     });
   });
 });
+
+describe('useCacheManager: duplicate cleanup', () => {
+  it('runs in the write queue so no write targets a gist it just deleted', async () => {
+    // The remembered gist turns out to be a duplicate of the canonical one.
+    useGistStore.setState({
+      ownerLogin: 'octocat',
+      gistName: 'DUP',
+      metadata: cacheData('octocat').metadata,
+    });
+    let finishCleanup!: () => void;
+    mocks.cleanupDuplicateCacheGists.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishCleanup = () =>
+            resolve({
+              canonicalGist: { id: 'CANON', name: 'CANON', files: [] },
+              deletedCount: 1,
+              remainingDuplicateCount: 0,
+            });
+        })
+    );
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      const cleanup = result.current.cleanupDuplicateCaches();
+      await vi.waitFor(() =>
+        expect(mocks.cleanupDuplicateCacheGists).toHaveBeenCalled()
+      );
+      // A follow lands while the duplicates are being deleted.
+      const write = result.current.persistChanges();
+      await Promise.resolve();
+      expect(mocks.writeCache).not.toHaveBeenCalled();
+
+      finishCleanup();
+      await cleanup;
+      await write;
+    });
+
+    expect(mocks.writeCache).toHaveBeenCalledTimes(1);
+    expect(mocks.writeCache.mock.calls[0][1]).toBe('CANON');
+    expect(useGistStore.getState().gistName).toBe('G1');
+    expect(window.localStorage.getItem(gistIdStorageKey('octocat'))).toBe('G1');
+  });
+
+  it('waits for queued writes before scanning for duplicates', async () => {
+    useGistStore.setState({
+      ownerLogin: 'octocat',
+      gistName: 'G1',
+      metadata: cacheData('octocat').metadata,
+    });
+    let finishWrite!: () => void;
+    mocks.writeCache.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishWrite = () => resolve({ id: 'G1', name: 'G1', files: [] });
+        })
+    );
+    mocks.cleanupDuplicateCacheGists.mockResolvedValue({
+      canonicalGist: { id: 'G1', name: 'G1', files: [] },
+      deletedCount: 0,
+      remainingDuplicateCount: 0,
+    });
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      const write = result.current.persistChanges();
+      await vi.waitFor(() => expect(mocks.writeCache).toHaveBeenCalled());
+      const cleanup = result.current.cleanupDuplicateCaches();
+      await Promise.resolve();
+      expect(mocks.cleanupDuplicateCacheGists).not.toHaveBeenCalled();
+
+      finishWrite();
+      await write;
+      await cleanup;
+    });
+
+    expect(mocks.cleanupDuplicateCacheGists).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredGistId: 'G1' })
+    );
+  });
+});
