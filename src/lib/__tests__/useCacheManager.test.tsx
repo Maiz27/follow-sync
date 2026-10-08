@@ -1041,4 +1041,37 @@ describe('useCacheManager: writes merged with another device', () => {
       'theirs',
     ]);
   });
+
+  it('drops a ghost removal the merge pruned, keeping one made during the write', async () => {
+    useGistStore.setState({
+      ownerLogin: 'octocat',
+      gistName: 'G1',
+      metadata: cacheData('octocat').metadata,
+    });
+    useGhostStore.getState().setRemovedGhostLogins(['pruned']);
+    let adopted: boolean | undefined;
+    mocks.writeCache.mockImplementation(
+      async (
+        data: CachedData,
+        _gistId: string,
+        options: { onMerged?: (merged: CachedData) => boolean }
+      ) => {
+        // A ghost removed while the write was in flight...
+        useGhostStore.getState().setRemovedGhostLogins(['pruned', 'during']);
+        // ...and the other device's sync pruned "pruned" (no longer followed).
+        adopted = options.onMerged?.({ ...data, removedGhosts: [] });
+        return { id: 'G1', name: 'G1', files: [] };
+      }
+    );
+    const { result } = renderHook(() => useCacheManager());
+
+    await act(async () => {
+      await result.current.persistChanges();
+    });
+
+    expect(adopted).toBe(true);
+    expect([...useGhostStore.getState().removedGhostLogins]).toEqual([
+      'during',
+    ]);
+  });
 });

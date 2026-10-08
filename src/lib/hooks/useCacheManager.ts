@@ -101,7 +101,13 @@ export const useCacheManager = () => {
   const sessionOwnerLogin = data?.user?.login;
 
   const loadFromCache = useCallback(
-    (cachedData: CachedData) => {
+    /**
+     * `written`: when `cachedData` is what a write merged this session's
+     * snapshot `written` into. Ghost removals in the snapshot are then
+     * already accounted for by the merge (which may have dropped some the
+     * other device pruned), so only those made since are kept on top.
+     */
+    (cachedData: CachedData, written?: CachedData) => {
       // The stores only ever hold this account's state (switchAccount resets
       // them when the account changes), so this may be a reload of the same
       // account's cache, e.g. after a remount once React Query dropped the
@@ -112,9 +118,14 @@ export const useCacheManager = () => {
         cachedData.syncedAt ?? cachedData.timestamp
       );
       // Same for ghost removals: keep those made here since.
+      const merged = new Set(
+        (written?.removedGhosts ?? []).map((login) => login.toLowerCase())
+      );
       const removedGhosts = new Set([
         ...(cachedData.removedGhosts ?? []).map((login) => login.toLowerCase()),
-        ...useGhostStore.getState().removedGhostLogins,
+        ...[...useGhostStore.getState().removedGhostLogins].filter(
+          (login) => !merged.has(login)
+        ),
       ]);
       setGhosts(
         cachedData.ghosts.filter(
@@ -304,7 +315,12 @@ export const useCacheManager = () => {
 
             // Only serve the cache when it matches the current schema.
             if (policy.shouldHydrate) {
-              loadFromCache(served);
+              loadFromCache(
+                served,
+                served === normalizedCachedData
+                  ? undefined
+                  : normalizedCachedData
+              );
 
               if (policy.decision === 'serve-fresh') {
                 toast.info('Loaded fresh data from cache.');
@@ -460,27 +476,24 @@ export const useCacheManager = () => {
             // sync (possibly another account), so this snapshot isn't ours.
             signal.throwIfAborted();
             const gistId = useGistStore.getState().gistName ?? activeGistName;
-            const newGist = await writeCache(
-              snapshotStores({
-                ownerLogin: identityLogin,
-                timestamp,
-                metadata,
-              }),
-              gistId,
-              {
-                discoverCanonicalFallback: isForced || !gistId,
-                // The gist changed elsewhere since it was read: show the
-                // merged result.
-                // The stores now belong to a newer sync: not adopted, so the
-                // write records no base (see writeCache's onMerged).
-                onMerged: (merged) => {
-                  if (signal.aborted) return false;
-                  loadFromCache(merged);
-                  return true;
-                },
-                onWarning: (message) => toast.warning(message),
-              }
-            );
+            const snapshot = snapshotStores({
+              ownerLogin: identityLogin,
+              timestamp,
+              metadata,
+            });
+            const newGist = await writeCache(snapshot, gistId, {
+              discoverCanonicalFallback: isForced || !gistId,
+              // The gist changed elsewhere since it was read: show the
+              // merged result. When the stores now belong to a newer sync,
+              // it isn't adopted, so the write records no base (see
+              // writeCache's onMerged).
+              onMerged: (merged) => {
+                if (signal.aborted) return false;
+                loadFromCache(merged, snapshot);
+                return true;
+              },
+              onWarning: (message) => toast.warning(message),
+            });
             setGistName(newGist.id, username);
           });
         } catch (error) {
@@ -568,7 +581,7 @@ export const useCacheManager = () => {
           written = merged;
           // The account changed: its stores don't hold this cache.
           if (useGistStore.getState().ownerLogin !== accountLogin) return false;
-          loadFromCache(merged);
+          loadFromCache(merged, dataToCache);
           return true;
         },
         onWarning: (message) => toast.warning(message),

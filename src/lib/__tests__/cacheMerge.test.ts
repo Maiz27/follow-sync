@@ -131,6 +131,33 @@ describe('mergeCacheData', () => {
     expect(merged.ghosts).toEqual([]);
   });
 
+  it('keeps a tombstone pruned on one side since the base pruned', () => {
+    // Both started with g1 removed; a sync on the remote device no longer
+    // saw g1 followed and dropped its tombstone. Local removed g2 since.
+    const tombstoneBase = toCacheBase(REV, snapshot({ removedGhosts: ['g1'] }));
+    const remote = snapshot({ removedGhosts: [], syncedAt: 200 });
+    const local = snapshot({ removedGhosts: ['g1', 'g2'] });
+
+    expect(
+      [
+        ...(mergeCacheData(tombstoneBase, remote, local).removedGhosts ?? []),
+      ].sort()
+    ).toEqual(['g2']);
+    // And the other way round.
+    expect(
+      [
+        ...(mergeCacheData(tombstoneBase, local, remote).removedGhosts ?? []),
+      ].sort()
+    ).toEqual(['g2']);
+  });
+
+  it('unions tombstones without a base', () => {
+    const remote = snapshot({ removedGhosts: [] });
+    const local = snapshot({ removedGhosts: ['G1'] });
+
+    expect(mergeCacheData(null, remote, local).removedGhosts).toEqual(['g1']);
+  });
+
   it('keeps local settings: this write is the latest action', () => {
     const merged = mergeCacheData(
       base,

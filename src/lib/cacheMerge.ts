@@ -12,6 +12,8 @@ export type CacheBase = {
   syncedAt: number;
   following: string[];
   ignoredLogins: string[];
+  /** Ghost removals (tombstones), lowercased. */
+  removedGhosts: string[];
 };
 
 const key = (login: string) => login.toLowerCase();
@@ -24,6 +26,7 @@ export const toCacheBase = (
   syncedAt: data.syncedAt ?? data.timestamp,
   following: data.network.following.map((user) => key(user.login)),
   ignoredLogins: (data.ignoredLogins ?? []).map(key),
+  removedGhosts: (data.removedGhosts ?? []).map(key),
 });
 
 const syncTime = (data: CachedData) => data.syncedAt ?? data.timestamp;
@@ -74,6 +77,28 @@ const applyFollowingDelta = (
   return result;
 };
 
+/**
+ * Merges two versions of a set of logins (lowercased). With `base` (what
+ * both started from), three-way: an entry either side removed since `base`
+ * stays removed, an entry either side added is kept, the rest is kept.
+ * Without one, a union: nothing either side holds is lost.
+ */
+const mergeLoginSets = (
+  base: readonly string[] | null | undefined,
+  remote: readonly string[],
+  local: readonly string[]
+) => {
+  const all = new Set([...remote, ...local].map(key));
+  if (!base) return [...all];
+  const baseSet = new Set(base);
+  const remoteSet = new Set(remote.map(key));
+  const localSet = new Set(local.map(key));
+  return [...all].filter(
+    (login) =>
+      !(baseSet.has(login) && (!remoteSet.has(login) || !localSet.has(login)))
+  );
+};
+
 /** A cache this code can take a network from (see READABLE_CACHE_VERSIONS). */
 const hasUsableNetwork = (data: CachedData) =>
   READABLE_CACHE_VERSIONS.includes(data.metadata.cacheVersion);
@@ -88,7 +113,10 @@ const hasUsableNetwork = (data: CachedData) =>
  *   last sync" diff); the other side's follows/unfollows since `base` are
  *   re-applied to its following list (unless that side re-synced since
  *   `base`, which the newer sync supersedes).
- * - Ignore lists merge by what each side added or removed since `base`.
+ * - Ignore lists and ghost removals (tombstones) merge by what each side
+ *   added or removed since `base`. A sync drops the tombstones of ghosts it
+ *   no longer sees followed, and that pruning stays: a union would bring
+ *   them back from the other side's copy forever.
  *
  * Without a base (this session never read the gist, e.g. a forced refresh
  * straight after page load), a difference between the two sides can't be
@@ -98,13 +126,12 @@ const hasUsableNetwork = (data: CachedData) =>
  *   unfollows live on GitHub, and a full sync observed every one made before
  *   it started. One made elsewhere after that sync shows up with the next
  *   sync; it is never undone on GitHub.
- * - Ignore lists are unioned: an ignore made elsewhere is kept. (An un-ignore
- *   made elsewhere can come back; ignoring only hides, so that is the safe
- *   direction.)
+ * - Ignore lists and ghost removals are unioned: an ignore made elsewhere
+ *   is kept. (An un-ignore made elsewhere, or a tombstone pruned elsewhere,
+ *   can come back; both only hide accounts, so that is the safe direction.)
  *
  * Either way:
  *
- * - Ghost removals (tombstones) are unioned.
  * - Settings and the write time are local: this write is the user's latest.
  * - A remote cache from a schema this code can't serve contributes its ignore
  *   list and ghost removals, never its network.
@@ -131,34 +158,25 @@ export const mergeCacheData = (
           other.network.following
         );
 
-  const removedGhosts = [
-    ...new Set(
-      [...(remote.removedGhosts ?? []), ...(local.removedGhosts ?? [])].map(key)
-    ),
-  ];
+  const removedGhosts = mergeLoginSets(
+    base?.removedGhosts,
+    remote.removedGhosts ?? [],
+    local.removedGhosts ?? []
+  );
   const tombstones = new Set(removedGhosts);
 
-  const remoteIgnored = (remote.ignoredLogins ?? []).map(key);
-  const localIgnored = new Set((local.ignoredLogins ?? []).map(key));
-  let ignoredLogins: Set<string>;
-  if (base) {
-    const baseIgnored = new Set(base.ignoredLogins);
-    ignoredLogins = new Set(
-      [
-        ...remoteIgnored,
-        ...[...localIgnored].filter((login) => !baseIgnored.has(login)),
-      ].filter((login) => !(baseIgnored.has(login) && !localIgnored.has(login)))
-    );
-  } else {
-    ignoredLogins = new Set([...remoteIgnored, ...localIgnored]);
-  }
+  const ignoredLogins = mergeLoginSets(
+    base?.ignoredLogins,
+    remote.ignoredLogins ?? [],
+    local.ignoredLogins ?? []
+  );
 
   return {
     ...local,
     network: { followers: primary.network.followers, following },
     ghosts: primary.ghosts.filter((ghost) => !tombstones.has(key(ghost.login))),
     removedGhosts,
-    ignoredLogins: [...ignoredLogins],
+    ignoredLogins,
     lastDiff: primary.lastDiff ?? null,
     syncedAt: syncTime(primary),
     metadata: {
