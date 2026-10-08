@@ -459,6 +459,7 @@ export const useCacheManager = () => {
                 onMerged: (merged) => {
                   if (!signal.aborted) loadFromCache(merged);
                 },
+                onWarning: (message) => toast.warning(message),
               }
             );
             setGistName(newGist.id, username);
@@ -550,6 +551,7 @@ export const useCacheManager = () => {
             loadFromCache(merged);
           }
         },
+        onWarning: (message) => toast.warning(message),
       });
       setGistName(updatedGist.id, accountLogin);
       // The account changed during the write: its stores were reset and

@@ -77,7 +77,30 @@ type WriteCacheOptions = {
    * them.
    */
   onMerged?: (merged: CachedData) => void;
+  /**
+   * Called when the write went through but left something the user should
+   * know about (e.g. it replaced a cache that couldn't be read).
+   */
+  onWarning?: (message: string) => void;
 };
+
+/**
+ * The gist holds a cache this code can't read, and writing would destroy it:
+ * a corrupt or hand-edited cache file, or one written by a newer version of
+ * the app. Nothing is written; the user decides what to do with the gist.
+ */
+export class CacheUnreadableError extends Error {
+  readonly gistId: string;
+  /** What to tell the user (see toUserMessage). */
+  readonly userMessage: string;
+
+  constructor(gistId: string) {
+    super(`The cache gist ${gistId} holds a cache that can't be read.`);
+    this.name = 'CacheUnreadableError';
+    this.gistId = gistId;
+    this.userMessage = `Your cache gist (${gistId}) holds a cache this version of Follow Sync can't read, so it wasn't overwritten. Rename or delete its "${GIST_FILENAME}" file on GitHub to start a new cache.`;
+  }
+}
 
 const normalizeOwnerLogin = (ownerLogin: string) => ownerLogin.toLowerCase();
 
@@ -556,6 +579,7 @@ export const findCanonicalCacheGist = async ({
   viewerLogin,
   preferredGistId,
   fullScan = false,
+  failOnReadError = false,
 }: {
   /** The login the session knows (may be stale after a GitHub rename). */
   ownerLogin: string;
@@ -568,6 +592,13 @@ export const findCanonicalCacheGist = async ({
    * each load is slow and burns rate limit for accounts with many gists.
    */
   fullScan?: boolean;
+  /**
+   * Throw when a candidate can't be read instead of leaving it out. A write
+   * that falls back to discovery needs this: leaving the existing cache out
+   * would create a second one next to it (and the duplicate cleanup could
+   * then delete the original).
+   */
+  failOnReadError?: boolean;
 }): Promise<CacheDiscoveryResult> => {
   const candidateMap = new Map<string, CacheGist>();
   let ownerLogin = normalizeOwnerLogin(viewerLogin || sessionOwnerLogin);
@@ -591,6 +622,7 @@ export const findCanonicalCacheGist = async ({
         candidateMap.set(preferredGist.id, preferredGist);
       }
     } catch (error) {
+      if (failOnReadError) throw error;
       console.warn('Failed to fetch preferred cache gist by id.', error);
     }
   }
@@ -612,6 +644,7 @@ export const findCanonicalCacheGist = async ({
       try {
         return await fetchGistById(gist.id);
       } catch (error) {
+        if (failOnReadError) throw error;
         console.warn('Failed to fetch candidate cache gist by id.', error);
         return null;
       }
@@ -902,23 +935,93 @@ const writeShardedCache = async (
   );
 };
 
-type RemoteCache = { gist: CacheGist; data: CachedData };
+/**
+ * A cache gist as read to merge with: `data` is what it holds, or null when
+ * it holds nothing a merge could keep and may be written over (see
+ * readCacheToMerge).
+ */
+type RemoteCache = { gist: CacheGist; data: CachedData | null };
+
+/** Why a gist's cache didn't parse (see classifyUnreadable). */
+type UnreadableCache =
+  /** No cache file at all. */
+  | 'absent'
+  /** A single-file cache too large for the host to relay (from before sharding). */
+  | 'too-large'
+  /** A sharded manifest whose chunk files are missing or cut short. */
+  | 'missing-chunks'
+  /** Anything else: corrupt, hand-edited, or a newer app version's format. */
+  | 'unknown';
+
+const classifyUnreadable = (gist: CacheGist): UnreadableCache => {
+  const file = gist.files.find((candidate) => candidate.name === GIST_FILENAME);
+  if (!file) return 'absent';
+  // loadFullText leaves a cache file truncated only when the host refused to
+  // relay it (413): an old single-file cache, never a manifest.
+  if (file.truncated) return 'too-large';
+  const manifest = readManifest(file.text);
+  if (!manifest) return 'unknown';
+  const complete = manifest.chunks.every((ref) => {
+    const chunk = gist.files.find((candidate) => candidate.name === ref.file);
+    return (
+      chunk &&
+      !chunk.truncated &&
+      typeof chunk.text === 'string' &&
+      chunk.text.length === ref.length
+    );
+  });
+  // Every chunk there and still undecodable: corrupt, not merely broken.
+  return complete ? 'unknown' : 'missing-chunks';
+};
 
 /**
- * The cache another device or tab wrote (at `version`, or the current one),
- * or null when it can't be read.
+ * Reads the cache a write is about to replace, to merge with. Null when the
+ * gist no longer exists.
+ *
+ * A failed request (5xx, rate limit, a chunk that can't be fetched) throws:
+ * the write is abandoned rather than made without the merge, which would
+ * drop what another device wrote; the next write tries again. A cache that
+ * was read but doesn't parse is only written over when it is known to hold
+ * nothing a merge could keep:
+ *
+ * - a single-file cache too large for the host to relay (from before
+ *   sharding: it could never be read here, and rewriting it in chunks is
+ *   how it becomes readable again);
+ * - a sharded manifest whose chunk files are missing (a write broken by an
+ *   older version of this code). Its ignore list and ghost removals lived in
+ *   the missing chunks; the manifest itself carries only metadata and times,
+ *   which a write replaces anyway. The gist is read a second time first, so
+ *   a cache that was only caught mid-write isn't mistaken for a broken one.
+ *
+ * Anything else that doesn't parse (corrupt, hand-edited, or written by a
+ * newer version of the app) throws CacheUnreadableError: overwriting it would
+ * destroy it, so the user decides.
  */
-const readRemoteCache = async (
+const readCacheToMerge = async (
   gistId: string,
-  version?: string | null
+  warn?: (message: string) => void
 ): Promise<RemoteCache | null> => {
-  try {
-    const gist = await fetchGistById(gistId, version);
-    const data = gist ? parseCache(gist) : null;
-    return gist && data ? { gist, data } : null;
-  } catch (error) {
-    console.warn('Failed to read the newer cache to merge with.', error);
-    return null;
+  for (let attempt = 0; ; attempt++) {
+    const gist = await fetchGistById(gistId);
+    if (!gist) return null;
+    const data = parseCache(gist);
+    if (data) return { gist, data };
+
+    const kind = classifyUnreadable(gist);
+    if (kind === 'absent') return { gist, data: null };
+    if (kind === 'too-large') {
+      console.warn('Rewriting a cache too large to read in chunks.');
+      return { gist, data: null };
+    }
+    if (kind === 'missing-chunks') {
+      if (attempt === 0) continue;
+      console.warn('Replacing a cache whose chunk files are missing.');
+      warn?.(
+        'Your cached network was incomplete on GitHub and has been replaced; ignored accounts and removed ghosts saved elsewhere may need to be set again.'
+      );
+      return { gist, data: null };
+    }
+    throw new CacheUnreadableError(gistId);
   }
 };
 
@@ -997,12 +1100,16 @@ const findInterleavedWrite = async ({
     const generation = meta?.revision.generation;
     if (!generation || knownGenerations.has(generation)) continue;
 
-    const remote = await readRemoteCache(gistId, version);
-    if (!remote) continue;
+    const gist = await fetchGistById(gistId, version).catch((error) => {
+      console.warn('Failed to read a cache gist revision.', error);
+      return null;
+    });
+    const data = gist ? parseCache(gist) : null;
+    if (!data) continue;
     return {
       generation,
       parent: meta.manifest?.parent ?? null,
-      data: remote.data,
+      data,
     };
   }
   return null;
@@ -1036,7 +1143,8 @@ const writeCacheTo = async (
   data: CachedData,
   description: string,
   onMerged?: (merged: CachedData) => void,
-  known?: CacheGist | null
+  known?: CacheGist | null,
+  warn?: (message: string) => void
 ): Promise<CacheGist | null> => {
   if (!gistId) {
     const generation = newGeneration();
@@ -1088,9 +1196,9 @@ const writeCacheTo = async (
               },
               data: knownData,
             }
-          : await readRemoteCache(gistId);
+          : await readCacheToMerge(gistId, warn);
     }
-    if (remote) {
+    if (remote?.data) {
       toWrite = mergeCacheData(base, remote.data, toWrite);
       merged = true;
       // The read may be newer than the check: it is what was merged.
@@ -1101,8 +1209,15 @@ const writeCacheTo = async (
         files: remote.gist.files.map((file) => file.name),
       };
     } else {
-      // Nothing (readable) to keep: written over, as before.
-      checked = { revision: meta.revision, base: null, files: meta.files };
+      // No cache, or one with nothing a merge could keep (see
+      // readCacheToMerge): written over.
+      checked = remote
+        ? {
+            revision: remote.gist.revision ?? meta.revision,
+            base: null,
+            files: remote.gist.files.map((file) => file.name),
+          }
+        : { revision: meta.revision, base: null, files: meta.files };
     }
   }
 
@@ -1262,7 +1377,8 @@ export const writeCache = async (
       normalizedData,
       description,
       options.onMerged,
-      known
+      known,
+      options.onWarning
     );
 
   const updateTargets = new Set<string>();
@@ -1282,6 +1398,7 @@ export const writeCache = async (
       ownerLogin: normalizedOwnerLogin,
       preferredGistId: gistId,
       fullScan: true,
+      failOnReadError: true,
     });
 
     const canonicalGistId = discoveryResult.canonicalGist?.id;

@@ -11,6 +11,14 @@ export const toUserMessage = (error: unknown, fallback: string): string => {
     console.error(error);
   }
 
+  // Errors that carry their own user-facing explanation (e.g. a cache gist
+  // that can't be read and so wasn't overwritten).
+  const userMessage =
+    error instanceof Error
+      ? (error as Error & { userMessage?: unknown }).userMessage
+      : undefined;
+  if (typeof userMessage === 'string') return userMessage;
+
   const raw = error instanceof Error ? error.message : String(error ?? '');
   const lower = raw.toLowerCase();
 

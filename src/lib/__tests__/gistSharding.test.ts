@@ -25,13 +25,16 @@ import {
   buildCacheDescription,
   buildShardedCache,
   findCanonicalCacheGist,
+  CacheUnreadableError,
   forgetCacheBases,
+  newGeneration,
   parseCache,
   rememberCacheBase,
   serializeCache,
   writeCache,
 } from '@/lib/gist';
 import { decodeCache, encodeCache } from '@/lib/cacheCodec';
+import { toUserMessage } from '@/lib/errors';
 import type { CacheGist, CachedData, NetworkUser } from '@/lib/types';
 
 const OWNER = 'octocat';
@@ -83,34 +86,80 @@ const META_MANIFEST_CHARS = 64_000;
 /** History entries the proxy keeps. */
 const PROXY_HISTORY = 30;
 
-type Request = { method: string; path: string; files: string[] };
+type Request = {
+  method: string;
+  path: string;
+  files: string[];
+  /** The proxy view asked for (`meta`), if any. */
+  view: string | null;
+};
+
+const restError = (status: number) =>
+  new (GitHubRestError as unknown as new (status: number) => Error)(status);
+
+/** GitHub's cap on the files a single-gist response lists. */
+const GITHUB_FILE_LIST_LIMIT = 300;
 
 /**
  * An in-memory stand-in for the Gist API behind the proxy. Every change makes
- * a revision (with a SHA version) and the gist keeps its history, like
- * GitHub: `GET /gists/{id}/{sha}` and raw URLs read a revision as it was, and
- * `GET /gists/{id}/commits` lists them. PATCH merges files (null deletes),
- * inline content is cut at 1 MB like GitHub does, the proxy's `meta` view and
- * history trimming are applied, and request bodies over the host limit are
- * refused like Vercel does. `history` / `historyOnWrite` false leave the
- * (deprecated) history out of every response / of write responses.
+ * a revision (with a SHA version and a commit time) and the gist keeps its
+ * history, like GitHub: `GET /gists/{id}/{sha}` and raw URLs read a revision
+ * as it was, and `GET /gists/{id}/commits` lists them. PATCH merges files
+ * (null deletes), inline content is cut at 1 MB like GitHub does, the
+ * proxy's `meta` view and history trimming are applied, and request bodies
+ * over the host limit are refused like Vercel does.
+ *
+ * Options:
+ * - `history` / `historyOnWrite` false leave the (deprecated) history out of
+ *   every response / of write responses;
+ * - `order: 'oldest-first'` lists history and commits oldest first (GitHub
+ *   lists them newest first, but doesn't promise it);
+ * - `deleteAbsent: '422'` refuses (422) a PATCH that deletes a file the gist
+ *   doesn't have, instead of ignoring the deletion;
+ * - `fileListLimit`: a gist response lists at most this many files (sorted
+ *   by name) and sets `truncated`, like GitHub's 300-file cap.
+ *
+ * `failRead` / `failRaw` make a request fail with a status (e.g. a rate
+ * limit or a 5xx) without touching the gist.
  */
-const fakeGitHub = ({ history = true, historyOnWrite = true } = {}) => {
-  type Revision = { version: string; files: Map<string, string> };
+const fakeGitHub = ({
+  history = true,
+  historyOnWrite = true,
+  order = 'newest-first' as 'newest-first' | 'oldest-first',
+  deleteAbsent = 'ignore' as 'ignore' | '422',
+  fileListLimit = GITHUB_FILE_LIST_LIMIT,
+} = {}) => {
+  type Revision = {
+    version: string;
+    committedAt: string;
+    files: Map<string, string>;
+  };
   const gists = new Map<
     string,
     { description: string; files: Map<string, string>; revisions: Revision[] }
   >();
   const bodies: number[] = [];
   let nextId = 1;
-  let generationCount = 0;
+  let commitCount = 0;
   let failWhen: ((method: string, files: string[]) => boolean) | null = null;
+  let failRead: ((request: Request) => number | null) | null = null;
+  let failRaw: ((file: string) => number | null) | null = null;
   let beforeRequest: ((request: Request) => void) | null = null;
 
   const commit = (id: string) => {
     const gist = gists.get(id)!;
-    gist.revisions.push({ version: sha(), files: new Map(gist.files) });
+    gist.revisions.push({
+      version: sha(),
+      // One second apart, like GitHub's committed_at resolution.
+      committedAt: new Date(
+        Date.UTC(2024, 0, 1) + ++commitCount * 1000
+      ).toISOString(),
+      files: new Map(gist.files),
+    });
   };
+
+  const ordered = <T>(newestFirst: T[]) =>
+    order === 'newest-first' ? newestFirst : [...newestFirst].reverse();
 
   const view = (
     id: string,
@@ -126,6 +175,8 @@ const fakeGitHub = ({ history = true, historyOnWrite = true } = {}) => {
       : gist.revisions.length - 1;
     if (upTo < 0) return null;
     const revision = gist.revisions[upTo];
+    const names = [...revision.files.keys()].sort();
+    const listed = names.slice(0, fileListLimit);
     return {
       id,
       description: gist.description,
@@ -133,16 +184,23 @@ const fakeGitHub = ({ history = true, historyOnWrite = true } = {}) => {
       updated_at: '2024-01-01T00:00:00Z',
       ...(history && withHistory
         ? {
-            history: gist.revisions
-              .slice(0, upTo + 1)
-              .reverse()
-              .slice(0, PROXY_HISTORY)
-              .map(({ version }) => ({ version })),
+            history: ordered(
+              gist.revisions
+                .slice(0, upTo + 1)
+                .reverse()
+                .slice(0, PROXY_HISTORY)
+                .map(({ version, committedAt }) => ({
+                  version,
+                  committed_at: committedAt,
+                }))
+            ),
           }
         : {}),
       owner: { login: OWNER },
+      ...(listed.length < names.length ? { truncated: true } : {}),
       files: Object.fromEntries(
-        [...revision.files].map(([name, content]) => {
+        listed.map((name) => {
+          const content = revision.files.get(name)!;
           const keepManifest =
             name === GIST_FILENAME && content.length <= META_MANIFEST_CHARS;
           const dropped = omitContent && !keepManifest;
@@ -162,7 +220,11 @@ const fakeGitHub = ({ history = true, historyOnWrite = true } = {}) => {
 
   vi.mocked(ghRest).mockImplementation(async (path, init) => {
     const method = init?.method ?? 'GET';
+    const headers = new Headers(init?.headers);
+    const requestView = headers.get('x-follow-sync-gist-view');
     if (path.startsWith('/gists?')) {
+      const status = failRead?.({ method, path, files: [], view: null });
+      if (status) throw restError(status);
       return [...gists.keys()].map((id) =>
         view(id, { omitContent: true })
       ) as never;
@@ -181,9 +243,14 @@ const fakeGitHub = ({ history = true, historyOnWrite = true } = {}) => {
       body = JSON.parse(init.body);
     }
     const files = Object.keys(body.files ?? {});
-    beforeRequest?.({ method, path, files });
+    const request = { method, path, files, view: requestView };
+    beforeRequest?.(request);
     if (failWhen?.(method, files)) {
       throw new Error('GitHub request failed (502): network');
+    }
+    if (method === 'GET') {
+      const status = failRead?.(request);
+      if (status) throw restError(status);
     }
 
     if (path === '/gists' && method === 'POST') {
@@ -203,21 +270,33 @@ const fakeGitHub = ({ history = true, historyOnWrite = true } = {}) => {
     const [, , id, sub] = path.split('?')[0].split('/');
     const gist = gists.get(id);
     if (!gist) return null;
-    const headers = new Headers(init?.headers);
-    const omitContent = headers.get('x-follow-sync-gist-view') === 'meta';
+    const omitContent = requestView === 'meta';
 
     if (sub === 'commits') {
       const perPage = Number(/per_page=(\d+)/.exec(path)?.[1] ?? 30);
-      return [...gist.revisions]
+      const newestFirst = [...gist.revisions]
         .reverse()
-        .slice(0, perPage)
-        .map(({ version }) => ({ version })) as never;
+        .map(({ version, committedAt }) => ({
+          version,
+          committed_at: committedAt,
+        }));
+      // A page is always the newest ones; only their order varies.
+      return ordered(newestFirst.slice(0, perPage)) as never;
     }
     if (sub) {
       return view(id, { omitContent, version: sub }) as never;
     }
 
     if (method === 'PATCH') {
+      const deletions = Object.entries(body.files ?? {})
+        .filter(([, file]) => !file)
+        .map(([name]) => name);
+      if (
+        deleteAbsent === '422' &&
+        deletions.some((name) => !gist.files.has(name))
+      ) {
+        throw restError(422);
+      }
       if (body.description) gist.description = body.description;
       for (const [name, file] of Object.entries(body.files ?? {})) {
         if (file) gist.files.set(name, file.content);
@@ -234,18 +313,23 @@ const fakeGitHub = ({ history = true, historyOnWrite = true } = {}) => {
   vi.mocked(ghGistRaw).mockImplementation(async (rawUrl) => {
     const [, id, version, name] =
       /\/([^/]+)\/raw\/([^/]+)\/([^/]+)$/.exec(rawUrl) ?? [];
+    const status = failRaw?.(decodeURIComponent(name ?? ''));
+    if (status) throw restError(status);
     const content = gists
       .get(id)
       ?.revisions.find((revision) => revision.version === version)
       ?.files.get(decodeURIComponent(name));
-    if (content === undefined) throw new Error('raw 404');
+    if (content === undefined) throw restError(404);
     return content;
   });
 
-  const currentGeneration = (id: string) => {
+  const currentManifest = (id: string) => {
     const manifest = gists.get(id)!.files.get(GIST_FILENAME);
     try {
-      return (JSON.parse(manifest ?? '') as { generation?: string }).generation;
+      return JSON.parse(manifest ?? '') as {
+        generation?: string;
+        chunks?: Array<{ file: string }>;
+      };
     } catch {
       return undefined;
     }
@@ -256,19 +340,33 @@ const fakeGitHub = ({ history = true, historyOnWrite = true } = {}) => {
     bodies,
     /**
      * Another device writes `data` to the gist in one request, as this code
-     * would: based on the cache it holds now, replacing its chunks.
+     * does: based on the cache it holds now, deleting the chunks of the
+     * manifest it replaces. `sweep: 'all'` deletes every other chunk file
+     * instead, like earlier versions of this code did (including another
+     * writer's chunks still uploading).
      */
-    writeElsewhere: (id: string, data: CachedData) => {
+    writeElsewhere: (
+      id: string,
+      data: CachedData,
+      { sweep = 'replaced' }: { sweep?: 'replaced' | 'all' } = {}
+    ) => {
       const gist = gists.get(id)!;
+      const replaced = currentManifest(id);
       const { manifest, chunks } = buildShardedCache(
         data,
-        `elsewhere${++generationCount}`,
-        currentGeneration(id) ?? null
+        newGeneration(),
+        replaced?.generation ?? null
+      );
+      const replacedChunks = new Set(
+        (replaced?.chunks ?? []).map((ref) => ref.file)
       );
       gist.files = new Map([
         ...[...gist.files].filter(
           ([name]) =>
-            name !== GIST_FILENAME && !name.startsWith(GIST_CHUNK_PREFIX)
+            name !== GIST_FILENAME &&
+            !(sweep === 'all'
+              ? name.startsWith(GIST_CHUNK_PREFIX)
+              : replacedChunks.has(name))
         ),
         [GIST_FILENAME, manifest],
         ...chunks.map(
@@ -279,10 +377,10 @@ const fakeGitHub = ({ history = true, historyOnWrite = true } = {}) => {
     },
     /** Another device uploads a chunk file without its manifest (yet). */
     uploadChunkElsewhere: (id: string) => {
-      gists
-        .get(id)!
-        .files.set(`${GIST_CHUNK_PREFIX}inprogress${++generationCount}.1`, '{');
+      const name = `${GIST_CHUNK_PREFIX}${newGeneration()}.1`;
+      gists.get(id)!.files.set(name, '{');
       commit(id);
+      return name;
     },
     /** Puts a gist with exactly `files` in place (one revision). */
     seed: (id: string, files: Record<string, string>) => {
@@ -293,13 +391,33 @@ const fakeGitHub = ({ history = true, historyOnWrite = true } = {}) => {
       });
       commit(id);
     },
+    /** Changes the gist's files directly (one revision); null deletes. */
+    edit: (id: string, files: Record<string, string | null>) => {
+      const gist = gists.get(id)!;
+      for (const [name, content] of Object.entries(files)) {
+        if (content === null) gist.files.delete(name);
+        else gist.files.set(name, content);
+      }
+      commit(id);
+    },
     failWhen: (fn: typeof failWhen) => {
       failWhen = fn;
+    },
+    failRead: (fn: typeof failRead) => {
+      failRead = fn;
+    },
+    failRaw: (fn: typeof failRaw) => {
+      failRaw = fn;
     },
     beforeRequest: (fn: typeof beforeRequest) => {
       beforeRequest = fn;
     },
     fileNames: (id: string) => [...gists.get(id)!.files.keys()].sort(),
+    /** The live manifest's chunk files missing from the gist. */
+    missingChunks: (id: string) =>
+      (currentManifest(id)?.chunks ?? [])
+        .map((ref) => ref.file)
+        .filter((file) => !gists.get(id)!.files.has(file)),
   };
 };
 
@@ -825,5 +943,259 @@ describe('concurrent writers (optimistic concurrency)', () => {
 
       expect(requests().filter((r) => r.startsWith('PATCH'))).toHaveLength(3);
     });
+  });
+});
+
+describe('a cache that exists but cannot be read', () => {
+  const ignoredOf = async (gistId: string) =>
+    [...((await readBack(gistId))?.ignoredLogins ?? [])].sort();
+
+  /** A full (not `meta`) read of the gist itself. */
+  const isFullRead = (gistId: string) => (request: Request) =>
+    request.method === 'GET' &&
+    request.path === `/gists/${gistId}` &&
+    request.view === null;
+
+  const patches = () =>
+    vi.mocked(ghRest).mock.calls.filter(([, init]) => init?.method === 'PATCH')
+      .length;
+
+  it.each([
+    ['a server error', 502],
+    ['a rate limit', 429],
+    ['a forbidden rate limit', 403],
+  ])(
+    'abandons a write without a base when the merge read fails with %s',
+    async (_label, status) => {
+      const github = fakeGitHub();
+      const gist = await writeCache(
+        { ...cache(20), ignoredLogins: ['old'] },
+        null
+      );
+      // This session never read the gist; another device wrote it.
+      forgetCacheBases();
+      github.writeElsewhere(gist.id, {
+        ...cache(20),
+        ignoredLogins: ['old', 'theirs'],
+      });
+      let failed = false;
+      github.failRead((request) => {
+        if (failed || !isFullRead(gist.id)(request)) return null;
+        failed = true;
+        return status;
+      });
+      vi.mocked(ghRest).mockClear();
+
+      await expect(
+        writeCache(
+          { ...cache(20), ignoredLogins: ['mine'], timestamp: 5 },
+          gist.id
+        )
+      ).rejects.toThrow(`(${status})`);
+      expect(patches()).toBe(0);
+      expect(await ignoredOf(gist.id)).toEqual(['old', 'theirs']);
+
+      // The next write (the read works again) merges instead.
+      await writeCache(
+        { ...cache(20), ignoredLogins: ['mine'], timestamp: 6 },
+        gist.id
+      );
+      expect(await ignoredOf(gist.id)).toEqual(['mine', 'old', 'theirs']);
+    }
+  );
+
+  it('abandons a write with a stale base when the merge read fails', async () => {
+    const github = fakeGitHub();
+    const gist = await writeCache(
+      { ...cache(20), ignoredLogins: ['old'] },
+      null
+    );
+    github.writeElsewhere(gist.id, {
+      ...cache(20),
+      ignoredLogins: ['old', 'theirs'],
+    });
+    github.failRead((request) => (isFullRead(gist.id)(request) ? 502 : null));
+
+    await expect(
+      writeCache(
+        { ...cache(20), ignoredLogins: ['old', 'mine'], timestamp: 5 },
+        gist.id
+      )
+    ).rejects.toThrow('(502)');
+    github.failRead(null);
+    expect(await ignoredOf(gist.id)).toEqual(['old', 'theirs']);
+  });
+
+  it('abandons the write when a chunk it has to fetch from its raw URL fails', async () => {
+    const github = fakeGitHub();
+    const gist = await writeCache(
+      { ...cache(20), ignoredLogins: ['old'] },
+      null
+    );
+    forgetCacheBases();
+    github.writeElsewhere(gist.id, {
+      ...cache(20),
+      ignoredLogins: ['old', 'theirs'],
+    });
+    // Contents dropped from the response (as the proxy does over its
+    // budget), and the raw fetch of a chunk is rate limited.
+    const real = vi.mocked(ghRest).getMockImplementation()!;
+    vi.mocked(ghRest).mockImplementation(async (path, init) => {
+      const result = (await real(path, init)) as {
+        files?: Record<string, { content: string | null; truncated: boolean }>;
+      } | null;
+      if (!init?.method && path === `/gists/${gist.id}` && result?.files) {
+        for (const [name, file] of Object.entries(result.files)) {
+          if (name !== GIST_FILENAME) {
+            file.content = null;
+            file.truncated = true;
+          }
+        }
+      }
+      return result as never;
+    });
+    github.failRaw((file) => (file.startsWith(GIST_CHUNK_PREFIX) ? 429 : null));
+
+    await expect(
+      writeCache(
+        { ...cache(20), ignoredLogins: ['mine'], timestamp: 5 },
+        gist.id
+      )
+    ).rejects.toThrow('(429)');
+    github.failRaw(null);
+    expect(await ignoredOf(gist.id)).toEqual(['old', 'theirs']);
+  });
+
+  it.each([
+    ['corrupt JSON', '{"format":"sharded-1","gener'],
+    [
+      'a newer manifest format',
+      JSON.stringify({
+        format: 'sharded-2',
+        generation: 'x',
+        parts: ['a'],
+        metadata: { cacheVersion: '5.0' },
+      }),
+    ],
+    ['a malformed cache', JSON.stringify({ network: 'nope' })],
+  ])('refuses to overwrite %s', async (_label, content) => {
+    const github = fakeGitHub();
+    github.seed('odd', { [GIST_FILENAME]: content });
+    vi.mocked(ghRest).mockClear();
+
+    const error = await writeCache(cache(20), 'odd').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(CacheUnreadableError);
+    expect(toUserMessage(error, 'fallback')).toContain("can't read");
+    expect(patches()).toBe(0);
+    expect(github.gists.get('odd')!.files.get(GIST_FILENAME)).toBe(content);
+    expect(github.gists.size).toBe(1);
+  });
+
+  it('replaces a manifest whose chunks are missing, after reading it again', async () => {
+    const github = fakeGitHub();
+    const gist = await writeCache(
+      { ...cache(20), ignoredLogins: ['old'] },
+      null
+    );
+    forgetCacheBases();
+    // An older version of this code deleted the chunks.
+    github.edit(
+      gist.id,
+      Object.fromEntries(
+        github
+          .fileNames(gist.id)
+          .filter((name) => name.startsWith(GIST_CHUNK_PREFIX))
+          .map((name) => [name, null])
+      )
+    );
+    vi.mocked(ghRest).mockClear();
+    const onWarning = vi.fn();
+
+    await writeCache(
+      { ...cache(21), ignoredLogins: ['mine'], timestamp: 5 },
+      gist.id,
+      { onWarning }
+    );
+
+    const fullReads = vi
+      .mocked(ghRest)
+      .mock.calls.filter(
+        ([path, init]) =>
+          path === `/gists/${gist.id}` &&
+          !init?.method &&
+          !new Headers(init?.headers).get('x-follow-sync-gist-view')
+      );
+    expect(fullReads).toHaveLength(2);
+    expect(onWarning).toHaveBeenCalledTimes(1);
+    expect(await readBack(gist.id)).toEqual({
+      ...cache(21),
+      ignoredLogins: ['mine'],
+      timestamp: 5,
+    });
+  });
+
+  it('merges instead when the second read finds the cache complete again', async () => {
+    const github = fakeGitHub();
+    const gist = await writeCache(
+      { ...cache(20), ignoredLogins: ['old'] },
+      null
+    );
+    forgetCacheBases();
+    const chunks = github
+      .fileNames(gist.id)
+      .filter((name) => name.startsWith(GIST_CHUNK_PREFIX));
+    github.edit(
+      gist.id,
+      Object.fromEntries(chunks.map((name) => [name, null]))
+    );
+    // Another device finishes a write between the two reads.
+    let reads = 0;
+    github.beforeRequest((request) => {
+      if (isFullRead(gist.id)(request) && ++reads === 2) {
+        github.writeElsewhere(gist.id, {
+          ...cache(20),
+          ignoredLogins: ['old', 'theirs'],
+        });
+      }
+    });
+    const onWarning = vi.fn();
+
+    await writeCache(
+      { ...cache(20), ignoredLogins: ['mine'], timestamp: 5 },
+      gist.id,
+      { onWarning }
+    );
+
+    expect(onWarning).not.toHaveBeenCalled();
+    expect(await ignoredOf(gist.id)).toEqual(['mine', 'old', 'theirs']);
+  });
+
+  it('still rewrites a single-file cache too large to relay', async () => {
+    const github = fakeGitHub();
+    github.seed('legacy', {
+      [GIST_FILENAME]: 'x'.repeat(GITHUB_INLINE_LIMIT + 1),
+    });
+    github.failRaw((file) => (file === GIST_FILENAME ? 413 : null));
+
+    await writeCache(cache(6), 'legacy');
+
+    github.failRaw(null);
+    expect(await readBack('legacy')).toEqual(cache(6));
+  });
+
+  it('does not create a second cache when discovery cannot read the existing one', async () => {
+    const github = fakeGitHub();
+    const gist = await writeCache(
+      { ...cache(20), ignoredLogins: ['old'] },
+      null
+    );
+    forgetCacheBases();
+    github.failRead((request) => (isFullRead(gist.id)(request) ? 503 : null));
+
+    await expect(
+      writeCache(cache(20), null, { discoverCanonicalFallback: true })
+    ).rejects.toThrow('(503)');
+    expect(github.gists.size).toBe(1);
   });
 });
