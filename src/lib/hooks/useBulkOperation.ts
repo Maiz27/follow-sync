@@ -26,10 +26,11 @@ export const useBulkOperation = (
 ) => {
   const { show, update, complete, fail } = useProgress();
   const [isPending, setIsPending] = useState(false);
-  const cancelRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
+  // Aborting (rather than setting a flag) also ends a rate-limit pause early.
   const cancel = useCallback(() => {
-    cancelRef.current = true;
+    abortRef.current?.abort();
   }, []);
 
   const execute = async (users: NetworkUser[]) => {
@@ -38,7 +39,8 @@ export const useBulkOperation = (
     if (total === 0) return;
 
     setIsPending(true);
-    cancelRef.current = false;
+    const controller = new AbortController();
+    abortRef.current = controller;
     show({
       title: `Bulk ${actionName}`,
       message: `Processing ${total} users...`,
@@ -50,7 +52,7 @@ export const useBulkOperation = (
     const result = await runBulk({
       items: users,
       run: mutationFn,
-      isCancelled: () => cancelRef.current,
+      signal: controller.signal,
       onProgress: (count) => {
         processed = count;
         update(

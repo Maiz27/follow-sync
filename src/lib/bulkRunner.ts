@@ -22,6 +22,11 @@ export type BulkRunOptions<T> = {
   /** Called while waiting out a short rate limit. */
   onPause?: (waitMs: number) => void;
   isCancelled?: () => boolean;
+  /**
+   * Aborting it cancels the run at once, even mid-pause; `isCancelled` alone
+   * is only checked between items and after a pause ends.
+   */
+  signal?: AbortSignal;
   /** Pause between items to stay under GitHub's secondary rate limits. */
   delayMs?: number;
   /** How many times to wait out a short rate limit on the same item. */
@@ -31,6 +36,30 @@ export type BulkRunOptions<T> = {
 
 const defaultSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Waits for `sleep(ms)`, or less when `signal` aborts first. */
+const sleepUnlessAborted = (
+  sleep: (ms: number) => Promise<void>,
+  ms: number,
+  signal?: AbortSignal
+) => {
+  if (!signal) return sleep(ms);
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => resolve();
+    signal.addEventListener('abort', onAbort, { once: true });
+    sleep(ms).then(
+      () => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      }
+    );
+  });
+};
 
 /**
  * Runs a bulk action sequentially. Ordinary failures are collected and the run
@@ -43,11 +72,13 @@ export const runBulk = async <T>({
   run,
   onProgress,
   onPause,
-  isCancelled = () => false,
+  isCancelled: isCancelledOption = () => false,
+  signal,
   delayMs = 250,
   maxPausesPerItem = 3,
   sleep = defaultSleep,
 }: BulkRunOptions<T>): Promise<BulkResult<T>> => {
+  const isCancelled = () => Boolean(signal?.aborted) || isCancelledOption();
   const succeeded: T[] = [];
   const failed: T[] = [];
   let stopReason: BulkStopReason | null = null;
@@ -81,7 +112,7 @@ export const runBulk = async <T>({
         }
 
         onPause?.(wait);
-        await sleep(wait);
+        await sleepUnlessAborted(sleep, wait, signal);
         if (isCancelled()) {
           stopReason = 'cancelled';
           break outer;
@@ -92,7 +123,7 @@ export const runBulk = async <T>({
     onProgress?.(index + 1);
 
     if (index < items.length - 1 && delayMs > 0) {
-      await sleep(delayMs);
+      await sleepUnlessAborted(sleep, delayMs, signal);
     }
   }
 

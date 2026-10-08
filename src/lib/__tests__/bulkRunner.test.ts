@@ -85,4 +85,41 @@ describe('runBulk', () => {
     expect(result.stopReason).toBe('cancelled');
     expect(result.skipped).toEqual([2, 3]);
   });
+
+  it('stops a rate-limit pause as soon as the run is aborted', async () => {
+    const controller = new AbortController();
+    const run = vi.fn().mockRejectedValue(rateLimited('30'));
+    // A pause that would never end on its own.
+    const sleep = vi.fn(() => new Promise<void>(() => undefined));
+
+    const pending = runBulk({
+      items: ['a', 'b'],
+      run,
+      sleep,
+      signal: controller.signal,
+      onPause: () => controller.abort(),
+    });
+
+    const result = await pending;
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(result.stopReason).toBe('cancelled');
+    expect(result.skipped).toEqual(['a', 'b']);
+  });
+
+  it('does not wait out the delay between items once aborted', async () => {
+    const controller = new AbortController();
+    const run = vi.fn(async () => controller.abort());
+    const sleep = vi.fn(() => new Promise<void>(() => undefined));
+
+    const result = await runBulk({
+      items: [1, 2],
+      run,
+      sleep,
+      signal: controller.signal,
+    });
+
+    expect(result.stopReason).toBe('cancelled');
+    expect(result.succeeded).toEqual([1]);
+    expect(result.skipped).toEqual([2]);
+  });
 });
