@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { GIST_FILENAME } from '@/lib/constants';
+
 type GistFileJson = {
   content?: string | null;
   truncated?: boolean;
@@ -19,16 +21,38 @@ const isGistJson = (value: unknown): value is GistJson =>
   typeof (value as GistJson).files === 'object' &&
   (value as GistJson).files !== null;
 
+/**
+ * History entries kept: enough for a writer to see every revision made since
+ * it checked the gist (its own requests plus any other writer's). Each is cut
+ * down to its version and time; the user object it carries isn't needed.
+ */
+export const MAX_HISTORY_ENTRIES = 30;
+
+/**
+ * A cache manifest (the file named GIST_FILENAME) at most this long keeps its
+ * content in a `meta` view: it is what identifies the cache a revision holds.
+ * Sharded manifests are a few KB; a single-file cache from before sharding is
+ * far larger and dropped like any content.
+ */
+export const MAX_META_MANIFEST_CHARS = 64_000;
+
+const slimHistoryEntry = (entry: unknown) => {
+  if (typeof entry !== 'object' || entry === null) return entry;
+  const { version, committed_at } = entry as Record<string, unknown>;
+  return { version, committed_at };
+};
+
 export const byteLength = (text: string) => Buffer.byteLength(text, 'utf8');
 
 /**
  * Shrinks a single-gist response (GET/PATCH /gists/{id}, POST /gists) so the
  * proxy can return it under the host's response limit:
  *
- * - `history` is cut to its latest entry (the current revision), which is all
- *   the app reads;
+ * - `history` is cut to its latest MAX_HISTORY_ENTRIES entries, each to its
+ *   version and time (the app reads the revisions since its last check);
  * - with `omitContent`, every file's inline content is dropped (the caller
- *   asked for file names and the revision only);
+ *   asked for file names and the revision only), except a small cache
+ *   manifest, which identifies the cache the gist holds;
  * - otherwise, while the body is over `maxBytes`, the largest inline contents
  *   are dropped first.
  *
@@ -48,7 +72,11 @@ export const shapeGistResponse = (
   }
   if (!isGistJson(gist)) return body;
 
-  if (Array.isArray(gist.history)) gist.history = gist.history.slice(0, 1);
+  if (Array.isArray(gist.history)) {
+    gist.history = gist.history
+      .slice(0, MAX_HISTORY_ENTRIES)
+      .map(slimHistoryEntry);
+  }
 
   const files = Object.values(gist.files ?? {});
   const drop = (file: GistFileJson) => {
@@ -57,7 +85,14 @@ export const shapeGistResponse = (
   };
 
   if (omitContent) {
-    files.forEach(drop);
+    for (const [name, file] of Object.entries(gist.files ?? {})) {
+      const keep =
+        name === GIST_FILENAME &&
+        typeof file.content === 'string' &&
+        !file.truncated &&
+        file.content.length <= MAX_META_MANIFEST_CHARS;
+      if (!keep) drop(file);
+    }
     return JSON.stringify(gist);
   }
 

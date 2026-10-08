@@ -54,7 +54,7 @@ const snapshot = ({
   },
 });
 
-const REV = { version: 'v1', updatedAt: '2024-01-01T00:00:00Z' };
+const REV = { version: 'v1', generation: 'g1' };
 
 const logins = (users: NetworkUser[]) => users.map((u) => u.login).sort();
 
@@ -141,30 +141,111 @@ describe('mergeCacheData', () => {
   });
 });
 
+describe('mergeCacheData without a base (this session never read the gist)', () => {
+  it('keeps the network of the newer sync whole', () => {
+    const remote = snapshot({
+      followers: ['fan', 'newfan'],
+      following: ['a', 'c'],
+      syncedAt: 500,
+    });
+    const local = snapshot({ following: ['a', 'b', 'd'], syncedAt: 400 });
+
+    const merged = mergeCacheData(null, remote, local);
+
+    expect(logins(merged.network.followers)).toEqual(['fan', 'newfan']);
+    expect(logins(merged.network.following)).toEqual(['a', 'c']);
+    expect(merged.syncedAt).toBe(500);
+  });
+
+  it('keeps a fresh local sync over an older remote one', () => {
+    const remote = snapshot({ following: ['a', 'c'], syncedAt: 100 });
+    const local = snapshot({ following: ['a', 'b'], syncedAt: 900 });
+
+    const merged = mergeCacheData(null, remote, local);
+
+    expect(logins(merged.network.following)).toEqual(['a', 'b']);
+    expect(merged.syncedAt).toBe(900);
+  });
+
+  it('never drops an ignore or a ghost removal made on either side', () => {
+    const remote = snapshot({
+      ignoredLogins: ['Theirs', 'both'],
+      ghosts: ['g1', 'g2'],
+      removedGhosts: ['g1'],
+      syncedAt: 100,
+    });
+    const local = snapshot({
+      ignoredLogins: ['mine', 'both'],
+      ghosts: ['g1', 'g2'],
+      removedGhosts: ['g2'],
+      syncedAt: 900,
+    });
+
+    const merged = mergeCacheData(null, remote, local);
+
+    expect([...(merged.ignoredLogins ?? [])].sort()).toEqual([
+      'both',
+      'mine',
+      'theirs',
+    ]);
+    expect([...(merged.removedGhosts ?? [])].sort()).toEqual(['g1', 'g2']);
+    expect(merged.ghosts).toEqual([]);
+  });
+
+  it("never takes the network of a cache this code can't serve", () => {
+    const remote = snapshot({
+      following: ['old'],
+      ignoredLogins: ['theirs'],
+      syncedAt: 900,
+    });
+    remote.metadata = { ...remote.metadata, cacheVersion: '2.0' };
+    const local = snapshot({ following: ['a'], syncedAt: 100 });
+
+    const merged = mergeCacheData(null, remote, local);
+
+    expect(logins(merged.network.following)).toEqual(['a']);
+    expect(merged.ignoredLogins).toEqual(['theirs']);
+  });
+});
+
 describe('isSameRevision', () => {
-  const at = '2024-01-01T00:00:00Z';
-  it('compares history versions when both sides have one', () => {
+  it('compares cache generations when both sides have one', () => {
     expect(
       isSameRevision(
-        { version: 'a', updatedAt: at },
-        { version: 'a', updatedAt: 'x' }
+        { version: 'a', generation: 'g1' },
+        { version: 'b', generation: 'g1' }
       )
     ).toBe(true);
     expect(
       isSameRevision(
-        { version: 'a', updatedAt: at },
-        { version: 'b', updatedAt: at }
+        { version: 'a', generation: 'g1' },
+        { version: 'a', generation: 'g2' }
       )
     ).toBe(false);
   });
 
-  it('falls back to updated_at when a version is missing', () => {
+  it('treats a cache appearing or disappearing as a change', () => {
     expect(
       isSameRevision(
-        { version: null, updatedAt: at },
-        { version: 'b', updatedAt: at }
+        { version: 'a', generation: null },
+        { version: 'a', generation: 'g1' }
+      )
+    ).toBe(false);
+  });
+
+  it('falls back to history versions without generations, and never matches unknown', () => {
+    expect(
+      isSameRevision(
+        { version: 'a', generation: null },
+        { version: 'a', generation: null }
       )
     ).toBe(true);
-    expect(isSameRevision(null, { version: 'b', updatedAt: at })).toBe(false);
+    expect(
+      isSameRevision(
+        { version: null, generation: null },
+        { version: null, generation: null }
+      )
+    ).toBe(false);
+    expect(isSameRevision(null, { version: 'b', generation: 'g' })).toBe(false);
   });
 });

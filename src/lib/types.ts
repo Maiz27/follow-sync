@@ -38,10 +38,21 @@ export interface CacheGistFile {
   rawUrl?: string | null;
 }
 
-/** A gist revision: its latest history version and `updated_at`. */
+/**
+ * What identifies the cache a gist revision holds (see isSameRevision).
+ */
 export interface GistRevision {
+  /**
+   * The gist's latest history version (a commit SHA), when GitHub returned
+   * one. `history` is documented as deprecated, so it may be missing.
+   */
   version: string | null;
-  updatedAt: string | null;
+  /**
+   * The write generation of the cache manifest at this revision: unique per
+   * cache write. Null for a single-file cache from before sharding, or a gist
+   * without a cache.
+   */
+  generation: string | null;
 }
 
 export interface CacheGist {

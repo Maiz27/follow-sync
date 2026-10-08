@@ -7,7 +7,7 @@ vi.mock('@/lib/server/githubToken', () => ({
 
 import { NextRequest } from 'next/server';
 import { DELETE, GET, PATCH, POST } from '@/app/api/gh/rest/[...path]/route';
-import { MAX_PROXY_BODY_BYTES } from '@/lib/constants';
+import { GIST_FILENAME, MAX_PROXY_BODY_BYTES } from '@/lib/constants';
 
 const ctx = (path: string[]) => ({ params: Promise.resolve({ path }) });
 const request = (path: string, method = 'GET') =>
@@ -58,6 +58,7 @@ describe('/api/gh/rest allowlist', () => {
   });
 
   const GIST_ID = 'aa5a315d61ae9438b18d';
+  const REVISION = '468aac8caed5f0c3b859b8286968a1b2c3d4e5f6';
   const handlers = { GET, POST, PATCH, DELETE } as const;
 
   it.each([
@@ -66,6 +67,8 @@ describe('/api/gh/rest allowlist', () => {
     ['GET', `gists/${GIST_ID}`],
     ['PATCH', `gists/${GIST_ID}`],
     ['DELETE', `gists/${GIST_ID}`],
+    ['GET', `gists/${GIST_ID}/commits`],
+    ['GET', `gists/${GIST_ID}/${REVISION}`],
     ['GET', 'user/following'],
     ['GET', 'user/followers'],
     ['GET', 'user/following/octo-cat'],
@@ -85,7 +88,11 @@ describe('/api/gh/rest allowlist', () => {
 
   it.each([
     ['POST', `gists/${GIST_ID}/forks`],
-    ['GET', `gists/${GIST_ID}/commits`],
+    ['POST', `gists/${GIST_ID}/commits`],
+    ['PATCH', `gists/${GIST_ID}/${REVISION}`],
+    ['DELETE', `gists/${GIST_ID}/${REVISION}`],
+    ['GET', `gists/${GIST_ID}/${REVISION.slice(0, 39)}`],
+    ['GET', `gists/${GIST_ID}/${REVISION}/extra`],
     ['GET', `gists/${GIST_ID}/forks`],
     ['GET', 'gists/public'],
     ['GET', 'gists/starred'],
@@ -119,7 +126,11 @@ describe('/api/gh/rest body limits', () => {
     JSON.stringify({
       id: GIST_ID,
       updated_at: '2024-01-01T00:00:00Z',
-      history: [{ version: 'v3' }, { version: 'v2' }, { version: 'v1' }],
+      history: Array.from({ length: 40 }, (_, i) => ({
+        version: `v${40 - i}`,
+        committed_at: '2024-01-01T00:00:00Z',
+        user: { login: 'o', avatar_url: 'x'.repeat(200) },
+      })),
       files: Object.fromEntries(
         Object.entries(files).map(([name, content]) => [
           name,
@@ -193,13 +204,22 @@ describe('/api/gh/rest body limits', () => {
       expect(file.truncated).toBe(true);
       expect(file.raw_url).toContain('gist.githubusercontent.com');
     }
-    expect(gist.history).toEqual([{ version: 'v3' }]);
+    expect(gist.history).toHaveLength(30);
+    expect(gist.history[0]).toEqual({
+      version: 'v40',
+      committed_at: '2024-01-01T00:00:00Z',
+    });
   });
 
-  it('drops every content when only the file list is asked for', async () => {
+  it('drops every content but a small cache manifest when only the file list is asked for', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(gistJson({ a: 'aaa', b: 'bbb' })))
+      vi.fn(
+        async () =>
+          new Response(
+            gistJson({ a: 'aaa', b: 'bbb', [GIST_FILENAME]: '{"m":1}' })
+          )
+      )
     );
 
     const response = await GET(
@@ -214,8 +234,36 @@ describe('/api/gh/rest body limits', () => {
     );
     const gist = await response.json();
 
-    expect(Object.keys(gist.files)).toEqual(['a', 'b']);
+    expect(Object.keys(gist.files)).toEqual(['a', 'b', GIST_FILENAME]);
     expect(gist.files.a).toMatchObject({ content: null, truncated: true });
+    expect(gist.files[GIST_FILENAME]).toMatchObject({ content: '{"m":1}' });
+  });
+
+  it('drops a large single-file cache from a file-list view too', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(gistJson({ [GIST_FILENAME]: 'x'.repeat(100_000) }))
+      )
+    );
+
+    const response = await GET(
+      new NextRequest(`https://app.example/api/gh/rest/gists/${GIST_ID}`, {
+        headers: {
+          host: 'app.example',
+          'sec-fetch-site': 'same-origin',
+          'x-follow-sync-gist-view': 'meta',
+        },
+      }),
+      ctx(['gists', GIST_ID])
+    );
+    const gist = await response.json();
+
+    expect(gist.files[GIST_FILENAME]).toMatchObject({
+      content: null,
+      truncated: true,
+    });
   });
 
   it('answers 413 instead of relaying a non-gist response over the limit', async () => {

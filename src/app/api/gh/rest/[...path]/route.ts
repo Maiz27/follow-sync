@@ -12,6 +12,8 @@ const UPSTREAM_TIMEOUT_MS = 30_000;
 // Gist ids are hex (very old ones are decimal). Requiring that keeps the
 // sibling collection routes (`gists/public`, `gists/starred`) out.
 const GIST_ID = /^[0-9a-f]{1,64}$/i;
+// A gist revision: a git commit SHA (SHA-1, or SHA-256 should GitHub move).
+const GIST_REVISION = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
 // GitHub logins: letters, digits and hyphens (a few legacy ones differ, so
 // this is deliberately loose — it only has to be a single path segment).
 const LOGIN = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -29,6 +31,11 @@ const ALLOWED: Rule[] = [
   { pattern: ['gists'], methods: ['GET', 'POST'] },
   // Read, write and delete (duplicate cleanup) a cache gist.
   { pattern: ['gists', GIST_ID], methods: ['GET', 'PATCH', 'DELETE'] },
+  // Read-only, for concurrent cache writes: the revisions made since a
+  // write's check (when a response carries no history), and the cache an
+  // earlier revision held.
+  { pattern: ['gists', GIST_ID, 'commits'], methods: ['GET'] },
+  { pattern: ['gists', GIST_ID, GIST_REVISION], methods: ['GET'] },
   // REST follow lists (organizations and ghost detection).
   { pattern: ['user', 'following'], methods: ['GET'] },
   { pattern: ['user', 'followers'], methods: ['GET'] },
