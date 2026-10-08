@@ -14,6 +14,10 @@ export const useNetworkManager = (username?: string) => {
   const { setForceNextRefresh } = useGistStore();
   const progress = useProgress();
 
+  // The key is the account. The client, session and progress callbacks are
+  // plumbing that changes identity across renders, not inputs that should
+  // refetch (and re-sync from GitHub) when they do.
+  // eslint-disable-next-line @tanstack/query/exhaustive-deps
   const queryResult = useQuery({
     queryKey: [QUERY_KEY_USER_NETWORK, username],
     queryFn: async () => {
@@ -35,5 +39,12 @@ export const useNetworkManager = (username?: string) => {
     await queryResult.refetch();
   };
 
-  return { ...queryResult, refetch: forceRefetch };
+  return {
+    data: queryResult.data,
+    error: queryResult.error,
+    isPending: queryResult.isPending,
+    isError: queryResult.isError,
+    isFetching: queryResult.isFetching,
+    refetch: forceRefetch,
+  };
 };

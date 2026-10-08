@@ -31,8 +31,23 @@ export const STALE_TIME_LARGE = 1000 * 60 * 60 * 12; // 12 hours
 export const STALE_TIME_MANUAL_ONLY = Infinity; // Never stale, requires manual refresh
 
 // Metadata
-export const DOMAIN = process.env.NEXT_PUBLIC_DOMAIN ?? 'localhost';
-export const BASE_URL = `https://${DOMAIN}`;
+export const SITE_NAME = 'Follow Sync';
+
+/**
+ * Public origin used for canonical URLs, Open Graph, the sitemap and robots.
+ * Prefers the configured domain, then Vercel's production/deployment host,
+ * and finally a local dev server (served over http, not https).
+ */
+const resolveBaseUrl = () => {
+  const host =
+    process.env.NEXT_PUBLIC_DOMAIN ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_URL;
+  if (host) return `https://${host.replace(/^https?:\/\//, '')}`;
+  return `http://localhost:${process.env.PORT ?? 3000}`;
+};
+
+export const BASE_URL = resolveBaseUrl();
 
 export const GITHUB_REPO_URL = 'https://github.com/maiz27/follow-sync';
 
@@ -47,10 +62,10 @@ export const METADATA = new Map([
     'home',
     {
       title: 'Follow Sync | GitHub Follower Management Tool',
+      absoluteTitle: true,
       description:
         'The best way to manage your GitHub followers. Track, analyze, and grow your network effortlessly. Get insights into non-followers, fans, and more.',
       url: BASE_URL,
-      icon: '/imgs/logo/favicon.ico',
       image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',
     },
@@ -58,11 +73,10 @@ export const METADATA = new Map([
   [
     'dashboard',
     {
-      title: 'Dashboard | Follow Sync',
+      title: 'Dashboard',
       description:
         'Analyze your GitHub network. View your followers, following, non-followers, fans, and ghosts.',
       url: `${BASE_URL}/dashboard`,
-      icon: '/imgs/logo/favicon.ico',
       image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',
     },
@@ -70,11 +84,10 @@ export const METADATA = new Map([
   [
     'terms',
     {
-      title: 'Terms of Service | Follow Sync',
+      title: 'Terms of Service',
       description:
         'Review the terms and conditions for using Follow Sync, outlining your rights and responsibilities, acceptable use, and the service agreement for managing your GitHub network with our tool.',
       url: `${BASE_URL}/terms`,
-      icon: '/imgs/logo/favicon.ico',
       image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',
     },
@@ -82,11 +95,10 @@ export const METADATA = new Map([
   [
     'privacy',
     {
-      title: 'Privacy Policy | Follow Sync',
+      title: 'Privacy Policy',
       description:
         'Understand how Follow Sync handles your data, how it is used to analyze your GitHub network, and our commitment to protecting your privacy.',
       url: `${BASE_URL}/privacy`,
-      icon: '/imgs/logo/favicon.ico',
       image: `${BASE_URL}/imgs/logo/og.png`,
       type: 'website',
     },
