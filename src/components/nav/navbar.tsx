@@ -26,7 +26,7 @@ const Navbar = () => {
         <Link href='/' className='flex shrink-0 items-center gap-2'>
           <Logo />
           {/* The wordmark never wraps; below 360px it yields to the controls. */}
-          <span className='hidden text-lg font-extrabold whitespace-nowrap text-primary min-[360px]:inline sm:text-xl'>
+          <span className='hidden text-lg font-bold tracking-[-0.01em] whitespace-nowrap text-primary min-[360px]:inline sm:text-xl'>
             Follow Sync
           </span>
           <span className='sr-only min-[360px]:hidden'>Follow Sync</span>
