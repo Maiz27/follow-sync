@@ -6,9 +6,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 const mocks = vi.hoisted(() => ({
   session: {
     status: 'unauthenticated' as
-      | 'loading'
-      | 'authenticated'
-      | 'unauthenticated',
+      'loading' | 'authenticated' | 'unauthenticated',
     data: null as null | { user: { login: string } },
   },
   pathname: '/',
