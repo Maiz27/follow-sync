@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import { ThemeProvider } from '@/components/theme/themeProvider';
 import { AuthSessionProvider } from '@/components/auth/sessionProvider';
 import Navbar from '@/components/nav/navbar';
@@ -36,15 +37,20 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Set by middleware alongside the CSP. Reading it renders every page on
+  // demand, which the nonce requires: a prerendered page can't carry one.
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
+
   return (
     <html lang='en' suppressHydrationWarning>
       <body>
         <ThemeProvider
+          nonce={nonce}
           attribute='class'
           defaultTheme='system'
           enableSystem
