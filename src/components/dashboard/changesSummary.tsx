@@ -68,13 +68,17 @@ const ChangesSummary = () => {
       </p>
       <ul className='flex flex-wrap gap-x-4 gap-y-1'>
         {visible.map(({ key, label, sign }) => (
-          <li key={key}>
+          <li key={key} className='flex items-center gap-1.5'>
+            {/* A brand node marks the positive signal; the text keeps its
+                foreground colour so it stays readable on the card. */}
             <span
+              aria-hidden='true'
               className={cn(
-                'font-semibold tabular-nums',
-                sign === '+' && 'text-brand'
+                'size-2 shrink-0',
+                sign === '+' ? 'bg-brand' : 'bg-muted-foreground/40'
               )}
-            >
+            />
+            <span className='font-semibold tabular-nums'>
               {sign}
               {diff.counts[key].toLocaleString()}
             </span>{' '}

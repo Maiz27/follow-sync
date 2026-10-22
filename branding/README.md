@@ -28,8 +28,8 @@ Regenerate the rasters from `fs-nodes-tile.svg` at 16/32/48 (ICO), 96, 180, 192 
 | Sync Green | `#16A34A` light, `#22C55E` dark | `--brand`                    | the accent only                               |
 
 The accent marks the reciprocal or positive signal and nothing else: the logo's returning arrow, bulk-action
-progress, success toasts, plus deltas in the changes summary. Buttons, tabs and focus rings stay monochrome.
-Never set text in green on white, and never put the mark on green.
+progress, success toasts, the node marker next to plus deltas in the changes summary. Buttons, tabs and focus rings
+stay monochrome. Never set text in green on white, and never put the mark on green.
 
 ## Type
 
