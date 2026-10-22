@@ -17,7 +17,8 @@ pointed head, zero radius, one accent.
 | `fs-nodes-tile.svg`                          | Square ink tile with the small cut: source of `icon-96.png`, `apple-icon.png` and the manifest icons in `public/imgs/logo`.                                |
 | `fs-nodes-favicon-tile.svg`                  | 16-grid favicon drawing on an ink tile: source of `favicon.ico`. The browser-tab SVG (`public/imgs/logo/icon.svg`) uses the same drawing without the tile. |
 
-Regenerate the rasters from `fs-nodes-tile.svg` at 16/32/48 (ICO), 96, 180, 192 and 512 px.
+Regenerate `favicon.ico` (16/32/48 px) from `fs-nodes-favicon-tile.svg`, and the 96, 180, 192 and 512 px rasters
+from `fs-nodes-tile.svg`.
 
 ## Colour
 
