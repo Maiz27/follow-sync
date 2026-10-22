@@ -4,22 +4,39 @@ import React, { useEffect, useState } from 'react';
 import { Button } from '../ui/button';
 import { readStorage, writeStorage } from '@/lib/storage';
 import { LuEllipsis, LuInfo, LuX } from 'react-icons/lu';
+import {
+  FollowersGlyph,
+  FollowingGlyph,
+  GhostGlyph,
+  OneWayInGlyph,
+  OneWayOutGlyph,
+} from '@/components/brand/glyphs';
 
 /** Browser preference (not account data), so it survives sign-out. */
 export const ONBOARDING_STORAGE_KEY = 'follow-sync:pref:onboarding-dismissed';
 
 const TAB_GUIDE = [
-  ['Audience', 'everyone who follows you.'],
-  ['Network', 'everyone you follow, including organizations.'],
-  [
-    'One-Way Out',
-    "people you follow who don't follow back — candidates to unfollow.",
-  ],
-  ['One-Way In', "people who follow you that you don't follow back."],
-  [
-    'Ghosts',
-    "deleted or suspended accounts stuck in GitHub's lists; ones you follow can be removed.",
-  ],
+  { icon: FollowersGlyph, tab: 'Audience', text: 'everyone who follows you.' },
+  {
+    icon: FollowingGlyph,
+    tab: 'Network',
+    text: 'everyone you follow, including organizations.',
+  },
+  {
+    icon: OneWayOutGlyph,
+    tab: 'One-Way Out',
+    text: "people you follow who don't follow back — candidates to unfollow.",
+  },
+  {
+    icon: OneWayInGlyph,
+    tab: 'One-Way In',
+    text: "people who follow you that you don't follow back.",
+  },
+  {
+    icon: GhostGlyph,
+    tab: 'Ghosts',
+    text: "deleted or suspended accounts stuck in GitHub's lists; ones you follow can be removed.",
+  },
 ];
 
 /**
@@ -59,10 +76,13 @@ const Onboarding = () => {
         <LuInfo className='text-primary' aria-hidden='true' />
         Quick tour
       </p>
-      <ul className='grid gap-1'>
-        {TAB_GUIDE.map(([tab, text]) => (
-          <li key={tab}>
-            <span className='font-medium'>{tab}</span>: {text}
+      <ul className='grid gap-1.5'>
+        {TAB_GUIDE.map(({ icon: Icon, tab, text }) => (
+          <li key={tab} className='flex items-start gap-2'>
+            <Icon className='mt-0.5 shrink-0 text-base' aria-hidden='true' />
+            <span>
+              <span className='font-medium'>{tab}</span>: {text}
+            </span>
           </li>
         ))}
       </ul>

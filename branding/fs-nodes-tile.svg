@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+  <title id="title">Follow Sync app icon</title>
+  <!-- Square ink tile (platforms apply their own corner mask) with the small-size cut at 66 %, the returning arrow in Sync Green. -->
+  <rect width="256" height="256" fill="#111111"/>
+  <g transform="translate(43.52 43.52) scale(0.66)">
+    <path fill="#ffffff" d="M16 36 H88 V52 H152 V36 L232 72 L152 108 V92 H88 V108 H16 Z"/>
+    <path fill="#16A34A" d="M240 220 H168 V204 H104 V220 L24 184 L104 148 V164 H168 V148 H240 Z"/>
+  </g>
+</svg>

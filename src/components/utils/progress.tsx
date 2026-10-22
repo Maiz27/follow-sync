@@ -25,10 +25,10 @@ const ProgressBar = ({ value, label }: { value: number; label: string }) => (
     aria-valuemin={0}
     aria-valuemax={100}
     aria-valuenow={Math.round(value)}
-    className='box-content h-2.5 w-full overflow-hidden rounded-full border border-border bg-muted-foreground'
+    className='box-content h-2.5 w-full overflow-hidden border border-border bg-muted'
   >
     <div
-      className='h-2.5 rounded-full bg-accent transition-all duration-300 ease-in-out'
+      className='h-2.5 bg-brand transition-all duration-300 ease-in-out'
       style={{ width: `${value}%` }}
     />
   </div>

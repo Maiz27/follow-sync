@@ -7,8 +7,9 @@ import { Button } from '../ui/button';
 import { useGistStore } from '@/lib/store/gist';
 import { useCacheManager } from '@/lib/hooks/useCacheManager';
 import { hasChanges, type NetworkDiff } from '@/lib/networkDiff';
-import { timeAgo } from '@/lib/utils';
-import { LuSparkles, LuX } from 'react-icons/lu';
+import { cn, timeAgo } from '@/lib/utils';
+import { LuX } from 'react-icons/lu';
+import { MutualGlyph } from '@/components/brand/glyphs';
 
 const CATEGORIES: Array<{
   key: keyof NetworkDiff['counts'];
@@ -50,7 +51,7 @@ const ChangesSummary = () => {
   return (
     <section
       aria-label='Changes since last sync'
-      className='relative rounded-lg border bg-card p-4 text-sm'
+      className='relative border bg-card p-4 text-sm'
     >
       <Button
         variant='ghost'
@@ -62,13 +63,22 @@ const ChangesSummary = () => {
         <LuX />
       </Button>
       <p className='mb-2 flex items-center gap-2 pr-8 font-semibold'>
-        <LuSparkles className='text-primary' aria-hidden='true' />
+        <MutualGlyph className='text-primary' aria-hidden='true' />
         Since your previous sync ({timeAgo(diff.since)})
       </p>
       <ul className='flex flex-wrap gap-x-4 gap-y-1'>
         {visible.map(({ key, label, sign }) => (
-          <li key={key}>
-            <span className='font-semibold'>
+          <li key={key} className='flex items-center gap-1.5'>
+            {/* A brand node marks the positive signal; the text keeps its
+                foreground colour so it stays readable on the card. */}
+            <span
+              aria-hidden='true'
+              className={cn(
+                'size-2 shrink-0',
+                sign === '+' ? 'bg-brand' : 'bg-muted-foreground/40'
+              )}
+            />
+            <span className='font-semibold tabular-nums'>
               {sign}
               {diff.counts[key].toLocaleString()}
             </span>{' '}

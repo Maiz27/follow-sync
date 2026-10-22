@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { LuUserX } from 'react-icons/lu';
+import { OneWayOutGlyph } from '@/components/brand/glyphs';
 import ConnectionListTab, { ConnectionListAction } from './connectionListTab';
 import { useFollowManager } from '@/lib/hooks/useFollowManager';
 import { useCacheManager } from '@/lib/hooks/useCacheManager';
@@ -37,7 +37,7 @@ const NonFollowersTab = ({ oneWayOut }: NonFollowersTabProps) => {
       ignorable
       hideIgnoredByDefault
       empty={{
-        icon: LuUserX,
+        icon: OneWayOutGlyph,
         title: 'No One-Way Out Connections',
         description: "Everyone you follow also follows you back. That's great!",
       }}

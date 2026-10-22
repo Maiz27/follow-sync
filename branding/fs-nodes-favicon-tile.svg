@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16" role="img" aria-labelledby="title">
+  <title id="title">Follow Sync favicon tile</title>
+  <!-- Source of favicon.ico: the 16-grid favicon drawing on an ink tile, inset by one unit. -->
+  <rect width="16" height="16" fill="#111111"/>
+  <g transform="translate(1 1) scale(0.875)">
+    <path fill="#ffffff" d="M0 1h4v1h6V0l6 3-6 3V5H4v1H0z"/>
+    <path fill="#16A34A" d="M16 15h-4v-1H6v2l-6-3 6-3v2h6v-1h4z"/>
+  </g>
+</svg>

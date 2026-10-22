@@ -8,6 +8,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -65,11 +67,16 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
+  /* Sync Green (#16A34A): the one accent. It marks the reciprocal or positive
+     signal (the logo's returning arrow, progress, success, plus deltas) and
+     nothing else. */
+  --brand: oklch(0.627 0.194 149.2);
+  --brand-foreground: oklch(1 0 0);
+  --chart-1: var(--color-green-300);
+  --chart-2: var(--color-green-500);
+  --chart-3: var(--color-green-600);
+  --chart-4: var(--color-green-700);
+  --chart-5: var(--color-green-800);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -107,14 +114,17 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
+  /* A step brighter (#22C55E) so the accent keeps its contrast on ink. */
+  --brand: oklch(0.723 0.219 149.6);
+  --brand-foreground: oklch(0.145 0 0);
+  --chart-1: var(--color-green-300);
+  --chart-2: var(--color-green-500);
+  --chart-3: var(--color-green-600);
+  --chart-4: var(--color-green-700);
+  --chart-5: var(--color-green-800);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
@@ -147,6 +157,35 @@
 
 main {
   @apply min-h-[calc(100dvh_-_3.5rem_-_3.5rem)];
+}
+
+/* Landing hero: the two follows slide toward each other and meet. Reduced
+   motion is handled by the global rule below. */
+@keyframes brand-sync-out {
+  from {
+    transform: translateX(-24%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes brand-sync-back {
+  from {
+    transform: translateX(24%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.brand-hero-mark [data-part='out'] {
+  animation: brand-sync-out 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.brand-hero-mark [data-part='back'] {
+  animation: brand-sync-back 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s both;
 }
 
 div[data-slot='dropdown-menu-item'] > *:first-child {

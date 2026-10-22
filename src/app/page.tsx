@@ -3,7 +3,9 @@ import DashboardPreview from '@/components/landing/dashboardPreview';
 import { Heading } from '@/components/utils/heading';
 import { Section } from '@/components/utils/section';
 import { SubText } from '@/components/utils/subText';
-import { LuGithub, LuLock, LuSearch, LuUsers } from 'react-icons/lu';
+import { BrandMark } from '@/components/brand/mark';
+import { MutualGlyph, OneWayOutGlyph } from '@/components/brand/glyphs';
+import { LuGithub, LuLock } from 'react-icons/lu';
 
 const HOW_IT_WORKS = [
   {
@@ -12,12 +14,12 @@ const HOW_IT_WORKS = [
     body: 'Sign in with GitHub. Follow Sync asks only for read:user, user:follow and gist access.',
   },
   {
-    icon: LuSearch,
+    icon: MutualGlyph,
     title: 'See who is in sync',
     body: 'Your followers and following are compared to find one-way connections, organizations and ghost accounts.',
   },
   {
-    icon: LuUsers,
+    icon: OneWayOutGlyph,
     title: 'Act on it',
     body: 'Follow back, unfollow or remove ghosts one at a time or in bulk, with search, sort and CSV/JSON export.',
   },
@@ -27,6 +29,8 @@ export default function Home() {
   return (
     <>
       <Section className='grid place-items-center pt-16 pb-10 md:pt-24'>
+        {/* The mark, large: the two follows slide in and meet (see globals.css). */}
+        <BrandMark className='brand-hero-mark mb-8 h-16 w-[4.8rem] text-primary md:h-20 md:w-24' />
         <Heading Tag='h1'>
           {`Master Your GitHub Connections: Know Who's Really Following`}
         </Heading>

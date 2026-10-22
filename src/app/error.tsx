@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { BrandMark } from '@/components/brand/mark';
 import { toUserMessage } from '@/lib/errors';
 
 export default function Error({
@@ -17,6 +18,7 @@ export default function Error({
 
   return (
     <div className='flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center'>
+      <BrandMark mono className='h-8 w-10 text-muted-foreground' />
       <h1 className='text-2xl font-bold'>Something went wrong</h1>
       <p className='max-w-md text-sm text-muted-foreground'>
         {toUserMessage(

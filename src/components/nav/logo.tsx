@@ -1,27 +1,8 @@
-import React from 'react';
-import Image from 'next/image';
+import { BrandMark } from '@/components/brand/mark';
 
-const Logo = () => {
-  return (
-    <>
-      <Image
-        width={30}
-        height={30}
-        src='/imgs/logo/logo-b.png'
-        alt='Follow Sync Logo'
-        title='Follow Sync Logo'
-        className='block dark:hidden'
-      />
-      <Image
-        width={30}
-        height={30}
-        src='/imgs/logo/logo-w.png'
-        alt='Follow Sync Logo'
-        title='Follow Sync Logo'
-        className='hidden dark:block'
-      />
-    </>
-  );
-};
+/** Navbar mark: the symbol in the text colour, with the brand accent. */
+const Logo = () => (
+  <BrandMark className='h-6 w-[1.8rem] text-primary' aria-label='Follow Sync' />
+);
 
 export default Logo;
