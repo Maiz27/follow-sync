@@ -17,6 +17,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
           '--normal-border': 'var(--border)',
         } as React.CSSProperties
       }
+      toastOptions={{
+        classNames: {
+          // Success is the brand's "in sync" signal.
+          success: '[&_[data-icon]]:text-brand',
+        },
+      }}
       {...props}
     />
   );
