@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { LuHeart } from 'react-icons/lu';
+import { FollowingGlyph } from '@/components/brand/glyphs';
 import ConnectionListTab, { ConnectionListAction } from './connectionListTab';
 import { useFollowManager } from '@/lib/hooks/useFollowManager';
 import { useCacheManager } from '@/lib/hooks/useCacheManager';
@@ -36,7 +36,7 @@ const FollowingTab = ({ following }: FollowingTabProps) => {
       action={action}
       ignorable
       empty={{
-        icon: LuHeart,
+        icon: FollowingGlyph,
         title: 'You are not following anyone yet',
         description: 'Start following other users to grow your network.',
       }}

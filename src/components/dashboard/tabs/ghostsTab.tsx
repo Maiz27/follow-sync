@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { LuGhost } from 'react-icons/lu';
+import { GhostGlyph } from '@/components/brand/glyphs';
 import ConnectionListTab, { ConnectionListAction } from './connectionListTab';
 import { useGhostManager } from '@/lib/hooks/useGhostManager';
 import { NetworkUser } from '@/lib/types';
@@ -39,7 +39,7 @@ const GhostsTab = ({ ghosts }: GhostsTabProps) => {
       action={action}
       includeGhosts
       empty={{
-        icon: LuGhost,
+        icon: GhostGlyph,
         title: 'No Ghosts Found',
         description: 'No accounts are missing from your GitHub follow lists.',
       }}

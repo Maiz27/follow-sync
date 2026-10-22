@@ -1,5 +1,5 @@
 import React from 'react';
-import { LuEye } from 'react-icons/lu';
+import { FollowersGlyph } from '@/components/brand/glyphs';
 import ConnectionListTab from './connectionListTab';
 import { NetworkUser } from '@/lib/types';
 import { TAB_DESCRIPTIONS } from '@/lib/constants';
@@ -16,7 +16,7 @@ const FollowersTab = ({ followers }: FollowersTabProps) => (
     users={followers}
     ignorable
     empty={{
-      icon: LuEye,
+      icon: FollowersGlyph,
       title: 'No Followers',
       description:
         "You don't have any followers yet. Keep engaging with the community!",

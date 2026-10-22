@@ -1,4 +1,9 @@
-import { LuEye, LuHeart, LuUserX, LuUserPlus } from 'react-icons/lu';
+import {
+  FollowersGlyph,
+  FollowingGlyph,
+  OneWayInGlyph,
+  OneWayOutGlyph,
+} from '@/components/brand/glyphs';
 
 // Query Keys
 export const QUERY_KEY_USER_NETWORK = 'user-network';
@@ -153,22 +158,22 @@ export const TAB_DESCRIPTIONS = {
 export const STATS_DATA = [
   {
     label: 'Your Audience (Followers)',
-    icon: LuEye,
+    icon: FollowersGlyph,
     description: 'Users currently following your GitHub profile.',
   },
   {
     label: 'Your Network (Following)',
-    icon: LuHeart,
+    icon: FollowingGlyph,
     description: 'Users you are currently following on GitHub.',
   },
   {
     label: 'One-Way Out (You Follow)',
-    icon: LuUserX,
+    icon: OneWayOutGlyph,
     description: 'Users you follow who have not followed you back.',
   },
   {
     label: 'One-Way In (They Follow)',
-    icon: LuUserPlus,
+    icon: OneWayInGlyph,
     description: 'Users who follow you, but you have not followed them back.',
   },
 ];

@@ -17,11 +17,11 @@ const EmptyState = ({
   return (
     <div
       className={cn(
-        'flex min-h-40 flex-col items-center justify-center space-y-4 rounded-lg p-8 text-center',
+        'flex min-h-40 flex-col items-center justify-center space-y-4 p-8 text-center',
         className
       )}
     >
-      <div className='rounded-full bg-primary/10 p-4'>
+      <div className='bg-primary/10 p-4'>
         <Icon className='text-2xl text-primary' />
       </div>
       <h2 className='text-xl font-semibold'>{title}</h2>
