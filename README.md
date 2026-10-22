@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="branding/fs-nodes-horizontal-on-dark.svg">
+    <img src="branding/fs-nodes-horizontal-color.svg" alt="Follow Sync" width="360">
+  </picture>
+</p>
+
 # Follow Sync: Your GitHub Network Manager
 
 ![Follow Sync Preview](/public/imgs/preview.jpg)
