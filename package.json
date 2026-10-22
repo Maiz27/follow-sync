@@ -46,8 +46,11 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@graphql-codegen/add": "^5.0.3",
-    "@graphql-codegen/cli": "5.0.7",
+    "@graphql-codegen/cli": "7.4.6",
     "@graphql-codegen/client-preset": "4.8.3",
+    "@graphql-codegen/typed-document-node": "^7.2.0",
+    "@graphql-codegen/typescript": "^6.1.2",
+    "@graphql-codegen/typescript-operations": "^6.1.10",
     "@graphql-typed-document-node/core": "^3.2.0",
     "@tailwindcss/postcss": "^4",
     "@tailwindcss/typography": "^0.5.20",
