@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Least privilege: the job only needs to read the repository.
+    permissions:
+      contents: read
 
     steps:
       # Third-party actions are pinned to full commit SHAs (supply-chain
