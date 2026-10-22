@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <title>Follow Sync</title>
+  <style>
+    .out { fill: #111111; }
+    @media (prefers-color-scheme: dark) { .out { fill: #ffffff; } }
+  </style>
+  <!-- Favicon drawn on a 16 grid with integer coordinates so it renders crisp at 16 and 32 px.
+       Outgoing follow in ink (white on dark), returning follow in Sync Green. -->
+  <path class="out" d="M0 1h4v1h6V0l6 3-6 3V5H4v1H0z"/>
+  <path fill="#16A34A" d="M16 15h-4v-1H6v2l-6-3 6-3v2h6v-1h4z"/>
+</svg>
