@@ -15,7 +15,7 @@ Follow Sync respects your privacy. This policy explains what data we access, how
 
 - Follow Sync does **not** run its own database or servers.
 - All network analysis data is stored in a private GitHub Gist owned by you.
-- No personal data is transmitted to or stored on Follow Sync infrastructure.
+- No personal data is stored on Follow Sync infrastructure. Requests to GitHub pass through Follow Sync's server, which forwards them without logging or keeping their contents.
 
 ## Data Usage
 
