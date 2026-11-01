@@ -36,8 +36,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   session: {
     strategy: 'jwt',
-    maxAge: 60 * 60 * 24, // 1 day
-    updateAge: 60 * 60 * 6, // 6 hours
+    // Sliding window: each session fetch re-issues the cookie for another
+    // 30 days, so users are only signed out after 30 days of inactivity.
+    maxAge: 60 * 60 * 24 * 30, // 30 days
   },
 
   callbacks: {
