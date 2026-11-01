@@ -15,7 +15,7 @@ Follow Sync respects your privacy. This policy explains what data we access, how
 
 - Follow Sync does **not** run its own database or servers.
 - All network analysis data is stored in a private GitHub Gist owned by you.
-- No personal data is transmitted to or stored on Follow Sync infrastructure.
+- No personal data is stored on Follow Sync infrastructure. Requests to GitHub pass through Follow Sync's serverless API routes, which forward them without logging or keeping their contents.
 
 ## Data Usage
 
@@ -23,7 +23,7 @@ Follow Sync respects your privacy. This policy explains what data we access, how
   - Non-mutual followers and following.
   - Ghost or unavailable accounts.
   - Network statistics and analysis.
-- Your GitHub token is stored only in your client session and transmitted securely over HTTPS.
+- Your GitHub token is kept in an encrypted, httpOnly session cookie that browser scripts cannot read; only Follow Sync's API routes decrypt it to call GitHub on your behalf, over HTTPS. The session lasts up to 30 days of inactivity, and signing out removes it.
 
 ## Third-Party Services
 
