@@ -23,7 +23,7 @@ Follow Sync respects your privacy. This policy explains what data we access, how
   - Non-mutual followers and following.
   - Ghost or unavailable accounts.
   - Network statistics and analysis.
-- Your GitHub token is stored only in your client session and transmitted securely over HTTPS.
+- Your GitHub token is kept in an encrypted, httpOnly session cookie that browser scripts cannot read; only Follow Sync's server decrypts it to call GitHub on your behalf, over HTTPS. The session lasts up to 30 days of inactivity, and signing out removes it.
 
 ## Third-Party Services
 
